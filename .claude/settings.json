@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell",
+            "args": [
+              "-NoProfile",
+              "-ExecutionPolicy",
+              "Bypass",
+              "-File",
+              "${CLAUDE_PROJECT_DIR}/scripts/smoke-test.ps1"
+            ],
+            "timeout": 90,
+            "statusMessage": "Running FoodTracker smoke tests"
+          }
+        ]
+      }
+    ]
+  }
+}

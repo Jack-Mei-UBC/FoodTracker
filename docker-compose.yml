@@ -1,0 +1,101 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: foodtracker-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: foodtracker
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+
+  redis:
+    image: redis:7-alpine
+    container_name: foodtracker-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: foodtracker-backend
+    restart: always
+    ports:
+      - "4000:4000"
+    environment:
+      - PORT=4000
+      - DATABASE_URL=postgresql://postgres:password@db:5432/foodtracker
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=development
+      - UPLOAD_DIR=/data/uploads
+      - FDC_API_KEY=${FDC_API_KEY}
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      - db
+      - redis
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+    container_name: foodtracker-worker
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/foodtracker
+      - REDIS_URL=redis://redis:6379
+      - NODE_ENV=development
+      - OCR_SERVICE_URL=http://ocr-service:8000
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      - db
+      - redis
+      - ocr-service
+
+  ocr-service:
+    build:
+      context: ./ocr-service
+      dockerfile: Dockerfile
+    container_name: foodtracker-ocr
+    restart: always
+    ports:
+      # Loopback-only so it's curl-able from the host but not LAN-exposed;
+      # other services reach it at http://ocr-service:8000
+      - "127.0.0.1:8000:8000"
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OCR_MODEL=${OCR_MODEL:-nvidia/nemotron-nano-12b-v2-vl:free}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: foodtracker-frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:4000
+      - OCR_SERVICE_URL=http://ocr-service:8000
+    depends_on:
+      - backend
+      - ocr-service
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads:
