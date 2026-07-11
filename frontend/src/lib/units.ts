@@ -108,13 +108,81 @@ export function computeUnitPrice(
   };
 }
 
+// Dashboard comparison basis: one canonical unit per dimension so every card
+// reads in the same terms. mass → per kg; volume → per kg (via density, kg per
+// litre); count → per each. `toBase` below is that canonical unit's size in the
+// dimension's base unit (g / ml / each), used both to scale and to detect when
+// the as-entered unit already IS the canonical one.
+const CANONICAL: Record<Dimension, { label: string; toBase: number }> = {
+  mass: { label: 'kg', toBase: 1000 },
+  volume: { label: 'L', toBase: 1000 }, // per-litre first, then divided by density → per kg
+  count: { label: 'each', toBase: 1 },
+};
+
+// Prettier bracket labels for the as-entered unit.
+const UNIT_DISPLAY: Record<string, string> = {
+  l: 'L', ml: 'mL', floz: 'fl oz',
+};
+const displayUnit = (unit: string): string => {
+  const key = unit.toLowerCase().replace(/[^a-z]/g, '');
+  return UNIT_DISPLAY[key] ?? key;
+};
+
+// Canonical per-unit price for the dashboard: always the dimension's standard
+// unit (kg for weight & volume, each for count), with the *as-entered* unit
+// price appended in brackets when it differs — e.g. "$4.41/kg ($2.00/lb)" or
+// "$1.20/kg ($1.20/L)". Volume is converted to a per-kg price using `density`
+// (kg per litre, default 1). Returns null when not computable.
+export function formatCanonicalUnitPrice(
+  price: number,
+  amount: number | null | undefined,
+  amountUnit: string | null | undefined,
+  density?: number | string | null
+): string | null {
+  const def = normalizeUnit(amountUnit);
+  if (!def || !amount || amount <= 0 || !isFinite(price)) return null;
+  const baseAmount = amount * def.toBase;
+  if (baseAmount <= 0) return null;
+
+  const canon = CANONICAL[def.dimension];
+  let canonPrice = (price / baseAmount) * canon.toBase; // $/kg (mass), $/L (volume), $/each
+  let canonLabel = canon.label;
+  if (def.dimension === 'volume') {
+    const d = density == null ? 1 : Number(density);
+    if (d > 0) { canonPrice = canonPrice / d; canonLabel = 'kg'; } // $/L → $/kg
+  }
+
+  const main = `$${canonPrice.toFixed(2)}/${canonLabel}`;
+
+  // Show the as-entered unit whenever it isn't already the canonical unit
+  // (volume is always shown since its canonical unit is a mass unit).
+  const enteredIsCanonical = def.dimension !== 'volume' && def.toBase === canon.toBase;
+  if (enteredIsCanonical) return main;
+  // Bracket = the price *as purchased* — total price over the purchased amount,
+  // e.g. "$4.49/600g", not a per-single-unit figure ("$0.01/g" rounds to noise).
+  // The amount is omitted when it's 1 so it reads "$2.00/lb", not "$2.00/1lb".
+  const amtUnit = displayUnit(amountUnit!);
+  const amtLabel = amount === 1 ? amtUnit : `${+amount.toFixed(3)}${amtUnit}`;
+  return `${main} ($${price.toFixed(2)}/${amtLabel})`;
+}
+
 // "$0.42/100g" style string, or null when not computable.
+//
+// When usablePct is supplied and not 100, the price is scaled to the *usable*
+// portion (e.g. 70% usable => cost divided by 0.70) and the label gains a
+// " usable" suffix so the reading is unambiguous. usablePct > 100 (dry goods
+// that expand) lowers the effective cost. See foods.usable_pct.
 export function formatUnitPrice(
   price: number,
   amount: number | null | undefined,
-  amountUnit: string | null | undefined
+  amountUnit: string | null | undefined,
+  usablePct?: number | string | null
 ): string | null {
   const r = computeUnitPrice(price, amount, amountUnit);
   if (!r) return null;
+  const pct = usablePct == null ? 100 : Number(usablePct);
+  if (pct > 0 && pct !== 100) {
+    return `$${(r.displayPrice / (pct / 100)).toFixed(2)}/${r.displayLabel} usable`;
+  }
   return `$${r.displayPrice.toFixed(2)}/${r.displayLabel}`;
 }

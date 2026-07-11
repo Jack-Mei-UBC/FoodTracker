@@ -1,7 +1,9 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { NutritionFacts } from '../lib/nutrition';
+import { formatCanonicalUnitPrice, normalizeUnit } from '../lib/units';
 import PriceEditor from '../components/PriceEditor';
 import MacroEditor from '../components/MacroEditor';
 
@@ -9,6 +11,8 @@ import MacroEditor from '../components/MacroEditor';
 interface LatestPrice {
   price: number;
   unit_price: number;
+  amount: number | string | null;
+  amount_unit: string | null;
   scraped_at: string;
   is_sale: boolean;
   store_name: string;
@@ -27,6 +31,8 @@ interface FoodItem {
   description: string | null;
   category: string;
   unit: string;
+  usable_pct: number | string;
+  density: number | string;
   latest_prices: LatestPrice[] | null;
   aliases: FoodAlias[] | null;
   nutrition: (NutritionFacts & { source: string }) | null;
@@ -67,6 +73,7 @@ interface PriceEfficiency {
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 export default function Dashboard() {
+  const router = useRouter();
   // State
   const [foods, setFoods] = useState<FoodItem[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
@@ -78,7 +85,8 @@ export default function Dashboard() {
   // Forms State
   const [newFood, setNewFood] = useState({ name: '', barcode: '', description: '', category: 'Grocery', unit: 'each' });
   const [newStore, setNewStore] = useState({ name: '', location: '', logo_url: '' });
-  const [scrapeRequest, setScrapeRequest] = useState({ storeId: '', url: '' });
+  const [scrapeRequest, setScrapeRequest] = useState({ storeId: '', query: '', postalCode: '' });
+  const [cocowestRequest, setCocowestRequest] = useState({ storeId: '', url: '' });
   
   // Active selected food for detailed price history modal
   const [selectedFoodDetails, setSelectedFoodDetails] = useState<FoodItem | null>(null);
@@ -92,6 +100,8 @@ export default function Dashboard() {
   const [editingChip, setEditingChip] = useState<'primary' | number | null>(null);
   const [chipDraft, setChipDraft] = useState('');
   const [newAlias, setNewAlias] = useState('');
+  const [usableDraft, setUsableDraft] = useState(''); // editing selected food's usable_pct
+  const [densityDraft, setDensityDraft] = useState(''); // editing selected food's density (kg/L)
   const [dragAliasId, setDragAliasId] = useState<number | null>(null);
 
   // Feedback notifications
@@ -215,6 +225,47 @@ export default function Dashboard() {
     } catch { showToast('Failed to add name.', 'error'); }
   };
 
+  // ── Usable portion (foods.usable_pct) ─────────────────────────────────────
+  // Keep the input in sync with the open food.
+  useEffect(() => {
+    if (selectedFoodDetails) setUsableDraft(String(Number(selectedFoodDetails.usable_pct ?? 100)));
+  }, [selectedFoodDetails?.id, selectedFoodDetails?.usable_pct]);
+
+  // Keep the density input in sync with the open food.
+  useEffect(() => {
+    if (selectedFoodDetails) setDensityDraft(String(Number(selectedFoodDetails.density ?? 1)));
+  }, [selectedFoodDetails?.id, selectedFoodDetails?.density]);
+
+  const saveUsablePct = async (foodId: number) => {
+    const pct = Number(usableDraft);
+    if (!(pct > 0)) { showToast('Usable % must be greater than 0.', 'error'); return; }
+    if (selectedFoodDetails && pct === Number(selectedFoodDetails.usable_pct)) return; // no-op
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/foods/${foodId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usable_pct: pct }),
+      });
+      if (!res.ok) throw new Error();
+      showToast('Usable % updated.');
+      refreshSelectedFood(foodId);
+    } catch { showToast('Failed to update usable %.', 'error'); }
+  };
+
+  const saveDensity = async (foodId: number) => {
+    const d = Number(densityDraft);
+    if (!(d > 0)) { showToast('Density must be greater than 0.', 'error'); return; }
+    if (selectedFoodDetails && d === Number(selectedFoodDetails.density)) return; // no-op
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/foods/${foodId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ density: d }),
+      });
+      if (!res.ok) throw new Error();
+      showToast('Density updated.');
+      refreshSelectedFood(foodId);
+    } catch { showToast('Failed to update density.', 'error'); }
+  };
+
   // Nutrition facts are edited through the shared <MacroEditor> popup.
 
   // Add a food item via POST
@@ -267,11 +318,11 @@ export default function Dashboard() {
     }
   };
 
-  // Trigger Scraper Job via POST
+  // Trigger Flipp Flyer Scrape Job via POST
   const handleTriggerScraper = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!scrapeRequest.storeId || !scrapeRequest.url) {
-      showToast('Please select a store and enter a valid URL', 'error');
+    if (!scrapeRequest.storeId) {
+      showToast('Please select a store to scrape', 'error');
       return;
     }
 
@@ -279,20 +330,54 @@ export default function Dashboard() {
       const res = await fetch(`${API_BASE_URL}/api/scrape/${scrapeRequest.storeId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: scrapeRequest.url })
+        body: JSON.stringify({
+          query: scrapeRequest.query.trim() || undefined,
+          postal_code: scrapeRequest.postalCode.trim() || undefined,
+        })
       });
       const data = await res.json();
       if (res.ok) {
-        showToast(`Scrape job queued! Job ID: ${data.jobId}`);
-        setScrapeRequest({ storeId: '', url: '' });
-        // Auto-refresh in 4s to see new logs
-        setTimeout(fetchData, 4000);
+        showToast('Flyer scrape queued! Opening live progress…');
+        setScrapeRequest({ storeId: '', query: '', postalCode: '' });
+        // Jump to the progress page and auto-expand this run to watch it live.
+        router.push(`/scrapes?job=${data.scrapeJobId}`);
       } else {
         showToast(data.error || 'Failed to queue scraper job', 'error');
       }
     } catch (err: any) {
       console.error(err);
       showToast("Failed to queue scraper job. Connection error.", "error");
+    }
+  };
+
+  // Trigger a cocowest.ca Costco sale-post import via POST
+  const handleTriggerCocowest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cocowestRequest.storeId || !cocowestRequest.url.trim()) {
+      showToast('Choose a store and paste a cocowest.ca post URL', 'error');
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/scrape-cocowest`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          store_id: cocowestRequest.storeId,
+          url: cocowestRequest.url.trim(),
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Costco sale post import queued! Opening live progress…');
+        setCocowestRequest({ storeId: '', url: '' });
+        router.push(`/scrapes?job=${data.scrapeJobId}`);
+      } else {
+        showToast(data.error || 'Failed to queue cocowest import', 'error');
+      }
+    } catch (err: any) {
+      console.error(err);
+      showToast("Failed to queue cocowest import. Connection error.", "error");
     }
   };
 
@@ -331,7 +416,7 @@ export default function Dashboard() {
             Grocery Intelligence Panel
           </h1>
           <p className="text-slate-400 text-sm lg:text-base leading-relaxed">
-            Monitor real-time grocery prices across multiple physical stores, audit historical changes, calculate unit efficiency spreads, and dispatch Playwright scraping pipelines to find maximum savings.
+            Monitor real-time grocery prices across multiple physical stores, audit historical changes, calculate unit efficiency spreads, and pull Flipp flyer deals to find maximum savings.
           </p>
         </div>
       </div>
@@ -392,10 +477,10 @@ export default function Dashboard() {
           <div className="rounded-2xl p-6 glass-panel border border-white/5 space-y-4">
             <div className="flex items-center space-x-2">
               <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
-              <h2 className="text-lg font-bold text-white">Scrape Store Prices</h2>
+              <h2 className="text-lg font-bold text-white">Scrape Flyer Deals</h2>
             </div>
             <p className="text-xs text-slate-400">
-              Schedule a Playwright crawler. Input a grocery catalog URL to extract listings and update DB values.
+              Pulls the store&apos;s current Flipp flyer prices for your postal code. Leave the search blank to match every tracked food against the flyer.
             </p>
             
             <form onSubmit={handleTriggerScraper} className="space-y-3 pt-2">
@@ -414,21 +499,80 @@ export default function Dashboard() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Catalog URL</label>
-                <input 
-                  type="text" 
-                  value={scrapeRequest.url}
-                  onChange={(e) => setScrapeRequest({ ...scrapeRequest, url: e.target.value })}
-                  placeholder="e.g. https://supermarket.com/offers"
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Flyer Search <span className="normal-case font-normal text-slate-500">(optional)</span></label>
+                <input
+                  type="text"
+                  value={scrapeRequest.query}
+                  onChange={(e) => setScrapeRequest({ ...scrapeRequest, query: e.target.value })}
+                  placeholder="e.g. milk — blank scans all tracked foods"
                   className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 placeholder-slate-600 transition"
                 />
               </div>
 
-              <button 
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Postal Code <span className="normal-case font-normal text-slate-500">(optional)</span></label>
+                <input
+                  type="text"
+                  value={scrapeRequest.postalCode}
+                  onChange={(e) => setScrapeRequest({ ...scrapeRequest, postalCode: e.target.value })}
+                  placeholder="V5A 3J2 (server default)"
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 placeholder-slate-600 transition"
+                />
+              </div>
+
+              <button
                 type="submit"
                 className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl py-2 text-sm font-semibold hover:shadow-lg hover:shadow-indigo-500/20 active:scale-[0.98] transition duration-200"
               >
-                Dispatch Crawler Job
+                Dispatch Flyer Scrape
+              </button>
+            </form>
+            <a href="/scrapes" className="block text-center text-[11px] font-semibold text-violet-400 hover:text-violet-300 transition pt-1">
+              View scraper activity →
+            </a>
+          </div>
+
+          {/* Import a cocowest.ca Costco Sale Post */}
+          <div className="rounded-2xl p-6 glass-panel border border-white/5 space-y-4">
+            <div className="flex items-center space-x-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <h2 className="text-lg font-bold text-white">Import Costco Sale Post</h2>
+            </div>
+            <p className="text-xs text-slate-400">
+              Paste a cocowest.ca &quot;weekend update&quot; post URL to log every sale item it lists against a Costco store.
+            </p>
+
+            <form onSubmit={handleTriggerCocowest} className="space-y-3 pt-2">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Store</label>
+                <select
+                  value={cocowestRequest.storeId}
+                  onChange={(e) => setCocowestRequest({ ...cocowestRequest, storeId: e.target.value })}
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 transition"
+                >
+                  <option value="">-- Choose a store --</option>
+                  {stores.map(store => (
+                    <option key={store.id} value={store.id}>{store.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">cocowest.ca Post URL</label>
+                <input
+                  type="text"
+                  value={cocowestRequest.url}
+                  onChange={(e) => setCocowestRequest({ ...cocowestRequest, url: e.target.value })}
+                  placeholder="https://cocowest.ca/2026/07/weekend-update-..."
+                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 placeholder-slate-600 transition"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl py-2 text-sm font-semibold hover:shadow-lg hover:shadow-emerald-500/20 active:scale-[0.98] transition duration-200"
+              >
+                Import Sale Post
               </button>
             </form>
           </div>
@@ -597,6 +741,11 @@ export default function Dashboard() {
                       <span className="text-[10px] uppercase font-bold tracking-wider text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">
                         {food.category}
                       </span>
+                      {Number(food.usable_pct) !== 100 && (
+                        <span className="ml-1.5 text-[10px] uppercase font-bold tracking-wider text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20" title="Usable portion of what you buy">
+                          {Number(food.usable_pct)}% usable
+                        </span>
+                      )}
                       <h3 className="text-lg font-bold text-white mt-1.5">{food.name}</h3>
                       <p className="text-xs text-slate-400 mt-1 line-clamp-1">{food.description || `Fresh tracked items per ${food.unit}`}</p>
                     </div>
@@ -608,20 +757,36 @@ export default function Dashboard() {
                     
                     <div className="space-y-1.5">
                       {food.latest_prices && food.latest_prices.length > 0 ? (
-                        food.latest_prices.map((p, idx) => (
-                          <div key={idx} className="flex justify-between items-center text-xs">
-                            <span className="text-slate-400 truncate max-w-[120px]">{p.store_name}</span>
-                            <div className="flex items-center space-x-1.5">
-                              {p.is_sale && (
-                                <span className="text-[9px] px-1 rounded bg-amber-500/15 text-amber-400 font-bold border border-amber-500/20 font-mono">
-                                  SALE
-                                </span>
-                              )}
-                              <span className="font-bold text-white font-mono">${parseFloat(p.price as any).toFixed(2)}</span>
-                              <span className="text-[10px] text-slate-500">/{food.unit}</span>
+                        food.latest_prices.map((p, idx) => {
+                          // Normalize to the dimension's standard unit (kg / kg-via-density / each),
+                          // with the as-entered unit in brackets when it differs.
+                          const norm = formatCanonicalUnitPrice(
+                            Number(p.price),
+                            p.amount != null ? Number(p.amount) : null,
+                            p.amount_unit,
+                            food.density,
+                          );
+                          return (
+                            <div key={idx} className="flex justify-between items-center gap-2 text-xs">
+                              <span className="text-slate-400 truncate max-w-[90px] shrink-0">{p.store_name}</span>
+                              <div className="flex items-center space-x-1.5 min-w-0 justify-end">
+                                {p.is_sale && (
+                                  <span className="text-[9px] px-1 rounded bg-amber-500/15 text-amber-400 font-bold border border-amber-500/20 font-mono shrink-0">
+                                    SALE
+                                  </span>
+                                )}
+                                {norm ? (
+                                  <span className="font-bold text-white font-mono truncate" title={norm}>{norm}</span>
+                                ) : (
+                                  <>
+                                    <span className="font-bold text-white font-mono">${parseFloat(p.price as any).toFixed(2)}</span>
+                                    <span className="text-[10px] text-slate-500">/{food.unit}</span>
+                                  </>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))
+                          );
+                        })
                       ) : (
                         <div className="text-[11px] text-slate-600">No prices logged. Dispatch a crawler to log prices.</div>
                       )}
@@ -783,6 +948,46 @@ export default function Dashboard() {
               )}
             </div>
 
+            {/* Usable portion — scales prices into an effective cost per usable unit */}
+            <div className="bg-slate-950/60 border border-white/5 rounded-2xl p-4 space-y-2">
+              <span className="text-xs font-semibold text-slate-400 block">
+                Usable Portion <span className="text-slate-600 font-normal">— % of what you buy that's actually usable</span>
+              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <input
+                  type="number" min="1" step="1"
+                  value={usableDraft}
+                  onChange={e => setUsableDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveUsablePct(selectedFoodDetails.id); }}
+                  onBlur={() => saveUsablePct(selectedFoodDetails.id)}
+                  className="w-24 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white font-mono focus:outline-none focus:border-violet-500"
+                />
+                <span className="text-xs text-slate-500">% usable</span>
+                <span className="text-[10px] text-slate-600">e.g. 70 = 30% bone/waste · &gt;100 for dry goods that expand</span>
+              </div>
+            </div>
+
+            {/* Density — only for foods sold by volume; converts per-volume prices to per-kg */}
+            {normalizeUnit(selectedFoodDetails.unit)?.dimension === 'volume' && (
+              <div className="bg-slate-950/60 border border-white/5 rounded-2xl p-4 space-y-2">
+                <span className="text-xs font-semibold text-slate-400 block">
+                  Density <span className="text-slate-600 font-normal">— kg per litre, to show volume prices per kg</span>
+                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <input
+                    type="number" min="0.01" step="0.01"
+                    value={densityDraft}
+                    onChange={e => setDensityDraft(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveDensity(selectedFoodDetails.id); }}
+                    onBlur={() => saveDensity(selectedFoodDetails.id)}
+                    className="w-24 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white font-mono focus:outline-none focus:border-violet-500"
+                  />
+                  <span className="text-xs text-slate-500">kg/L</span>
+                  <span className="text-[10px] text-slate-600">water ≈ 1 · oil ≈ 0.92 · honey ≈ 1.42</span>
+                </div>
+              </div>
+            )}
+
             {/* Price Trend Graphic: Custom SVG visualization */}
             <div className="bg-slate-950/60 border border-white/5 rounded-2xl p-4">
               <span className="text-xs font-semibold text-slate-400 block mb-3">Price Trend History</span>
@@ -905,6 +1110,8 @@ export default function Dashboard() {
           foodName={selectedFoodDetails.name}
           log={pricePopup.log}
           stores={stores}
+          usablePct={selectedFoodDetails.usable_pct}
+          density={selectedFoodDetails.density}
           onClose={() => setPricePopup(null)}
           onSaved={() => { setPricePopup(null); fetchPriceHistory(selectedFoodDetails); fetchData(); }}
           onDeleted={() => { setPricePopup(null); fetchPriceHistory(selectedFoodDetails); fetchData(); }}

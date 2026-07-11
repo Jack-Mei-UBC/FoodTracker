@@ -1,4 +1,5 @@
-FROM mcr.microsoft.com/playwright:v1.40.0-jammy
+# Plain Node: the scraper talks to Flipp's JSON API, no browser required.
+FROM node:20-slim
 
 WORKDIR /usr/src/app
 

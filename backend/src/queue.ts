@@ -26,18 +26,44 @@ export const scrapingQueue = new Queue(scrapingQueueName, {
   },
 });
 
-// Helper to push jobs
-export async function addScrapingJob(storeId: number, storeName: string, url: string) {
+// Helper to push jobs. A scrape job targets a store's current Flipp flyers
+// for a postal code; `query` narrows it to one search (omitted = match the
+// whole food catalog against the flyers). `scrapeJobId` is the scrape_jobs row
+// the worker updates with live progress.
+export async function addScrapingJob(scrapeJobId: number, storeId: number, storeName: string, postalCode: string, query?: string) {
   try {
     const job = await scrapingQueue.add(`scrape-${storeName.toLowerCase()}-${storeId}`, {
+      scrapeJobId,
       storeId,
       storeName,
-      url,
+      postalCode,
+      query,
     });
     console.log(`Added scraping job ${job.id} for store ${storeName} (ID: ${storeId})`);
     return job;
   } catch (error) {
     console.error(`Failed to add scraping job for ${storeName}:`, error);
+    throw error;
+  }
+}
+
+// Push a cocowest.ca scrape job. Unlike Flipp there's no postal/merchant
+// targeting — the whole post belongs to the one store the caller selected —
+// so the payload just carries the post URL. Shares the same scraping-queue
+// and worker concurrency; `source: 'cocowest'` is how worker.ts branches.
+export async function addCocowestScrapeJob(scrapeJobId: number, storeId: number, storeName: string, url: string) {
+  try {
+    const job = await scrapingQueue.add(`cocowest-${storeName.toLowerCase()}-${storeId}`, {
+      scrapeJobId,
+      storeId,
+      storeName,
+      source: 'cocowest',
+      url,
+    });
+    console.log(`Added cocowest scrape job ${job.id} for store ${storeName} (ID: ${storeId})`);
+    return job;
+  } catch (error) {
+    console.error(`Failed to add cocowest scrape job for ${storeName}:`, error);
     throw error;
   }
 }

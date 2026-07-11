@@ -1,16 +1,19 @@
 import { Worker, Job } from 'bullmq';
 import Redis from 'ioredis';
 import { Pool } from 'pg';
-import { chromium } from 'playwright';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as dotenv from 'dotenv';
+import { FlippItem, searchFlipp, usableItems, parseFlippAmount, nameMatchScore, flippItemUrl } from './flipp';
+import { symmetricMatchScore, parseAmount } from './scrape-common';
+import { fetchCocowestItems, usableCocowestItems } from './cocowest';
 
 dotenv.config();
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const databaseUrl = process.env.DATABASE_URL || 'postgresql://postgres:password@localhost:5432/foodtracker';
 const ocrServiceUrl = process.env.OCR_SERVICE_URL || 'http://ocr-service:8000';
+const backendUrl = process.env.BACKEND_URL || 'http://backend:4000';
 
 const redisConnection = new Redis(redisUrl, {
   maxRetriesPerRequest: null,
@@ -21,141 +24,346 @@ const pool = new Pool({
 });
 
 interface ScrapeJobData {
+  scrapeJobId: number;
   storeId: number;
   storeName: string;
-  url: string;
+  source?: 'flipp' | 'cocowest'; // defaults to 'flipp' for back-compat with existing queued jobs
+  postalCode?: string; // flipp only
+  query?: string; // flipp only
+  url?: string; // cocowest only — the post to scrape
 }
 
-// Playwright Scraping Logic
-async function scrapeStorePrices(storeId: number, storeName: string, url: string) {
-  console.log(`Starting Playwright browser to scrape ${storeName} at ${url}...`);
-  
-  let browser;
-  let itemsScraped: { name: string; price: number; isSale: boolean }[] = [];
-  
+// ── Flipp flyer scraper ─────────────────────────────────────────────────────
+// Prices are written through the backend REST API (not direct SQL) so every
+// scraped price gets unit normalization, its food_prices join row, and an
+// audit entry — the same path every other price source takes.
+
+async function backendApi(pathname: string, init?: RequestInit): Promise<any> {
+  const res = await fetch(`${backendUrl}${pathname}`, {
+    ...init,
+    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(`Backend ${init?.method || 'GET'} ${pathname} failed (${res.status}): ${body.error || 'unknown error'}`);
+  }
+  return body;
+}
+
+// ── Scrape progress tracking (scrape_jobs row) ──────────────────────────────
+// Progress bookkeeping is the worker's own state, so — like the OCR path's
+// scan_jobs updates — it writes straight to Postgres. Prices still go through the
+// backend API so they keep normalization / the food_prices join / audit.
+
+async function updateScrapeJob(id: number, fields: Record<string, any>) {
+  const keys = Object.keys(fields);
+  if (keys.length === 0) return;
+  const set = keys.map((k, i) => `${k} = $${i + 2}`).join(', ');
+  await pool.query(
+    `UPDATE scrape_jobs SET ${set}, updated_at = now() WHERE id = $1`,
+    [id, ...keys.map((k) => fields[k])]
+  );
+}
+
+// One detail record per logged price, appended atomically so concurrent-safe
+// even though we process one job at a time.
+async function appendScrapeItem(id: number, item: Record<string, any>) {
+  await pool.query(
+    `UPDATE scrape_jobs
+        SET items = items || $2::jsonb, logged = logged + 1, updated_at = now()
+      WHERE id = $1`,
+    [id, JSON.stringify([item])]
+  );
+}
+
+// Download a Flipp flyer image and register it as an images row via the backend
+// (multipart, same path a photo upload takes) so it gets served by GET
+// /api/images/:id and can be attached to the price log. Best-effort: a failed
+// image fetch must never fail the whole scrape, so this returns null on error.
+async function saveFlyerImage(url: string | null | undefined): Promise<number | null> {
+  if (!url) return null;
   try {
-    browser = await chromium.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-    
-    const context = await browser.newContext({
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
-    });
-    
-    const page = await context.newPage();
-    // Set a short timeout (15s) so background tasks don't hang indefinitely
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
-    
-    // Heuristic: Wait for body
-    await page.waitForSelector('body', { timeout: 5000 });
-    
-    // Evaluate page content to find product elements using common selectors
-    itemsScraped = await page.evaluate(() => {
-      const results: { name: string; price: number; isSale: boolean }[] = [];
-      
-      // Look for products using common class list keywords
-      const selectors = [
-        '[class*="product" i]', 
-        '[class*="item" i]', 
-        '[class*="tile" i]',
-        'article', 
-        'li'
-      ];
-      
-      let elements: Element[] = [];
-      for (const selector of selectors) {
-        const found = Array.from(document.querySelectorAll(selector));
-        if (found.length > 5) {
-          elements = found;
-          break;
-        }
-      }
-      
-      elements.forEach(el => {
-        // Find product title / name
-        const titleEl = el.querySelector('[class*="title" i], [class*="name" i], h2, h3, h4, [id*="title" i]');
-        // Find price info
-        const priceEl = el.querySelector('[class*="price" i], [id*="price" i], span, b');
-        
-        if (titleEl && priceEl) {
-          const name = titleEl.textContent?.trim() || '';
-          const priceText = priceEl.textContent?.trim() || '';
-          
-          // Regex extract price
-          const priceMatch = priceText.match(/\$?(\d+(?:\.\d{2})?)/);
-          if (name.length > 3 && priceMatch) {
-            const priceVal = parseFloat(priceMatch[1]);
-            const isSaleVal = priceText.toLowerCase().includes('sale') || priceText.toLowerCase().includes('discount');
-            if (priceVal > 0 && priceVal < 500) {
-              results.push({
-                name,
-                price: priceVal,
-                isSale: isSaleVal,
-              });
-            }
-          }
-        }
-      });
-      
-      return results.slice(0, 15); // limit to 15 items per scrape
-    });
-    
-    console.log(`Successfully scraped ${itemsScraped.length} potential items from ${url}`);
-  } catch (error: any) {
-    console.error(`Scraping via Playwright failed or timed out: ${error.message}`);
-    throw error;
-  } finally {
-    if (browser) {
-      await browser.close();
+    const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    const contentType = res.headers.get('content-type') || 'image/jpeg';
+    const ext = contentType.includes('png') ? '.png' : contentType.includes('webp') ? '.webp' : '.jpg';
+    const form = new FormData();
+    form.append('image', new Blob([buf], { type: contentType }), `flyer${ext}`);
+    const up = await fetch(`${backendUrl}/api/images`, { method: 'POST', body: form });
+    if (!up.ok) return null;
+    const body = await up.json();
+    return body.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+interface CatalogEntry {
+  id: number;
+  names: string[]; // primary name first, then aliases
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+// Keep catalog-wide scrapes polite: one Flipp search per food, rate-limited,
+// and capped so a huge catalog can't turn one job into hundreds of requests.
+const FLIPP_SEARCH_DELAY_MS = 400;
+const CATALOG_SEARCH_CAP = 50;
+const QUERY_MODE_ITEM_CAP = 15;
+// Query mode decides identity (is this flyer item an existing food?) with the
+// symmetric score; catalog mode only needs the food's own words covered, so it
+// uses the recall score but demands most of them.
+const QUERY_MATCH_THRESHOLD = 0.5;
+const CATALOG_MATCH_THRESHOLD = 0.6;
+
+function bestCatalogMatch(catalog: CatalogEntry[], itemName: string): { entry: CatalogEntry; score: number } | null {
+  let best: { entry: CatalogEntry; score: number } | null = null;
+  for (const entry of catalog) {
+    for (const name of entry.names) {
+      const score = symmetricMatchScore(name, itemName);
+      if (!best || score > best.score) best = { entry, score };
     }
   }
+  return best;
+}
 
-  if (itemsScraped.length === 0) {
-    throw new Error('Scraping completed but no items were found on the page.');
-  }
+async function scrapeFlippFlyers(scrapeJobId: number, storeId: number, storeName: string, postalCode: string, query?: string) {
+  console.log(`Scraping Flipp flyers for "${storeName}" (postal ${postalCode}${query ? `, query "${query}"` : ', full catalog'})...`);
+  await updateScrapeJob(scrapeJobId, { status: 'processing', phase: 'Loading catalog' });
 
-  // Insert or update records in the DB
-  for (const item of itemsScraped) {
-    try {
-      // 1. Try to match name with existing foods in DB
-      const foodMatch = await pool.query(
-        'SELECT id FROM foods WHERE name ILIKE $1 OR $1 ILIKE CONCAT(\'%\', name, \'%\') LIMIT 1',
-        [item.name]
-      );
-      
+  const foods: any[] = await backendApi('/api/foods');
+  const catalog: CatalogEntry[] = foods.map((f) => ({
+    id: f.id,
+    names: [f.name, ...((f.aliases || []) as any[]).map((a) => a.alias)].filter(Boolean),
+  }));
+
+  const loggedFlyerItems = new Set<number>();
+  let logged = 0;
+
+  // Log one price and record its source flyer image + deep link on the scrape job.
+  const logPrice = async (foodId: number, foodName: string, item: FlippItem, isNew: boolean) => {
+    const parsed = parseFlippAmount(item);
+    const price = Number(item.current_price);
+    // Save the flyer artwork first so the price log can point at it.
+    const imageId = await saveFlyerImage(item.clipping_image_url || item.clean_image_url);
+    await backendApi(`/api/foods/${foodId}/prices`, {
+      method: 'POST',
+      body: JSON.stringify({
+        store_id: storeId,
+        price,
+        amount: parsed.amount,
+        amount_unit: parsed.unit,
+        is_sale: parsed.multiBuy || item.original_price != null || !!item.sale_story,
+        source: 'scraper',
+        image_id: imageId,
+      }),
+    });
+    loggedFlyerItems.add(item.flyer_item_id ?? item.id ?? -1);
+    logged++;
+    await appendScrapeItem(scrapeJobId, {
+      food_id: foodId,
+      food_name: foodName,
+      is_new_food: isNew,
+      flyer_name: item.name,
+      price,
+      amount: parsed.amount,
+      amount_unit: parsed.unit,
+      is_sale: parsed.multiBuy || item.original_price != null || !!item.sale_story,
+      image_id: imageId,
+      flyer_url: flippItemUrl(item),
+      valid_to: item.valid_to ?? null,
+      logged_at: new Date().toISOString(),
+    });
+    console.log(`Logged $${price} (${parsed.amount} ${parsed.unit}) for "${item.name}" [food ${foodId}${imageId ? `, img ${imageId}` : ''}]`);
+  };
+
+  if (query) {
+    // Query mode: one search; log every matching deal at this store, creating
+    // catalog entries for items we don't track yet. The same deal often runs
+    // in several concurrent flyers — log each product once per scrape.
+    await updateScrapeJob(scrapeJobId, { phase: `Searching flyers for "${query}"` });
+    const items = usableItems(await searchFlipp(postalCode, query), storeName).slice(0, QUERY_MODE_ITEM_CAP);
+    await updateScrapeJob(scrapeJobId, { total: items.length, processed: 0, phase: `Matching ${items.length} deal(s)` });
+    const seenNames = new Set<string>();
+    let processed = 0;
+    for (const item of items) {
+      const itemName = item.name!.replace(/\s+/g, ' ').trim().slice(0, 255);
+      const nameKey = itemName.toLowerCase();
+      if (seenNames.has(nameKey)) { await updateScrapeJob(scrapeJobId, { processed: ++processed }); continue; }
+      seenNames.add(nameKey);
+      const best = bestCatalogMatch(catalog, itemName);
       let foodId: number;
-      
-      if (foodMatch.rows.length > 0) {
-        foodId = foodMatch.rows[0].id;
+      let foodName: string;
+      let isNew = false;
+      if (best && best.score >= QUERY_MATCH_THRESHOLD) {
+        foodId = best.entry.id;
+        foodName = best.entry.names[0];
       } else {
-        // If not found, insert a new food item
-        const newFood = await pool.query(
-          'INSERT INTO foods (name, category, unit) VALUES ($1, $2, $3) RETURNING id',
-          [item.name, 'Scraped', 'each']
-        );
-        foodId = newFood.rows[0].id;
+        const parsed = parseFlippAmount(item);
+        const created = await backendApi('/api/foods', {
+          method: 'POST',
+          body: JSON.stringify({ name: itemName, category: 'Scraped', unit: parsed.unit }),
+        });
+        foodId = created.id;
+        foodName = itemName;
+        isNew = true;
+        catalog.push({ id: created.id, names: [itemName] });
       }
-
-      // 2. Insert new price log entry
-      await pool.query(
-        'INSERT INTO price_logs (food_id, store_id, price, unit_price, is_sale) VALUES ($1, $2, $3, $4, $5)',
-        [foodId, storeId, item.price, item.price, item.isSale]
-      );
-      console.log(`Logged price $${item.price} for "${item.name}" at Store ID ${storeId}`);
-    } catch (insertErr) {
-      console.error(`Error saving scraped item "${item.name}":`, insertErr);
+      await logPrice(foodId, foodName, item, isNew);
+      await updateScrapeJob(scrapeJobId, { processed: ++processed });
+    }
+  } else {
+    // Catalog mode: search Flipp once per tracked food and log the single
+    // best-matching current deal at this store.
+    const searchList = catalog.slice(0, CATALOG_SEARCH_CAP);
+    await updateScrapeJob(scrapeJobId, { total: searchList.length, processed: 0, phase: `Scanning ${searchList.length} tracked food(s)` });
+    let processed = 0;
+    for (const entry of searchList) {
+      await updateScrapeJob(scrapeJobId, { phase: `Searching "${entry.names[0]}"` });
+      let items: FlippItem[];
+      try {
+        items = usableItems(await searchFlipp(postalCode, entry.names[0]), storeName);
+      } catch (err: any) {
+        console.error(`Flipp search failed for "${entry.names[0]}": ${err.message}`);
+        await updateScrapeJob(scrapeJobId, { processed: ++processed });
+        continue;
+      }
+      let bestItem: FlippItem | null = null;
+      let bestScore = 0;
+      for (const item of items) {
+        if (loggedFlyerItems.has(item.flyer_item_id ?? item.id ?? -1)) continue;
+        const score = Math.max(...entry.names.map((n) => nameMatchScore(n, item.name!)));
+        if (score > bestScore) {
+          bestScore = score;
+          bestItem = item;
+        }
+      }
+      if (bestItem && bestScore >= CATALOG_MATCH_THRESHOLD) {
+        await logPrice(entry.id, entry.names[0], bestItem, false);
+      }
+      await updateScrapeJob(scrapeJobId, { processed: ++processed });
+      await sleep(FLIPP_SEARCH_DELAY_MS);
+    }
+    if (catalog.length > CATALOG_SEARCH_CAP) {
+      console.log(`Catalog has ${catalog.length} foods; searched the first ${CATALOG_SEARCH_CAP}.`);
     }
   }
+
+  if (logged === 0) {
+    throw new Error(
+      `No current flyer deals matched at "${storeName}". The store name must resemble a Flipp merchant ` +
+      `(e.g. "Walmart", "Save-On-Foods") with an active flyer for postal code ${postalCode}.`
+    );
+  }
+  await updateScrapeJob(scrapeJobId, { status: 'done', phase: `Logged ${logged} price(s)`, finished_at: new Date() });
+  console.log(`Flipp scrape done: logged ${logged} prices for ${storeName}.`);
+}
+
+// ── cocowest.ca Costco sale-post scraper ────────────────────────────────────
+// A cocowest.ca "weekend update" post has no per-store/postal targeting — the
+// whole post belongs to one store (the "Costco" store the caller selected).
+// Mirrors Flipp's *query mode*: log a price for every parseable item,
+// creating a food (category 'Costco') for anything that doesn't match the
+// catalog, since this scope is meant to capture the full sale list.
+async function scrapeCocowest(scrapeJobId: number, storeId: number, storeName: string, url: string) {
+  console.log(`Scraping cocowest.ca post for "${storeName}": ${url}`);
+  await updateScrapeJob(scrapeJobId, { status: 'processing', phase: 'Fetching cocowest post' });
+
+  const foods: any[] = await backendApi('/api/foods');
+  const catalog: CatalogEntry[] = foods.map((f) => ({
+    id: f.id,
+    names: [f.name, ...((f.aliases || []) as any[]).map((a) => a.alias)].filter(Boolean),
+  }));
+
+  const items = usableCocowestItems(await fetchCocowestItems(url));
+  await updateScrapeJob(scrapeJobId, { total: items.length, processed: 0, phase: `Matching ${items.length} item(s)` });
+
+  let logged = 0;
+  let processed = 0;
+  for (const item of items) {
+    const itemName = item.name.replace(/\s+/g, ' ').trim().slice(0, 255);
+    const parsed = parseAmount(itemName);
+    const best = bestCatalogMatch(catalog, itemName);
+    let foodId: number;
+    let foodName: string;
+    let isNew = false;
+    if (best && best.score >= QUERY_MATCH_THRESHOLD) {
+      foodId = best.entry.id;
+      foodName = best.entry.names[0];
+    } else {
+      const created = await backendApi('/api/foods', {
+        method: 'POST',
+        body: JSON.stringify({ name: itemName, category: 'Costco', unit: parsed.unit }),
+      });
+      foodId = created.id;
+      foodName = itemName;
+      isNew = true;
+      catalog.push({ id: created.id, names: [itemName] });
+    }
+
+    const imageId = await saveFlyerImage(item.image_url);
+    const isSale = item.savings != null;
+    await backendApi(`/api/foods/${foodId}/prices`, {
+      method: 'POST',
+      body: JSON.stringify({
+        store_id: storeId,
+        price: item.price,
+        amount: parsed.amount,
+        amount_unit: parsed.unit,
+        is_sale: isSale,
+        source: 'scraper',
+        image_id: imageId,
+      }),
+    });
+    logged++;
+    await appendScrapeItem(scrapeJobId, {
+      food_id: foodId,
+      food_name: foodName,
+      is_new_food: isNew,
+      flyer_name: item.name,
+      price: item.price,
+      amount: parsed.amount,
+      amount_unit: parsed.unit,
+      is_sale: isSale,
+      image_id: imageId,
+      flyer_url: item.page_url,
+      valid_to: item.expires_on ?? null,
+      logged_at: new Date().toISOString(),
+    });
+    console.log(`Logged $${item.price} (${parsed.amount} ${parsed.unit}) for "${item.name}" [food ${foodId}${imageId ? `, img ${imageId}` : ''}]`);
+    await updateScrapeJob(scrapeJobId, { processed: ++processed });
+  }
+
+  if (logged === 0) {
+    throw new Error(`No sale items could be parsed from the cocowest post: ${url}`);
+  }
+  await updateScrapeJob(scrapeJobId, { status: 'done', phase: `Logged ${logged} price(s)`, finished_at: new Date() });
+  console.log(`cocowest scrape done: logged ${logged} prices for ${storeName}.`);
 }
 
 // Initialize BullMQ Worker
 const worker = new Worker<ScrapeJobData>(
   'scraping-queue',
   async (job: Job<ScrapeJobData>) => {
-    const { storeId, storeName, url } = job.data;
-    console.log(`Processing scraping job ${job.id} for store ${storeName}...`);
-    await scrapeStorePrices(storeId, storeName, url);
+    const { scrapeJobId, storeId, storeName, source, postalCode, query, url } = job.data;
+    console.log(`Processing scraping job ${job.id} for store ${storeName} (source: ${source || 'flipp'})...`);
+    try {
+      if (source === 'cocowest') {
+        await scrapeCocowest(scrapeJobId, storeId, storeName, url!);
+      } else {
+        await scrapeFlippFlyers(scrapeJobId, storeId, storeName, postalCode!, query);
+      }
+    } catch (err: any) {
+      // Surface the failure on the scrape_jobs row so the progress UI shows why.
+      // BullMQ may retry; keep status 'failed' until a retry re-sets 'processing'.
+      await updateScrapeJob(scrapeJobId, {
+        status: 'failed',
+        phase: 'Failed',
+        error: String(err?.message || err),
+        finished_at: new Date(),
+      }).catch(() => {});
+      throw err;
+    }
   },
   {
     connection: redisConnection,

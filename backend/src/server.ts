@@ -1,7 +1,7 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import * as db from './db';
-import { addScrapingJob, addOcrJob } from './queue';
+import { addScrapingJob, addCocowestScrapeJob, addOcrJob } from './queue';
 import { computeUnitPrice } from './units';
 import { scaleNutrients, NutritionFacts, NUTRIENT_FIELDS } from './nutrition';
 import { searchFdc } from './fdc';
@@ -108,7 +108,7 @@ app.get('/api/foods', async (req: Request, res: Response) => {
         (
           SELECT json_agg(prices)
           FROM (
-            SELECT pl.price, pl.unit_price, pl.scraped_at, pl.is_sale, s.name as store_name, s.id as store_id
+            SELECT pl.price, pl.unit_price, pl.amount, pl.amount_unit, pl.scraped_at, pl.is_sale, s.name as store_name, s.id as store_id
             FROM price_logs pl
             JOIN food_prices fp ON fp.price_log_id = pl.id
             JOIN stores s ON pl.store_id = s.id
@@ -153,14 +153,22 @@ app.get('/api/foods', async (req: Request, res: Response) => {
 
 // 5. Create Food
 app.post('/api/foods', async (req: Request, res: Response) => {
-  const { name, barcode, description, category, unit } = req.body;
+  const { name, barcode, description, category, unit, usable_pct, density } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'Food name is required' });
   }
+  // Usable-portion percent: optional, must be > 0 when supplied; defaults to 100.
+  if (usable_pct !== undefined && usable_pct !== null && !(Number(usable_pct) > 0)) {
+    return res.status(400).json({ error: 'usable_pct must be a positive number' });
+  }
+  // Density (kg/L) for per-volume foods: optional, must be > 0; defaults to 1.
+  if (density !== undefined && density !== null && !(Number(density) > 0)) {
+    return res.status(400).json({ error: 'density must be a positive number' });
+  }
   try {
     const result = await db.query(
-      'INSERT INTO foods (name, barcode, description, category, unit) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [name, barcode || null, description || null, category || 'Other', unit || 'each']
+      'INSERT INTO foods (name, barcode, description, category, unit, usable_pct, density) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+      [name, barcode || null, description || null, category || 'Other', unit || 'each', usable_pct != null ? Number(usable_pct) : 100, density != null ? Number(density) : 1]
     );
     res.status(201).json(result.rows[0]);
   } catch (err: any) {
@@ -304,14 +312,14 @@ app.post('/api/foods/:id/prices', async (req: Request, res: Response) => {
   }
 });
 
-// 7. Manually Trigger Scraper for a Store
+// 7. Manually Trigger a Flipp Flyer Scrape for a Store
+// Body: { postal_code?, query? }. postal_code falls back to FLIPP_POSTAL_CODE
+// (root .env). query narrows the scrape to one flyer search; without it the
+// worker matches the whole food catalog against the store's current flyers.
+// The store's name must resemble the Flipp merchant name (e.g. "Walmart").
 app.post('/api/scrape/:storeId', async (req: Request, res: Response) => {
   const { storeId } = req.params;
-  const { url } = req.body; // Target URL to scrape, e.g. a specific category page
-  
-  if (!url) {
-    return res.status(400).json({ error: 'Target URL is required for scraping' });
-  }
+  const { postal_code, query } = req.body || {};
 
   try {
     // Check if store exists
@@ -320,13 +328,100 @@ app.post('/api/scrape/:storeId', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Store not found' });
     }
 
+    const postal = String(postal_code || process.env.FLIPP_POSTAL_CODE || '').replace(/\s+/g, '').toUpperCase();
+    if (!/^[A-Z]\d[A-Z]\d[A-Z]\d$/.test(postal)) {
+      return res.status(400).json({
+        error: 'A Canadian postal code is required (postal_code in the body, or FLIPP_POSTAL_CODE in .env), e.g. V5A3J2',
+      });
+    }
+
     const storeName = storeResult.rows[0].name;
-    const job = await addScrapingJob(parseInt(storeId), storeName, url);
+    const trimmedQuery = typeof query === 'string' && query.trim() ? query.trim() : undefined;
+
+    // Track this scrape so the UI can show live progress. The worker updates this
+    // row (phase/counters/items) as it runs; its id rides along on the queue job.
+    const scrapeJob = await db.query(
+      `INSERT INTO scrape_jobs (store_id, store_name, postal_code, query, status, phase)
+       VALUES ($1, $2, $3, $4, 'queued', 'Queued') RETURNING id`,
+      [parseInt(storeId), storeName, postal, trimmedQuery ?? null]
+    );
+    const scrapeJobId = scrapeJob.rows[0].id;
+    const job = await addScrapingJob(scrapeJobId, parseInt(storeId), storeName, postal, trimmedQuery);
 
     res.json({
-      message: `Scrape job successfully queued for store ${storeName}`,
+      message: `Flipp flyer scrape queued for store ${storeName}`,
       jobId: job.id,
+      scrapeJobId,
     });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 7a. Manually Trigger a cocowest.ca Costco Sale-Post Scrape for a Store
+// Body: { store_id, url }. url must be a cocowest.ca post — the whole post is
+// treated as one store's current sale list (no postal/merchant targeting, unlike
+// Flipp). Logs a price for every parseable item, creating foods (category
+// 'Costco') for anything not already in the catalog.
+app.post('/api/scrape-cocowest', async (req: Request, res: Response) => {
+  const { store_id, url } = req.body || {};
+
+  try {
+    if (!store_id) {
+      return res.status(400).json({ error: 'store_id is required' });
+    }
+    const trimmedUrl = typeof url === 'string' ? url.trim() : '';
+    if (!/^https?:\/\/([a-z0-9-]+\.)*cocowest\.ca\//i.test(trimmedUrl)) {
+      return res.status(400).json({ error: 'A cocowest.ca post URL is required' });
+    }
+
+    const storeResult = await db.query('SELECT * FROM stores WHERE id = $1', [store_id]);
+    if (storeResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Store not found' });
+    }
+    const storeName = storeResult.rows[0].name;
+
+    const scrapeJob = await db.query(
+      `INSERT INTO scrape_jobs (store_id, store_name, source, source_url, status, phase)
+       VALUES ($1, $2, 'cocowest', $3, 'queued', 'Queued') RETURNING id`,
+      [parseInt(store_id), storeName, trimmedUrl]
+    );
+    const scrapeJobId = scrapeJob.rows[0].id;
+    const job = await addCocowestScrapeJob(scrapeJobId, parseInt(store_id), storeName, trimmedUrl);
+
+    res.json({
+      message: `cocowest scrape queued for store ${storeName}`,
+      jobId: job.id,
+      scrapeJobId,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 7b. List scrape jobs (progress dashboard). Compact — no per-item detail.
+app.get('/api/scrape-jobs', async (req: Request, res: Response) => {
+  try {
+    const result = await db.query(
+      `SELECT id, store_id, store_name, source, source_url, postal_code, query, status, phase,
+              total, processed, logged, error, created_at, updated_at, finished_at,
+              jsonb_array_length(items) AS item_count
+       FROM scrape_jobs
+       ORDER BY created_at DESC
+       LIMIT 50`
+    );
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 7c. One scrape job with its full per-item detail (saved flyer images + links).
+app.get('/api/scrape-jobs/:id', async (req: Request, res: Response) => {
+  try {
+    const result = await db.query('SELECT * FROM scrape_jobs WHERE id = $1', [parseInt(req.params.id)]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Scrape job not found' });
+    res.json(result.rows[0]);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -803,15 +898,24 @@ app.post('/api/foods/:id/aliases/:aliasId/make-primary', async (req: Request, re
 
 // 26. Update food fields (rename primary name, category, unit, description).
 app.put('/api/foods/:id', async (req: Request, res: Response) => {
-  const { name, category, unit, description, barcode } = req.body;
+  const { name, category, unit, description, barcode, usable_pct, density } = req.body;
+  if (usable_pct !== undefined && usable_pct !== null && !(Number(usable_pct) > 0)) {
+    return res.status(400).json({ error: 'usable_pct must be a positive number' });
+  }
+  if (density !== undefined && density !== null && !(Number(density) > 0)) {
+    return res.status(400).json({ error: 'density must be a positive number' });
+  }
   try {
     const result = await db.query(
       `UPDATE foods SET
          name = COALESCE($1, name), category = COALESCE($2, category),
          unit = COALESCE($3, unit), description = COALESCE($4, description),
-         barcode = COALESCE($5, barcode)
-       WHERE id = $6 RETURNING *`,
-      [name ?? null, category ?? null, unit ?? null, description ?? null, barcode ?? null, parseInt(req.params.id)]
+         barcode = COALESCE($5, barcode), usable_pct = COALESCE($6, usable_pct),
+         density = COALESCE($8, density)
+       WHERE id = $7 RETURNING *`,
+      [name ?? null, category ?? null, unit ?? null, description ?? null, barcode ?? null,
+       usable_pct != null ? Number(usable_pct) : null, parseInt(req.params.id),
+       density != null ? Number(density) : null]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Food not found' });
     res.json(result.rows[0]);

@@ -37,6 +37,8 @@ services:
       - NODE_ENV=development
       - UPLOAD_DIR=/data/uploads
       - FDC_API_KEY=${FDC_API_KEY}
+      # Default postal code for Flipp flyer scrapes (per-request override allowed)
+      - FLIPP_POSTAL_CODE=${FLIPP_POSTAL_CODE:-V5A3J2}
     volumes:
       - uploads:/data/uploads
     depends_on:
@@ -54,12 +56,16 @@ services:
       - REDIS_URL=redis://redis:6379
       - NODE_ENV=development
       - OCR_SERVICE_URL=http://ocr-service:8000
+      # Scraped prices are written through the backend REST API so they get
+      # normalization, food_prices join rows, and audit entries.
+      - BACKEND_URL=http://backend:4000
     volumes:
       - uploads:/data/uploads
     depends_on:
       - db
       - redis
       - ocr-service
+      - backend
 
   ocr-service:
     build:

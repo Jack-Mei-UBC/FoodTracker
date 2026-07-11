@@ -6,7 +6,7 @@
 // (PriceEditor / MacroEditor) — this modal only lists data and launches them.
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { formatUnitPrice } from '../lib/units';
+import { formatCanonicalUnitPrice, normalizeUnit } from '../lib/units';
 import { NutritionFacts } from '../lib/nutrition';
 import PriceEditor, { EditablePriceLog } from './PriceEditor';
 import MacroEditor from './MacroEditor';
@@ -19,6 +19,9 @@ interface Food {
   name: string;
   category: string;
   barcode: string | null;
+  usable_pct: number | string;
+  density: number | string;
+  unit: string;
   aliases: Alias[] | null;
   nutrition: (NutritionFacts & { source?: string }) | null;
 }
@@ -52,6 +55,8 @@ export default function FoodDetailModal({
   const [loading, setLoading] = useState(true);
 
   const [newName, setNewName] = useState('');
+  const [usableDraft, setUsableDraft] = useState('');   // editing foods.usable_pct
+  const [densityDraft, setDensityDraft] = useState(''); // editing foods.density (kg/L)
   const [lightbox, setLightbox] = useState<number | null>(null); // image_id being viewed
   const [error, setError] = useState<string | null>(null);
 
@@ -102,6 +107,36 @@ export default function FoodDetailModal({
       await fetch(`${API_BASE_URL}/api/foods/${foodId}/aliases/${aliasId}`, { method: 'DELETE' });
       changed();
     } catch { flashError('Failed to remove name.'); }
+  };
+
+  // Keep the usable-% / density inputs in sync with the loaded food.
+  useEffect(() => { if (food) setUsableDraft(String(Number(food.usable_pct ?? 100))); }, [food]);
+  useEffect(() => { if (food) setDensityDraft(String(Number(food.density ?? 1))); }, [food]);
+
+  const saveUsable = async () => {
+    const pct = Number(usableDraft);
+    if (!(pct > 0)) { flashError('Usable % must be greater than 0.'); return; }
+    if (food && pct === Number(food.usable_pct)) return; // no-op
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/foods/${foodId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ usable_pct: pct }),
+      });
+      if (!res.ok) throw new Error();
+      changed();
+    } catch { flashError('Failed to save usable %.'); }
+  };
+
+  const saveDensity = async () => {
+    const d = Number(densityDraft);
+    if (!(d > 0)) { flashError('Density must be greater than 0.'); return; }
+    if (food && d === Number(food.density)) return; // no-op
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/foods/${foodId}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ density: d }),
+      });
+      if (!res.ok) throw new Error();
+      changed();
+    } catch { flashError('Failed to save density.'); }
   };
 
   const fmtDate = (iso: string) =>
@@ -177,6 +212,46 @@ export default function FoodDetailModal({
               )}
             </div>
 
+            {/* Usable portion — scales prices into an effective cost per usable unit */}
+            <div className="space-y-2">
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                Usable Portion <span className="normal-case font-normal text-slate-600">— % of what you buy that's actually usable</span>
+              </span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="number" min="1" step="1"
+                  value={usableDraft}
+                  onChange={e => setUsableDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveUsable(); }}
+                  onBlur={saveUsable}
+                  className="w-24 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white font-mono focus:outline-none focus:border-violet-500"
+                />
+                <span className="text-xs text-slate-500">% usable</span>
+                <span className="text-[10px] text-slate-600">e.g. 70 = 30% bone/waste · &gt;100 for dry goods that expand</span>
+              </div>
+            </div>
+
+            {/* Density — only for foods sold by volume; converts per-volume prices to per-kg */}
+            {normalizeUnit(food.unit)?.dimension === 'volume' && (
+              <div className="space-y-2">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  Density <span className="normal-case font-normal text-slate-600">— kg per litre, to show volume prices per kg</span>
+                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number" min="0.01" step="0.01"
+                    value={densityDraft}
+                    onChange={e => setDensityDraft(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveDensity(); }}
+                    onBlur={saveDensity}
+                    className="w-24 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white font-mono focus:outline-none focus:border-violet-500"
+                  />
+                  <span className="text-xs text-slate-500">kg/L</span>
+                  <span className="text-[10px] text-slate-600">water ≈ 1 · oil ≈ 0.92 · honey ≈ 1.42</span>
+                </div>
+              </div>
+            )}
+
             {/* Prices — list only; add/edit go through the shared PriceEditor popup */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -213,7 +288,7 @@ export default function FoodDetailModal({
                             </div>
                             <div className="text-[10px] text-slate-500 font-mono">
                               {log.amount ? `${Number(log.amount)} ${log.amount_unit ?? ''} · ` : ''}
-                              {formatUnitPrice(Number(log.price), log.amount ? Number(log.amount) : null, log.amount_unit) ?? ''}
+                              {formatCanonicalUnitPrice(Number(log.price), log.amount ? Number(log.amount) : null, log.amount_unit, food.density) ?? ''}
                               {' · '}{fmtDate(log.scraped_at)}
                             </div>
                           </div>
@@ -238,6 +313,8 @@ export default function FoodDetailModal({
           foodName={food.name}
           log={pricePopup.log as EditablePriceLog | null}
           stores={stores}
+          usablePct={food.usable_pct}
+          density={food.density}
           onClose={() => setPricePopup(null)}
           onSaved={changed}
           onDeleted={changed}

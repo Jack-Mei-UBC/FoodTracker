@@ -68,6 +68,22 @@ assert_json "GET /api/goals (single row)" "$API/api/goals" "d.get('id')==1"
   && pass "GET /api/prices/efficiency responds" \
   || failc "GET /api/prices/efficiency responds"
 
+# Backend: Flipp scrape endpoint contract — unknown store 404s before queuing.
+scrape_code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$API/api/scrape/999999" 2>/dev/null || echo 000)"
+[ "$scrape_code" = "404" ] \
+  && pass "POST /api/scrape/:storeId rejects unknown store (404)" \
+  || failc "POST /api/scrape/:storeId rejects unknown store (404)"
+
+# Backend: cocowest scrape endpoint contract — unknown store 404s before queuing.
+cocowest_code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{"store_id":999999,"url":"https://cocowest.ca/x"}' "$API/api/scrape-cocowest" 2>/dev/null || echo 000)"
+[ "$cocowest_code" = "404" ] \
+  && pass "POST /api/scrape-cocowest rejects unknown store (404)" \
+  || failc "POST /api/scrape-cocowest rejects unknown store (404)"
+
+# Backend: scrape-jobs progress endpoint (the /scrapes dashboard reads this).
+assert_json "GET /api/scrape-jobs responds (array)" \
+  "$API/api/scrape-jobs" "isinstance(d,list)"
+
 # Backend: USDA proxy (external + needs FDC_API_KEY; soft check)
 usda_code="$(http_code "$API/api/nutrition-search?q=milk")"
 if [ "$usda_code" = "200" ]; then pass "GET /api/nutrition-search returns USDA candidates"
@@ -75,7 +91,7 @@ else warn "USDA search unavailable (code $usda_code — external API / FDC_API_K
 
 # Frontend pages (soft-gated on the web server being up)
 if [ "$(http_code "$WEB/")" = "200" ]; then
-  for path in "/" "/diary" "/history" "/inbox"; do
+  for path in "/" "/diary" "/history" "/inbox" "/scrapes"; do
     [ "$(http_code "$WEB$path")" = "200" ] \
       && pass "GET $WEB$path -> 200" \
       || failc "GET $WEB$path -> 200"

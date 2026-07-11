@@ -5,13 +5,7 @@ import type { ScanResponse } from '../../types/scan';
 import ReviewItems, { RawItem } from '../../components/ReviewItems';
 
 // Staged status shown while the (possibly slow) vision call is in flight.
-const stageForElapsed = (s: number): string => {
-  if (s < 2) return 'Uploading image to vision AI...';
-  if (s < 8) return 'Vision AI is reading the image...';
-  if (s < 18) return 'Classifying receipt vs. price tag...';
-  if (s < 35) return 'Extracting products, prices, and sizes...';
-  return 'Still working — the free AI model can take up to ~90s...';
-};
+// We update this explicitly at each step of `scanNow` instead of using a timer.
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -21,8 +15,7 @@ export default function Scanner() {
   const [isScanning, setIsScanning] = useState(false);
   const [queuing, setQueuing] = useState(false);
   const [ocrProgress, setOcrProgress] = useState<string[]>([]);
-  const [scanElapsed, setScanElapsed] = useState(0);
-  const scanTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [scanStageLabel, setScanStageLabel] = useState<string | null>(null);
 
   // Selected-but-not-yet-processed image, and the extracted result for review.
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -51,14 +44,16 @@ export default function Scanner() {
     fetch(`${API_BASE_URL}/api/stores`).then(r => r.ok ? r.json() : []).then(setStores).catch(() => {});
   }, []);
 
-  const startScanTimer = () => {
-    setScanElapsed(0);
-    scanTimerRef.current = setInterval(() => setScanElapsed(s => s + 1), 1000);
+  // progress mapping for the staged bar
+  const progressForStage = (label: string | null) => {
+    if (!label) return 0;
+    if (label.startsWith('Uploading')) return 10;
+    if (label.startsWith('Vision AI is reading')) return 40;
+    if (label.startsWith('Classifying')) return 60;
+    if (label.startsWith('Extracting')) return 85;
+    if (label.startsWith('Still working')) return 95;
+    return 50;
   };
-  const stopScanTimer = () => {
-    if (scanTimerRef.current) { clearInterval(scanTimerRef.current); scanTimerRef.current = null; }
-  };
-  useEffect(() => stopScanTimer, []);
 
   // Send one or more images straight to the background queue (Inbox).
   const queueImages = async (files: File[]): Promise<boolean> => {
@@ -113,15 +108,17 @@ export default function Scanner() {
     if (!pendingFile) return;
     setIsScanning(true);
     setOcrProgress(['Uploading image to vision AI...']);
+    setScanStageLabel('Uploading image to vision AI...');
     setRawItems(null);
     setManualEntryMode(false);
-    startScanTimer();
+    // stages will be updated inline as each network step completes
     try {
       // Store the image first (fast, local) so committed logs can link to it,
       // and pick up EXIF GPS for store auto-selection.
       try {
         const imgForm = new FormData();
         imgForm.append('image', pendingFile);
+        setScanStageLabel('Uploading image to vision AI... (storing image)');
         const imgRes = await fetch(`${API_BASE_URL}/api/images`, { method: 'POST', body: imgForm });
         if (imgRes.ok) {
           const img = await imgRes.json();
@@ -133,8 +130,10 @@ export default function Scanner() {
         }
       } catch { /* attachment is best-effort; the scan itself continues */ }
 
+      setScanStageLabel('Vision AI is reading the image...');
       const formData = new FormData();
       formData.append('image', pendingFile);
+      setScanStageLabel('Vision AI is reading the image... (sending to model)');
       const scanRes = await fetch('/api/scan', { method: 'POST', body: formData });
       if (!scanRes.ok) {
         const err = await scanRes.json().catch(() => ({ error: scanRes.statusText }));
@@ -142,10 +141,12 @@ export default function Scanner() {
         notify('Image scan failed.', 'error');
         return;
       }
+      setScanStageLabel('Classifying receipt vs. price tag...');
       const scan: ScanResponse = await scanRes.json();
       setScanConfidence(scan.confidence);
 
       let items: RawItem[];
+      setScanStageLabel('Extracting products, prices, and sizes...');
       if (scan.type === 'receipt') {
         const { store_name, purchase_date, items: receiptItems } = scan.data;
         appendLog(`Detected a receipt${store_name ? ` from "${store_name}"` : ''}${purchase_date ? ` dated ${purchase_date}` : ''} — ${receiptItems.length} product lines.`);
@@ -159,6 +160,7 @@ export default function Scanner() {
         notify('Not recognized — you can still add items manually below.', 'error');
         setManualEntryMode(true);
         setRawItems([]);
+        setScanStageLabel(null);
         return;
       }
       if (items.length === 0) {
@@ -166,6 +168,7 @@ export default function Scanner() {
         notify('No products detected. Add items manually, or try a clearer image.', 'error');
         setManualEntryMode(true);
         setRawItems([]);
+        setScanStageLabel(null);
         return;
       }
       appendLog(`AI extracted ${items.length} product line${items.length > 1 ? 's' : ''}. Review below.`);
@@ -176,7 +179,7 @@ export default function Scanner() {
       appendLog(`Fatal error: ${err.message || err}`);
       notify('Receipt processing failed.', 'error');
     } finally {
-      stopScanTimer();
+      setScanStageLabel(null);
       setIsScanning(false);
     }
   };
@@ -346,12 +349,12 @@ export default function Scanner() {
             {isScanning && (
               <div className="space-y-2 animate-slide-up">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-violet-300 font-semibold animate-pulse">{stageForElapsed(scanElapsed)}</span>
-                  <span className="text-slate-500 font-mono tabular-nums">{scanElapsed}s</span>
+                  <span className="text-violet-300 font-semibold animate-pulse">{scanStageLabel ?? 'Processing...'}</span>
+                  <span className="text-slate-500 font-mono tabular-nums">&nbsp;</span>
                 </div>
                 <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
                   <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-400 rounded-full transition-all duration-1000 ease-out"
-                    style={{ width: `${Math.min(95, Math.round((1 - Math.exp(-scanElapsed / 15)) * 100))}%` }} />
+                    style={{ width: `${Math.min(95, progressForStage(scanStageLabel))}%` }} />
                 </div>
               </div>
             )}

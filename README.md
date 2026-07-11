@@ -27,7 +27,7 @@ Six containers orchestrated by `docker-compose.yml`. Each service is its own pac
 |---|---|---|---|
 | `frontend` | Next.js 14 (App Router), TS, Tailwind | 3000 | PWA UI |
 | `backend` | Express, TypeScript | 4000 | REST API; owns Postgres; enqueues jobs |
-| `worker` | BullMQ + Playwright, Node/TS | — | Processes the scraping **and** OCR queues |
+| `worker` | BullMQ, Node/TS | — | Processes the scraping **and** OCR queues |
 | `ocr-service` | FastAPI, Python 3.12 | 8000 (loopback) | Vision-LLM extraction via OpenRouter |
 | `db` | Postgres 15 | 5432 | Relational data |
 | `redis` | Redis 7 | 6379 | BullMQ queues |
@@ -38,7 +38,9 @@ flowchart LR
   UI -->|/scanner proxy| OCR[FastAPI OCR]
   API -->|enqueue| Q[(Redis / BullMQ)]
   W[Worker] -->|dequeue| Q
-  W -->|scrape| Web[(Store sites)]
+  W -->|flyer JSON| Flipp[(Flipp flyer API)]
+  W -->|sale post HTML| Cocowest[(cocowest.ca)]
+  W -->|write prices via REST| API
   W -->|extract| OCR
   OCR -->|vision LLM| OR[OpenRouter]
   API --> DB[(Postgres)]
@@ -52,6 +54,12 @@ flowchart LR
 2. **Background queue** (`/inbox`): browser → API (stores the image) → worker calls `ocr-service` → result held on a `scan_jobs` row → reviewed in the **same** shared review component.
 
 The OCR service sends the image **directly to a vision model** (no Tesseract): one call classifies `receipt | price_tag | unknown` and extracts structured fields, with a reprompt-retry and graceful degradation for flaky free models.
+
+**Flyer scraping (two sources, one queue).** The worker drains a `scraping-queue` shared by both scrapers, branching on a `source` field in the job payload:
+- **Flipp** (`source: 'flipp'`, default): hits Flipp's public flyer JSON API (`backflipp.wishabi.com` — **no headless browser**, the worker image is plain `node:20-slim`), fuzzy-matches merchants to the store name, and either logs one deal per tracked food (catalog mode) or every matching deal for a search query (query mode).
+- **cocowest.ca** (`source: 'cocowest'`): given a cocowest.ca "weekend update" post URL, regex-parses the `<img alt>` text of every product photo (item number, name, size, savings, expiry, price — no JSON API, no DOM parser needed) and logs a price for **every** item against a chosen store (typically "Costco"), creating foods (category `Costco`) for anything unmatched.
+
+Both parse pack sizes into `amount`/`amount_unit` with a shared regex-based parser (`worker/src/scrape-common.ts`) and write each deal **through the backend REST API** so scraped prices get the same unit normalization, `food_prices` join, and audit entry as every other source. Each run is tracked on a `scrape_jobs` row (status/phase/progress + a per-price detail list) surfaced live on the `/scrapes` page; each logged price also saves its source image (Flipp clipping image or cocowest product photo, attached via `image_id`, shown in the same lightbox as receipt photos) and a link back to where it came from. Progress bookkeeping is written direct via the worker's pg pool; only the prices go through the audited API.
 
 ---
 
@@ -120,7 +128,7 @@ There is no unit-test suite by design — this is an integration-heavy system wh
 powershell -File scripts/smoke-test.ps1
 ```
 
-It gates on backend health, then asserts the foods/diary/goals/efficiency endpoints, the join-table reads, micronutrient aggregation, the USDA lookup, and all four pages. Exit `0` = green, `2` = regression, and it no-ops when the stack isn't running.
+It gates on backend health, then asserts the foods/diary/goals/efficiency endpoints, the join-table reads, micronutrient aggregation, the scraper contract (unknown-store 404 + the `scrape-jobs` progress feed), the USDA lookup, and every page. Exit `0` = green, `2` = regression, and it no-ops when the stack isn't running.
 
 The same checks run in **CI** (`.github/workflows/smoke.yml`) via a portable bash twin, `scripts/smoke-test.sh`, so the "every change is verified" guarantee holds for outside contributors too — not just on my machine. CI boots only the services the checks need (`db`, `redis`, `backend`, `frontend`) and runs in strict mode, so a stack that fails to boot is a failing build.
 
@@ -142,8 +150,8 @@ The full list lives in [CLAUDE.md](CLAUDE.md). The load-bearing ones:
 
 ```
 backend/       Express API, audit trail, unit + nutrition + FDC logic
-frontend/      Next.js PWA (dashboard, diary, scanner, inbox, history)
-worker/        BullMQ consumer: Playwright scraper + OCR job runner
+frontend/      Next.js PWA (dashboard, diary, scanner, inbox, scrapes, history)
+worker/        BullMQ consumer: Flipp + cocowest.ca flyer scrapers + OCR job runner
 ocr-service/   FastAPI vision-LLM extraction
 db/schema.sql  Idempotent schema + seed data
 scripts/       smoke-test.ps1 (the verification loop)

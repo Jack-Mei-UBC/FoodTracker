@@ -7,7 +7,7 @@
 //   * create mode (no log):      POST /api/foods/:foodId/prices
 
 import React, { useState, useEffect } from 'react';
-import { UNIT_OPTIONS, parseAmountInput, formatUnitPrice } from '../lib/units';
+import { UNIT_OPTIONS, parseAmountInput, formatCanonicalUnitPrice } from '../lib/units';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -27,6 +27,8 @@ export default function PriceEditor({
   foodName,
   log,
   stores: storesProp,
+  usablePct,
+  density,
   onClose,
   onSaved,
   onDeleted,
@@ -35,6 +37,8 @@ export default function PriceEditor({
   foodName?: string;
   log?: EditablePriceLog | null;   // present => edit, absent => create
   stores?: Store[];
+  usablePct?: number | string | null; // food's usable %; reserved for callers
+  density?: number | string | null;   // food's density (kg/L); converts volume preview to per-kg
   onClose: () => void;
   onSaved?: () => void;
   onDeleted?: (id: number) => void; // when provided in edit mode, shows Delete
@@ -67,11 +71,15 @@ export default function PriceEditor({
     }
   };
 
-  const preview = formatUnitPrice(
+  // Live preview in the dashboard's canonical terms (kg / kg-via-density / each),
+  // so what you see while entering matches the food cards.
+  const preview = formatCanonicalUnitPrice(
     Number(draft.price),
     draft.amount === '' ? null : Number(draft.amount),
     draft.amount_unit,
+    density,
   );
+  void usablePct; // accepted for API parity with callers; not shown in this preview
 
   const save = async () => {
     if (draft.price === '') { setError('Enter a price.'); return; }

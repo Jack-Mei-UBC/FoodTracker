@@ -85,6 +85,35 @@ catch { Check "goals endpoint reachable" $false }
 try { Get-Json "$API/api/prices/efficiency" | Out-Null; Check "GET /api/prices/efficiency responds" $true }
 catch { Check "efficiency endpoint reachable" $false }
 
+# --- Backend: Flipp scrape endpoint contract ---------------------------------
+# Unknown store must 404 before anything is queued (read-only: no job created).
+try {
+    Invoke-RestMethod -Uri "$API/api/scrape/999999" -Method Post -ContentType 'application/json' -Body '{}' -TimeoutSec 10 | Out-Null
+    Check "POST /api/scrape/:storeId rejects unknown store (404)" $false
+} catch {
+    $code = $null
+    try { $code = [int]$_.Exception.Response.StatusCode } catch { }
+    Check "POST /api/scrape/:storeId rejects unknown store (404)" ($code -eq 404)
+}
+
+# --- Backend: cocowest scrape endpoint contract -------------------------------
+# Unknown store must 404 before anything is queued (read-only: no job created).
+try {
+    Invoke-RestMethod -Uri "$API/api/scrape-cocowest" -Method Post -ContentType 'application/json' -Body '{"store_id":999999,"url":"https://cocowest.ca/x"}' -TimeoutSec 10 | Out-Null
+    Check "POST /api/scrape-cocowest rejects unknown store (404)" $false
+} catch {
+    $code = $null
+    try { $code = [int]$_.Exception.Response.StatusCode } catch { }
+    Check "POST /api/scrape-cocowest rejects unknown store (404)" ($code -eq 404)
+}
+
+# --- Backend: scrape-jobs progress endpoint ----------------------------------
+# The progress dashboard reads this; it must return a JSON array (possibly empty).
+try {
+    $sjobs = Get-Json "$API/api/scrape-jobs"
+    Check "GET /api/scrape-jobs responds (array)" (($null -eq $sjobs) -or ($sjobs -is [array]) -or ($sjobs.PSObject.Properties.Name -contains 'id'))
+} catch { Check "GET /api/scrape-jobs responds (array)" $false }
+
 # --- Backend: USDA FoodData Central proxy (external; soft check) -------------
 try {
     $cands = Get-Json "$API/api/nutrition-search?q=milk"
@@ -97,7 +126,7 @@ try {
 $webUp = $true
 try { Invoke-WebRequest -UseBasicParsing -Uri $WEB -TimeoutSec 8 | Out-Null } catch { $webUp = $false }
 if ($webUp) {
-    foreach ($path in @('/', '/diary', '/history', '/inbox')) {
+    foreach ($path in @('/', '/diary', '/history', '/inbox', '/scrapes')) {
         $ok = $false
         try { $ok = (Invoke-WebRequest -UseBasicParsing -Uri "$WEB$path" -TimeoutSec 12).StatusCode -eq 200 } catch { }
         Check "GET $WEB$path -> 200" $ok
