@@ -1,9 +1,12 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
+import { PoolClient } from 'pg';
 import * as db from './db';
 import { addScrapingJob, addCocowestScrapeJob, addOcrJob } from './queue';
 import { computeUnitPrice } from './units';
 import { scaleNutrients, NutritionFacts, NUTRIENT_FIELDS } from './nutrition';
+import { summarizeMeal, validateIngredient, IngredientRow } from './meals';
+import { chatJson, LlmError } from './llm';
 import { searchFdc } from './fdc';
 import { recordAudit } from './audit';
 import multer from 'multer';
@@ -947,6 +950,36 @@ app.put('/api/stores/:id/location', async (req: Request, res: Response) => {
 const MEALS = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+// Inserts one diary row (+ its audit entry) inside the caller's transaction.
+// Shared by POST /api/consumption-logs and POST /api/meals/:id/log so every
+// diary entry goes through the same snapshot + audit path.
+async function insertConsumptionLog(client: PoolClient, entry: {
+  food_id: number | null;
+  meal_id?: number | null;
+  food_name: string;
+  consumed_at: string | null;
+  meal: string;
+  amount: number;
+  amount_unit: string;
+  nutrients: Record<string, number | null>;
+  notes: string | null;
+  source: string;
+}) {
+  const cols = ['food_id', 'meal_id', 'food_name', 'consumed_at', 'meal', 'amount', 'amount_unit', ...NUTRIENT_FIELDS, 'notes', 'source'];
+  const values = [entry.food_id, entry.meal_id ?? null, entry.food_name, entry.consumed_at, entry.meal,
+    entry.amount, entry.amount_unit,
+    ...NUTRIENT_FIELDS.map(f => entry.nutrients[f] ?? null), entry.notes, entry.source];
+  // consumed_at defaults to now() when the caller omits it.
+  const placeholders = cols.map((c, i) => (c === 'consumed_at' ? `COALESCE($${i + 1}, now())` : `$${i + 1}`)).join(', ');
+  const result = await client.query(
+    `INSERT INTO consumption_logs (${cols.join(', ')}) VALUES (${placeholders}) RETURNING *`,
+    values
+  );
+  const row = result.rows[0];
+  await recordAudit(client, { entityType: 'consumption_log', entityId: row.id, action: 'create', after: row });
+  return row;
+}
+
 // 28. Get a food's nutrition facts (null when none recorded).
 app.get('/api/foods/:id/nutrition', async (req: Request, res: Response) => {
   try {
@@ -1112,17 +1145,17 @@ app.post('/api/consumption-logs', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'This food has no nutrition facts; supply calories explicitly or add facts first' });
     }
 
-    const cols = ['food_id', 'food_name', 'consumed_at', 'meal', 'amount', 'amount_unit', ...NUTRIENT_FIELDS, 'notes', 'source'];
-    const values = [food_id ?? null, name, consumed_at ?? null, mealValue, amt, unit,
-      ...NUTRIENT_FIELDS.map(f => nutrients[f]), notes ?? null, source || 'manual'];
-    // consumed_at defaults to now() when the caller omits it.
-    const placeholders = cols.map((c, i) => (c === 'consumed_at' ? `COALESCE($${i + 1}, now())` : `$${i + 1}`)).join(', ');
-    const result = await client.query(
-      `INSERT INTO consumption_logs (${cols.join(', ')}) VALUES (${placeholders}) RETURNING *`,
-      values
-    );
-    const row = result.rows[0];
-    await recordAudit(client, { entityType: 'consumption_log', entityId: row.id, action: 'create', after: row });
+    const row = await insertConsumptionLog(client, {
+      food_id: food_id ?? null,
+      food_name: name,
+      consumed_at: consumed_at ?? null,
+      meal: mealValue,
+      amount: amt,
+      amount_unit: String(unit),
+      nutrients,
+      notes: notes ?? null,
+      source: source || 'manual',
+    });
     await client.query('COMMIT');
     res.status(201).json(row);
   } catch (err: any) {
@@ -1305,6 +1338,354 @@ app.put('/api/goals', async (req: Request, res: Response) => {
     res.json(result.rows[0]);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Meal plans (recipes composed of catalog foods) ──────────────────────────
+
+// Per-ingredient detail used by every meal read: the food's effective
+// nutrition (join-preferred, same rule as GET /api/foods) and its latest
+// non-deleted price that has a usable unit_price (needed to cost the amount).
+const MEAL_INGREDIENT_SELECT = `
+  SELECT mi.id, mi.meal_id, mi.food_id, mi.amount, mi.amount_unit, mi.sort_order,
+         f.name AS food_name, f.unit AS food_unit, f.density,
+         (SELECT row_to_json(fn) FROM food_nutrition fn
+          JOIN food_macros fm ON fm.nutrition_id = fn.id
+          WHERE fm.food_id = mi.food_id
+          ORDER BY (fn.food_id = mi.food_id) DESC, fn.id LIMIT 1) AS nutrition,
+         (SELECT row_to_json(lp) FROM (
+            SELECT pl.price, pl.unit_price, pl.amount, pl.amount_unit, pl.scraped_at, pl.is_sale, s.name AS store_name
+            FROM price_logs pl
+            JOIN food_prices fp ON fp.price_log_id = pl.id
+            LEFT JOIN stores s ON pl.store_id = s.id
+            WHERE fp.food_id = mi.food_id AND pl.deleted_at IS NULL AND pl.unit_price IS NOT NULL
+            ORDER BY pl.scraped_at DESC LIMIT 1
+          ) lp) AS latest_price
+  FROM meal_ingredients mi
+  JOIN foods f ON mi.food_id = f.id
+`;
+
+// Validates and bulk-inserts a meal's ingredient list inside a transaction.
+// Returns an error message (caller responds 400 + rolls back) or null.
+async function insertMealIngredients(client: PoolClient, mealId: number, ingredients: any[]): Promise<string | null> {
+  for (const ing of ingredients) {
+    const err = validateIngredient(ing);
+    if (err) return err;
+  }
+  for (let i = 0; i < ingredients.length; i++) {
+    const ing = ingredients[i];
+    await client.query(
+      `INSERT INTO meal_ingredients (meal_id, food_id, amount, amount_unit, sort_order)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [mealId, parseInt(ing.food_id), Number(ing.amount), String(ing.amount_unit).trim(), ing.sort_order ?? i]
+    );
+  }
+  return null;
+}
+
+// 38. List meals with live totals (macros + cost) and per-serving figures.
+app.get('/api/meals', async (req: Request, res: Response) => {
+  try {
+    const [meals, ingredients] = await Promise.all([
+      db.query('SELECT * FROM meals ORDER BY updated_at DESC, id DESC'),
+      db.query(`${MEAL_INGREDIENT_SELECT} ORDER BY mi.meal_id, mi.sort_order, mi.id`),
+    ]);
+    const byMeal = new Map<number, IngredientRow[]>();
+    for (const row of ingredients.rows) {
+      const list = byMeal.get(row.meal_id) ?? [];
+      list.push(row);
+      byMeal.set(row.meal_id, list);
+    }
+    res.json(meals.rows.map((meal) => {
+      const summary = summarizeMeal(byMeal.get(meal.id) ?? [], Number(meal.servings));
+      return {
+        ...meal,
+        ingredient_count: (byMeal.get(meal.id) ?? []).length,
+        totals: summary.totals,
+        per_serving: summary.per_serving,
+        nutrition_complete: summary.nutrition_complete,
+        cost_complete: summary.cost_complete,
+      };
+    }));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 39. Draft a meal with an LLM from selected "fridge" foods and macro targets.
+// Returns an UNSAVED draft in the POST /api/meals ingredients shape — the user
+// reviews/edits it in the builder and saves explicitly (nothing auto-commits,
+// same review invariant as OCR). Registered before the :id routes.
+app.post('/api/meals/generate', async (req: Request, res: Response) => {
+  const { food_ids, targets, notes } = req.body || {};
+  if (!Array.isArray(food_ids) || food_ids.length === 0) {
+    return res.status(400).json({ error: 'food_ids (non-empty array) is required' });
+  }
+  try {
+    const foods = await db.query(
+      `SELECT f.id, f.name,
+         (SELECT row_to_json(fn) FROM food_nutrition fn
+          JOIN food_macros fm ON fm.nutrition_id = fn.id
+          WHERE fm.food_id = f.id
+          ORDER BY (fn.food_id = f.id) DESC, fn.id LIMIT 1) AS nutrition
+       FROM foods f WHERE f.id = ANY($1::int[])`,
+      [food_ids.map((id: any) => parseInt(id))]
+    );
+    const usable = foods.rows.filter((f) => f.nutrition && f.nutrition.serving_size != null);
+    if (usable.length === 0) {
+      return res.status(400).json({ error: 'None of the selected foods have nutrition facts' });
+    }
+
+    const foodLines = usable.map((f) => {
+      const n = f.nutrition;
+      return `- food_id ${f.id}: ${f.name} — serving ${n.serving_size} ${n.serving_unit}, ` +
+        `${n.calories} kcal, protein ${n.protein_g ?? '?'}g, carbs ${n.carbs_g ?? '?'}g, fat ${n.fat_g ?? '?'}g`;
+    }).join('\n');
+    const targetLines = ['calories', 'protein_g', 'carbs_g', 'fat_g']
+      .filter((k) => targets && targets[k] != null)
+      .map((k) => `${k}: ${targets[k]}`).join(', ');
+
+    const system =
+      'You are a meal-planning assistant. Compose ONE realistic meal using ONLY the provided foods (a subset is fine). ' +
+      'Per-serving nutrition targets apply to one serving of the meal. ' +
+      'Respond with a single JSON object: {"name": string, "servings": number, ' +
+      '"ingredients": [{"food_id": number, "amount": number, "amount_unit": string}], "rationale": string}. ' +
+      "amount_unit must be 'serving' (a multiple of that food's serving size, decimals allowed) " +
+      "or the food's own serving unit (e.g. g, ml). Keep amounts sensible for a real recipe.";
+    const user =
+      `Available foods (per-serving facts):\n${foodLines}\n\n` +
+      (targetLines ? `Targets per serving of the meal: ${targetLines}\n` : 'No specific macro targets; make a balanced meal.\n') +
+      (notes ? `Additional instructions: ${String(notes).slice(0, 500)}\n` : '');
+
+    const draft = await chatJson(system, user);
+
+    // Keep only ingredients that reference the provided foods with valid
+    // amounts/units; the model's output is a suggestion, not trusted input.
+    const allowedIds = new Set(usable.map((f) => f.id));
+    const nameById = new Map(usable.map((f) => [f.id, f.name]));
+    const ingredients = (Array.isArray(draft?.ingredients) ? draft.ingredients : [])
+      .filter((ing: any) => allowedIds.has(parseInt(ing?.food_id)) && !validateIngredient(ing))
+      .map((ing: any) => ({
+        food_id: parseInt(ing.food_id),
+        food_name: nameById.get(parseInt(ing.food_id)),
+        amount: Number(ing.amount),
+        amount_unit: String(ing.amount_unit).trim(),
+      }));
+    if (ingredients.length === 0) {
+      return res.status(502).json({ error: 'The model did not return any usable ingredients — try again' });
+    }
+
+    res.json({
+      draft: {
+        name: typeof draft.name === 'string' && draft.name.trim() ? draft.name.trim() : 'Generated meal',
+        servings: Number(draft.servings) > 0 ? Number(draft.servings) : 1,
+        ingredients,
+        rationale: typeof draft.rationale === 'string' ? draft.rationale : null,
+      },
+    });
+  } catch (err: any) {
+    const status = err instanceof LlmError ? err.status : 500;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+// 40. Create a meal with its ingredients.
+app.post('/api/meals', async (req: Request, res: Response) => {
+  const { name, servings, notes, ingredients } = req.body || {};
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'Meal name is required' });
+  if (servings !== undefined && servings !== null && !(Number(servings) > 0)) {
+    return res.status(400).json({ error: 'servings must be a positive number' });
+  }
+  if (ingredients !== undefined && !Array.isArray(ingredients)) {
+    return res.status(400).json({ error: 'ingredients must be an array' });
+  }
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const meal = await client.query(
+      'INSERT INTO meals (name, notes, servings) VALUES ($1, $2, $3) RETURNING *',
+      [String(name).trim(), notes ?? null, servings != null ? Number(servings) : 1]
+    );
+    const err = await insertMealIngredients(client, meal.rows[0].id, ingredients ?? []);
+    if (err) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: err });
+    }
+    await client.query('COMMIT');
+    res.status(201).json(meal.rows[0]);
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 41. One meal with full per-ingredient detail (scaled nutrients, latest price
+// + cost) and live totals / per-serving figures.
+app.get('/api/meals/:id', async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+  try {
+    const [meal, ingredients] = await Promise.all([
+      db.query('SELECT * FROM meals WHERE id = $1', [id]),
+      db.query(`${MEAL_INGREDIENT_SELECT} WHERE mi.meal_id = $1 ORDER BY mi.sort_order, mi.id`, [id]),
+    ]);
+    if (meal.rows.length === 0) return res.status(404).json({ error: 'Meal not found' });
+    const summary = summarizeMeal(ingredients.rows, Number(meal.rows[0].servings));
+    res.json({
+      ...meal.rows[0],
+      ingredients: summary.ingredients,
+      totals: summary.totals,
+      per_serving: summary.per_serving,
+      nutrition_complete: summary.nutrition_complete,
+      cost_complete: summary.cost_complete,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 42. Update a meal. When `ingredients` is provided the list is replaced
+// wholesale (delete + reinsert) — simplest correct semantics for a small list.
+app.put('/api/meals/:id', async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+  const { name, servings, notes, ingredients } = req.body || {};
+  if (servings !== undefined && servings !== null && !(Number(servings) > 0)) {
+    return res.status(400).json({ error: 'servings must be a positive number' });
+  }
+  if (ingredients !== undefined && !Array.isArray(ingredients)) {
+    return res.status(400).json({ error: 'ingredients must be an array' });
+  }
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const updated = await client.query(
+      `UPDATE meals SET
+         name = COALESCE($1, name), notes = COALESCE($2, notes),
+         servings = COALESCE($3, servings), updated_at = now()
+       WHERE id = $4 RETURNING *`,
+      [name != null ? String(name).trim() : null, notes ?? null,
+       servings != null ? Number(servings) : null, id]
+    );
+    if (updated.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Meal not found' });
+    }
+    if (Array.isArray(ingredients)) {
+      await client.query('DELETE FROM meal_ingredients WHERE meal_id = $1', [id]);
+      const err = await insertMealIngredients(client, id, ingredients);
+      if (err) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: err });
+      }
+    }
+    await client.query('COMMIT');
+    res.json(updated.rows[0]);
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 43. Delete a meal (hard delete; ingredients cascade, diary entries keep
+// their snapshot with meal_id nulled).
+app.delete('/api/meals/:id', async (req: Request, res: Response) => {
+  try {
+    const result = await db.query('DELETE FROM meals WHERE id = $1 RETURNING id', [parseInt(req.params.id)]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Meal not found' });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 44. Clone a meal (with its ingredients) so a previous meal can be tweaked
+// without losing the original.
+app.post('/api/meals/:id/clone', async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const copy = await client.query(
+      `INSERT INTO meals (name, notes, servings)
+       SELECT 'Copy of ' || name, notes, servings FROM meals WHERE id = $1 RETURNING *`,
+      [id]
+    );
+    if (copy.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Meal not found' });
+    }
+    await client.query(
+      `INSERT INTO meal_ingredients (meal_id, food_id, amount, amount_unit, sort_order)
+       SELECT $1, food_id, amount, amount_unit, sort_order FROM meal_ingredients WHERE meal_id = $2`,
+      [copy.rows[0].id, id]
+    );
+    await client.query('COMMIT');
+    res.status(201).json(copy.rows[0]);
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 45. Log portions of a meal to the diary as ONE consumption entry: the meal's
+// per-serving nutrients × portions, snapshotted at log time like any other
+// diary entry (audited, source='meal', meal_id for provenance).
+app.post('/api/meals/:id/log', async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+  const { meal, portions, consumed_at, notes } = req.body || {};
+  const mealValue = meal || 'snack';
+  if (!MEALS.includes(mealValue)) {
+    return res.status(400).json({ error: `meal must be one of: ${MEALS.join(', ')}` });
+  }
+  const qty = portions !== undefined ? Number(portions) : 1;
+  if (!(qty > 0)) return res.status(400).json({ error: 'portions must be a positive number' });
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const [mealRes, ingredients] = await Promise.all([
+      client.query('SELECT * FROM meals WHERE id = $1', [id]),
+      client.query(`${MEAL_INGREDIENT_SELECT} WHERE mi.meal_id = $1 ORDER BY mi.sort_order, mi.id`, [id]),
+    ]);
+    if (mealRes.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Meal not found' });
+    }
+    const summary = summarizeMeal(ingredients.rows, Number(mealRes.rows[0].servings));
+    if (summary.per_serving.calories === null) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'No ingredient in this meal has nutrition facts — add facts before logging it' });
+    }
+
+    const nutrients: Record<string, number | null> = {};
+    for (const f of NUTRIENT_FIELDS) {
+      const v = summary.per_serving[f];
+      nutrients[f] = v === null ? null : Math.round(v * qty * 100) / 100;
+    }
+    const row = await insertConsumptionLog(client, {
+      food_id: null,
+      meal_id: id,
+      food_name: mealRes.rows[0].name,
+      consumed_at: consumed_at ?? null,
+      meal: mealValue,
+      amount: qty,
+      amount_unit: 'serving',
+      nutrients,
+      notes: notes ?? null,
+      source: 'meal',
+    });
+    await client.query('COMMIT');
+    res.status(201).json({ ...row, nutrition_complete: summary.nutrition_complete });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 

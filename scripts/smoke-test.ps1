@@ -114,6 +114,46 @@ try {
     Check "GET /api/scrape-jobs responds (array)" (($null -eq $sjobs) -or ($sjobs -is [array]) -or ($sjobs.PSObject.Properties.Name -contains 'id'))
 } catch { Check "GET /api/scrape-jobs responds (array)" $false }
 
+# --- Backend: meal plans (read-only contract checks) -------------------------
+# GET list must return an array whose items carry computed totals/per-serving;
+# validation must reject a nameless meal and an ingredient-less AI generate.
+try {
+    $mealsList = Get-Json "$API/api/meals"
+    $isArr = ($null -eq $mealsList) -or ($mealsList -is [array]) -or (HasProp $mealsList 'id')
+    Check "GET /api/meals responds (array)" $isArr
+    $m1 = $mealsList | Select-Object -First 1
+    if ($m1) {
+        Check "meal items expose totals + per_serving" ((HasProp $m1 'totals') -and (HasProp $m1 'per_serving'))
+    }
+} catch { Check "GET /api/meals responds (array)" $false }
+
+try {
+    Invoke-RestMethod -Uri "$API/api/meals" -Method Post -ContentType 'application/json' -Body '{}' -TimeoutSec 10 | Out-Null
+    Check "POST /api/meals rejects missing name (400)" $false
+} catch {
+    $code = $null
+    try { $code = [int]$_.Exception.Response.StatusCode } catch { }
+    Check "POST /api/meals rejects missing name (400)" ($code -eq 400)
+}
+
+try {
+    Invoke-RestMethod -Uri "$API/api/meals/generate" -Method Post -ContentType 'application/json' -Body '{}' -TimeoutSec 10 | Out-Null
+    Check "POST /api/meals/generate rejects empty food_ids (400)" $false
+} catch {
+    $code = $null
+    try { $code = [int]$_.Exception.Response.StatusCode } catch { }
+    Check "POST /api/meals/generate rejects empty food_ids (400)" ($code -eq 400)
+}
+
+try {
+    Invoke-RestMethod -Uri "$API/api/meals/999999" -TimeoutSec 10 | Out-Null
+    Check "GET /api/meals/:id 404s on unknown meal" $false
+} catch {
+    $code = $null
+    try { $code = [int]$_.Exception.Response.StatusCode } catch { }
+    Check "GET /api/meals/:id 404s on unknown meal" ($code -eq 404)
+}
+
 # --- Backend: USDA FoodData Central proxy (external; soft check) -------------
 try {
     $cands = Get-Json "$API/api/nutrition-search?q=milk"
@@ -126,7 +166,7 @@ try {
 $webUp = $true
 try { Invoke-WebRequest -UseBasicParsing -Uri $WEB -TimeoutSec 8 | Out-Null } catch { $webUp = $false }
 if ($webUp) {
-    foreach ($path in @('/', '/diary', '/history', '/inbox', '/scrapes')) {
+    foreach ($path in @('/', '/diary', '/history', '/inbox', '/scrapes', '/meals')) {
         $ok = $false
         try { $ok = (Invoke-WebRequest -UseBasicParsing -Uri "$WEB$path" -TimeoutSec 12).StatusCode -eq 200 } catch { }
         Check "GET $WEB$path -> 200" $ok

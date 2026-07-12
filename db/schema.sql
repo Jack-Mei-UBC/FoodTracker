@@ -237,6 +237,41 @@ CREATE TABLE IF NOT EXISTS food_macros (
 );
 CREATE INDEX IF NOT EXISTS idx_food_macros_nutrition ON food_macros(nutrition_id);
 
+-- ── Meal plans ───────────────────────────────────────────────────────────────
+
+-- A meal (recipe) composed of catalog foods. `servings` is how many portions
+-- the recipe makes; totals ÷ servings gives per-portion macros/cost. Macros and
+-- cost are always computed live from the ingredients (never stored), so a
+-- meal's numbers track the foods' current facts and latest prices.
+CREATE TABLE IF NOT EXISTS meals (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    notes TEXT,
+    servings DECIMAL(8, 2) NOT NULL DEFAULT 1 CHECK (servings > 0),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Ingredients: an amount of a catalog food. amount_unit uses the shared unit
+-- vocabulary plus the diary-only 'serving' (a multiple of the food's serving
+-- size). Hard-deleted with the meal (meals are not audited; clone covers
+-- recovery).
+CREATE TABLE IF NOT EXISTS meal_ingredients (
+    id SERIAL PRIMARY KEY,
+    meal_id INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
+    food_id INTEGER NOT NULL REFERENCES foods(id) ON DELETE CASCADE,
+    amount DECIMAL(10, 3) NOT NULL CHECK (amount > 0),
+    amount_unit VARCHAR(20) NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_meal_ingredients_meal ON meal_ingredients(meal_id);
+
+-- Provenance for diary entries logged from a meal (source='meal'). Nullable;
+-- consumption_logs is defined above, so this is an idempotent add (apply
+-- manually to a running DB — see CLAUDE.md).
+ALTER TABLE consumption_logs ADD COLUMN IF NOT EXISTS meal_id INTEGER REFERENCES meals(id) ON DELETE SET NULL;
+
 -- Single-row daily targets (single-user app; id=1 always). Functional bootstrap
 -- (not demo data): the app and smoke tests expect the id=1 row to exist.
 CREATE TABLE IF NOT EXISTS user_goals (

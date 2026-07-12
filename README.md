@@ -43,6 +43,7 @@ flowchart LR
   W -->|write prices via REST| API
   W -->|extract| OCR
   OCR -->|vision LLM| OR[OpenRouter]
+  API -->|meal drafting LLM| OR
   API --> DB[(Postgres)]
   W --> DB
   API -->|nutrition lookup| FDC[USDA FoodData Central]
@@ -65,12 +66,13 @@ Both parse pack sizes into `amount`/`amount_unit` with a shared regex-based pars
 
 ## Data model
 
-Core entities are **stores, foods, price_logs**; calorie tracking adds **food_nutrition, consumption_logs, user_goals**. A few decisions worth calling out because they show up throughout the code:
+Core entities are **stores, foods, price_logs**; calorie tracking adds **food_nutrition, consumption_logs, user_goals**; meal planning adds **meals, meal_ingredients**. A few decisions worth calling out because they show up throughout the code:
 
 - **Many-to-many by design.** Foods relate to prices and nutrition through join tables (`food_prices`, `food_macros`), so one price observation or nutrition profile can be shared across foods. The origin `food_id` columns are retained for the audit trail and back-compat.
 - **Audit + revert on every price mutation.** Create / update / delete each write a before/after JSONB snapshot in the same transaction as the mutation. Deletes are soft; reverts are themselves audited, so reverts are revertible.
 - **History is immutable by snapshot.** Diary entries store the nutrient values computed *at log time* — editing a food's facts later never rewrites your history.
 - **One array drives the schema.** The full nutrient column set is declared once (`NUTRIENT_FIELDS` in `backend/src/nutrition.ts`); the server builds its `INSERT` / `UPDATE` / `SUM` column lists from it. Adding a nutrient is a migration plus one array entry.
+- **Meals are recipes, computed live.** A meal is a named list of ingredient amounts; its macros and cost are never stored — every read scales each ingredient's current facts and prices it against the food's latest tracked purchase (density-converting mass↔volume where needed). Logging a meal writes **one** diary entry (per-serving nutrients × portions, snapshotted like any other entry), and an LLM can draft a meal from selected "fridge" foods against macro targets — always returned as an unsaved draft the user reviews in the builder, same human-in-the-loop rule as OCR.
 
 ---
 
@@ -150,11 +152,12 @@ The full list lives in [CLAUDE.md](CLAUDE.md). The load-bearing ones:
 
 ```
 backend/       Express API, audit trail, unit + nutrition + FDC logic
-frontend/      Next.js PWA (dashboard, diary, scanner, inbox, scrapes, history)
+frontend/      Next.js PWA (dashboard, meals, diary, scanner, inbox, scrapes, history)
 worker/        BullMQ consumer: Flipp + cocowest.ca flyer scrapers + OCR job runner
 ocr-service/   FastAPI vision-LLM extraction
 db/schema.sql  Idempotent schema + seed data
 scripts/       smoke-test.ps1 (the verification loop)
 .claude/       settings.json — the Stop hook wiring the loop
 CLAUDE.md      The living spec: invariants, gotchas, architecture
+ROADMAP.md     Candidate future features (shopping lists, weekly planner, …)
 ```

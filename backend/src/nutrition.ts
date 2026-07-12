@@ -35,7 +35,7 @@ export interface NutritionFacts {
 
 export type ScaledNutrients = Record<NutrientField, number | null>;
 
-function isServingUnit(unit: string): boolean {
+export function isServingUnit(unit: string): boolean {
   const key = unit.toLowerCase().replace(/[^a-z]/g, '');
   return key === 'serving' || key === 'servings';
 }

@@ -39,6 +39,9 @@ services:
       - FDC_API_KEY=${FDC_API_KEY}
       # Default postal code for Flipp flyer scrapes (per-request override allowed)
       - FLIPP_POSTAL_CODE=${FLIPP_POSTAL_CODE:-V5A3J2}
+      # AI meal drafting (POST /api/meals/generate) via OpenRouter chat models.
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - MEAL_MODEL=${MEAL_MODEL:-google/gemini-2.5-flash}
     volumes:
       - uploads:/data/uploads
     depends_on:

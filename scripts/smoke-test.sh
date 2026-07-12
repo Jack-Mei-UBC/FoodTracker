@@ -84,6 +84,23 @@ cocowest_code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type
 assert_json "GET /api/scrape-jobs responds (array)" \
   "$API/api/scrape-jobs" "isinstance(d,list)"
 
+# Backend: meal plans (read-only contract checks).
+assert_json "GET /api/meals responds (array)" "$API/api/meals" "isinstance(d,list)"
+
+meal_code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$API/api/meals" 2>/dev/null || echo 000)"
+[ "$meal_code" = "400" ] \
+  && pass "POST /api/meals rejects missing name (400)" \
+  || failc "POST /api/meals rejects missing name (400)"
+
+gen_code="$(curl -s -o /dev/null -w '%{http_code}' -X POST -H 'Content-Type: application/json' -d '{}' "$API/api/meals/generate" 2>/dev/null || echo 000)"
+[ "$gen_code" = "400" ] \
+  && pass "POST /api/meals/generate rejects empty food_ids (400)" \
+  || failc "POST /api/meals/generate rejects empty food_ids (400)"
+
+[ "$(http_code "$API/api/meals/999999")" = "404" ] \
+  && pass "GET /api/meals/:id 404s on unknown meal" \
+  || failc "GET /api/meals/:id 404s on unknown meal"
+
 # Backend: USDA proxy (external + needs FDC_API_KEY; soft check)
 usda_code="$(http_code "$API/api/nutrition-search?q=milk")"
 if [ "$usda_code" = "200" ]; then pass "GET /api/nutrition-search returns USDA candidates"
@@ -91,7 +108,7 @@ else warn "USDA search unavailable (code $usda_code — external API / FDC_API_K
 
 # Frontend pages (soft-gated on the web server being up)
 if [ "$(http_code "$WEB/")" = "200" ]; then
-  for path in "/" "/diary" "/history" "/inbox" "/scrapes"; do
+  for path in "/" "/diary" "/history" "/inbox" "/scrapes" "/meals"; do
     [ "$(http_code "$WEB$path")" = "200" ] \
       && pass "GET $WEB$path -> 200" \
       || failc "GET $WEB$path -> 200"
