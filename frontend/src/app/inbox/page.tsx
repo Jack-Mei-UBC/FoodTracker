@@ -176,7 +176,7 @@ export default function Inbox() {
         )}
       </div>
 
-      <div className="rounded-3xl p-6 glass-panel border border-white/5 space-y-2">
+      <div className="card rounded-3xl p-6 space-y-2">
         {jobs.length === 0 && <p className="text-slate-600 text-sm py-6 text-center">Inbox empty. Queue an image from the Scanner.</p>}
         {jobs.map(job => {
           const isOpen = openReviews.some(r => r.jobId === job.id);
@@ -210,7 +210,7 @@ export default function Inbox() {
       {openReviews.map(review => (
         <div key={review.jobId} className="relative">
           {review.result.type === 'unknown' && !manualOverrideIds.has(review.jobId) ? (
-            <div className="rounded-3xl p-6 glass-panel border border-white/5 text-sm text-slate-400 space-y-3">
+            <div className="card rounded-3xl p-6 text-sm text-slate-400 space-y-3">
               <div className="text-xs font-semibold text-slate-400">{review.filename}</div>
               {review.imageId != null && (
                 <a href={`${API_BASE_URL}/api/images/${review.imageId}`} target="_blank" rel="noreferrer" className="block w-fit">

@@ -130,7 +130,7 @@ function ScrapesInner() {
 
       <div className="space-y-3">
         {jobs.length === 0 && (
-          <div className="rounded-3xl p-8 glass-panel border border-white/5 text-center text-slate-600 text-sm">
+          <div className="card rounded-3xl p-8 text-center text-slate-600 text-sm">
             No scrapes yet. Dispatch one from the <span className="text-violet-400 font-semibold">Dashboard</span>.
           </div>
         )}
@@ -140,7 +140,7 @@ function ScrapesInner() {
           const items = details[job.id] || [];
           const open = expanded.has(job.id);
           return (
-            <div key={job.id} className="rounded-2xl glass-panel border border-white/5 overflow-hidden">
+            <div key={job.id} className="card overflow-hidden">
               {/* Header row */}
               <button onClick={() => toggle(job.id)} className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-white/[0.02] transition">
                 <div className="flex items-center gap-3 min-w-0">

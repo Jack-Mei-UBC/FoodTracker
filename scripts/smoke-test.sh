@@ -48,13 +48,21 @@ fi
 # Backend: foods, single-food, M:N join reads
 assert_json "GET /api/foods returns items" \
   "$API/api/foods" "isinstance(d,list) and len(d)>0"
+assert_json "GET /api/foods (no limit) is a plain array, not {foods,total}" \
+  "$API/api/foods" "isinstance(d,list)"
 assert_json "food items expose latest_prices + nutrition + aliases" \
   "$API/api/foods" "all(k in d[0] for k in ('latest_prices','nutrition','aliases'))"
+assert_json "food items expose display_image_id" \
+  "$API/api/foods" "'display_image_id' in d[0]"
 assert_json "GET /api/foods/:id returns that food with aliases" \
   "$API/api/foods/1" "d.get('id')==1 and 'aliases' in d"
+assert_json "GET /api/foods/:id exposes display_image_id" \
+  "$API/api/foods/1" "'display_image_id' in d"
 [ "$(http_code "$API/api/foods/5/prices")" = "200" ] \
   && pass "GET /api/foods/:id/prices (join-table read) responds" \
   || failc "GET /api/foods/:id/prices (join-table read) responds"
+assert_json "GET /api/foods?limit=2 returns {foods,total,categories}" \
+  "$API/api/foods?limit=2&offset=0" "all(k in d for k in ('foods','total','categories')) and len(d['foods'])<=2"
 
 # Backend: diary totals include macro + micronutrient sums
 assert_json "GET /api/diary totals include micronutrient sums" \

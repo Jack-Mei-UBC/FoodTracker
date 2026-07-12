@@ -6,6 +6,8 @@ import { NutritionFacts } from '../lib/nutrition';
 import { formatCanonicalUnitPrice, normalizeUnit } from '../lib/units';
 import PriceEditor from '../components/PriceEditor';
 import MacroEditor from '../components/MacroEditor';
+import Modal from '../components/Modal';
+import FoodIconPicker from '../components/FoodIconPicker';
 
 // Interfaces based on database schema
 interface LatestPrice {
@@ -33,6 +35,8 @@ interface FoodItem {
   unit: string;
   usable_pct: number | string;
   density: number | string;
+  image_id: number | null;
+  display_image_id: number | null;
   latest_prices: LatestPrice[] | null;
   aliases: FoodAlias[] | null;
   nutrition: (NutritionFacts & { source: string }) | null;
@@ -71,6 +75,7 @@ interface PriceEfficiency {
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+const PAGE_SIZE = 24;
 
 export default function Dashboard() {
   const router = useRouter();
@@ -79,8 +84,13 @@ export default function Dashboard() {
   const [stores, setStores] = useState<Store[]>([]);
   const [efficiencies, setEfficiencies] = useState<PriceEfficiency[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [isLoading, setIsLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [serverCategories, setServerCategories] = useState<string[]>([]);
+  const [iconPickerFood, setIconPickerFood] = useState<FoodItem | null>(null);
 
   // Forms State
   const [newFood, setNewFood] = useState({ name: '', barcode: '', description: '', category: 'Grocery', unit: 'each' });
@@ -113,18 +123,37 @@ export default function Dashboard() {
     setTimeout(() => setNotification(null), 4000);
   };
 
-  // Fetch all dashboard data
-  const fetchData = async () => {
-    setIsLoading(true);
+  // Stores + price-efficiency spreads: fetched once on mount, not paginated.
+  const fetchStoresAndEfficiency = async () => {
     try {
-      // Fetch foods, stores and price spreads
-      const foodsRes = await fetch(`${API_BASE_URL}/api/foods`);
       const storesRes = await fetch(`${API_BASE_URL}/api/stores`);
       const efficiencyRes = await fetch(`${API_BASE_URL}/api/prices/efficiency`);
-
-      if (foodsRes.ok) setFoods(await foodsRes.json());
       if (storesRes.ok) setStores(await storesRes.json());
       if (efficiencyRes.ok) setEfficiencies(await efficiencyRes.json());
+    } catch (err) {
+      console.error("Backend API not reachable:", err);
+      showToast("Backend API not reachable. Failed to load dashboard data.", "error");
+    }
+  };
+
+  // Server-paginated + filtered food list for the current page.
+  const fetchFoods = async () => {
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) });
+      if (debouncedSearch) params.set('search', debouncedSearch);
+      if (selectedCategory !== 'All') params.set('category', selectedCategory);
+      const res = await fetch(`${API_BASE_URL}/api/foods?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setFoods(data.foods);
+        setTotal(data.total);
+        setServerCategories(data.categories);
+        // Filters/deletions can shrink total foods; clamp back onto a real page.
+        if (data.total > 0 && page * PAGE_SIZE >= data.total) {
+          setPage(Math.max(0, Math.ceil(data.total / PAGE_SIZE) - 1));
+        }
+      }
     } catch (err) {
       console.error("Backend API not reachable:", err);
       showToast("Backend API not reachable. Failed to load dashboard data.", "error");
@@ -134,8 +163,24 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    fetchData();
+    fetchStoresAndEfficiency();
   }, []);
+
+  // Debounce search input.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchQuery), 300);
+    return () => clearTimeout(t);
+  }, [searchQuery]);
+
+  // Reset to page 1 whenever the filter changes.
+  useEffect(() => {
+    setPage(0);
+  }, [debouncedSearch, selectedCategory]);
+
+  useEffect(() => {
+    fetchFoods();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [page, debouncedSearch, selectedCategory]);
 
   // Fetch price details when food is selected
   const fetchPriceHistory = async (food: FoodItem) => {
@@ -159,16 +204,14 @@ export default function Dashboard() {
 
   // ── Known Names (alias) management ────────────────────────────────────────
 
-  // Refresh the foods list and keep the open modal in sync after a name mutation.
+  // Refresh the current page + the open modal in sync after a name/fact mutation.
+  // The two hit independent endpoints, so run them concurrently.
   const refreshSelectedFood = async (foodId: number) => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/foods`);
-      if (!res.ok) return;
-      const list: FoodItem[] = await res.json();
-      setFoods(list);
-      const fresh = list.find(f => f.id === foodId);
-      if (fresh) setSelectedFoodDetails(fresh);
-    } catch { /* transient */ }
+    const [detail] = await Promise.all([
+      fetch(`${API_BASE_URL}/api/foods/${foodId}`).then(res => (res.ok ? res.json() : null)).catch(() => null),
+      fetchFoods(),
+    ]);
+    if (detail) setSelectedFoodDetails(detail);
   };
 
   const makePrimary = async (foodId: number, aliasId: number) => {
@@ -282,7 +325,7 @@ export default function Dashboard() {
       if (res.ok) {
         showToast(`Product "${newFood.name}" added successfully!`);
         setNewFood({ name: '', barcode: '', description: '', category: 'Grocery', unit: 'each' });
-        fetchData();
+        fetchFoods();
       } else {
         const data = await res.json();
         showToast(data.error || 'Failed to add food', 'error');
@@ -307,7 +350,7 @@ export default function Dashboard() {
       if (res.ok) {
         showToast(`Store "${newStore.name}" registered successfully!`);
         setNewStore({ name: '', location: '', logo_url: '' });
-        fetchData();
+        fetchStoresAndEfficiency();
       } else {
         const data = await res.json();
         showToast(data.error || 'Failed to add store', 'error');
@@ -381,17 +424,11 @@ export default function Dashboard() {
     }
   };
 
-  // Categories list
+  // Static category list for the quick-add form (works even on an empty/fresh DB).
   const categories = ['All', 'Fruits', 'Vegetables', 'Dairy', 'Bakery', 'Pantry', 'Meat', 'Beverages', 'Other'];
-
-  // Filter foods list
-  const filteredFoods = foods.filter(food => {
-    const matchesSearch = food.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          (food.description && food.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                          (food.barcode && food.barcode.includes(searchQuery));
-    const matchesCategory = selectedCategory === 'All' || food.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
+  // Category chips reflect what's actually in the database (search/filter is server-side now).
+  const categoryChips = ['All'].concat(serverCategories);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div className="space-y-8 animate-slide-up relative">
@@ -406,8 +443,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Hero Welcome banner */}
-      <div className="rounded-3xl p-6 lg:p-10 relative overflow-hidden glass-panel border border-white/5">
+      {/* ═══ Section: Hero banner ═══ */}
+      <div className="card rounded-3xl p-6 lg:p-10 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-80 h-80 bg-violet-600/10 rounded-full blur-3xl -z-10" />
         <div className="absolute bottom-0 left-0 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl -z-10" />
         
@@ -421,12 +458,12 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Summary Cards */}
+      {/* ═══ Section: Summary Cards ═══ */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="rounded-2xl p-6 glass-panel glass-panel-hover flex items-center justify-between">
+        <div className="card p-6 glass-panel-hover flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">Tracked Foods</span>
-            <h3 className="text-3xl font-extrabold text-white mt-1">{foods.length}</h3>
+            <h3 className="text-3xl font-extrabold text-white mt-1">{total}</h3>
             <p className="text-xs text-slate-400 mt-2">Active database items</p>
           </div>
           <div className="p-3 bg-violet-500/10 text-violet-400 rounded-xl">
@@ -436,7 +473,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="rounded-2xl p-6 glass-panel glass-panel-hover flex items-center justify-between">
+        <div className="card p-6 glass-panel-hover flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">Stores Tracked</span>
             <h3 className="text-3xl font-extrabold text-white mt-1">{stores.length}</h3>
@@ -449,7 +486,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="rounded-2xl p-6 glass-panel glass-panel-hover flex items-center justify-between">
+        <div className="card p-6 glass-panel-hover flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">Average Spread Savings</span>
             <h3 className="text-3xl font-extrabold text-emerald-400 mt-1">
@@ -467,14 +504,14 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Main Grid: Left = Scraper & Price Efficiency, Right = Main inventory search list */}
+      {/* ═══ Section: Main grid — left = scrapers · efficiency · admin, right = inventory ═══ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         
         {/* Left Column (Scraper controller and high discrepancy highlights) */}
         <div className="lg:col-span-1 space-y-8">
           
           {/* Dispatch Web Scraper Pipeline */}
-          <div className="rounded-2xl p-6 glass-panel border border-white/5 space-y-4">
+          <div className="card p-6 space-y-4">
             <div className="flex items-center space-x-2">
               <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
               <h2 className="text-lg font-bold text-white">Scrape Flyer Deals</h2>
@@ -485,11 +522,11 @@ export default function Dashboard() {
             
             <form onSubmit={handleTriggerScraper} className="space-y-3 pt-2">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Target Supermarket</label>
+                <label className="field-label">Target Supermarket</label>
                 <select 
                   value={scrapeRequest.storeId} 
                   onChange={(e) => setScrapeRequest({ ...scrapeRequest, storeId: e.target.value })}
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 transition"
+                  className="field-input"
                 >
                   <option value="">-- Choose a store --</option>
                   {stores.map(store => (
@@ -499,30 +536,30 @@ export default function Dashboard() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Flyer Search <span className="normal-case font-normal text-slate-500">(optional)</span></label>
+                <label className="field-label">Flyer Search <span className="normal-case font-normal text-slate-500">(optional)</span></label>
                 <input
                   type="text"
                   value={scrapeRequest.query}
                   onChange={(e) => setScrapeRequest({ ...scrapeRequest, query: e.target.value })}
                   placeholder="e.g. milk — blank scans all tracked foods"
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 placeholder-slate-600 transition"
+                  className="field-input"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Postal Code <span className="normal-case font-normal text-slate-500">(optional)</span></label>
+                <label className="field-label">Postal Code <span className="normal-case font-normal text-slate-500">(optional)</span></label>
                 <input
                   type="text"
                   value={scrapeRequest.postalCode}
                   onChange={(e) => setScrapeRequest({ ...scrapeRequest, postalCode: e.target.value })}
                   placeholder="V5A 3J2 (server default)"
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-violet-500 placeholder-slate-600 transition"
+                  className="field-input"
                 />
               </div>
 
               <button
                 type="submit"
-                className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl py-2 text-sm font-semibold hover:shadow-lg hover:shadow-indigo-500/20 active:scale-[0.98] transition duration-200"
+                className="btn btn-primary w-full py-2 duration-200"
               >
                 Dispatch Flyer Scrape
               </button>
@@ -533,7 +570,7 @@ export default function Dashboard() {
           </div>
 
           {/* Import a cocowest.ca Costco Sale Post */}
-          <div className="rounded-2xl p-6 glass-panel border border-white/5 space-y-4">
+          <div className="card p-6 space-y-4">
             <div className="flex items-center space-x-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <h2 className="text-lg font-bold text-white">Import Costco Sale Post</h2>
@@ -544,11 +581,11 @@ export default function Dashboard() {
 
             <form onSubmit={handleTriggerCocowest} className="space-y-3 pt-2">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Store</label>
+                <label className="field-label">Store</label>
                 <select
                   value={cocowestRequest.storeId}
                   onChange={(e) => setCocowestRequest({ ...cocowestRequest, storeId: e.target.value })}
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 transition"
+                  className="field-input focus:border-emerald-500"
                 >
                   <option value="">-- Choose a store --</option>
                   {stores.map(store => (
@@ -558,13 +595,13 @@ export default function Dashboard() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">cocowest.ca Post URL</label>
+                <label className="field-label">cocowest.ca Post URL</label>
                 <input
                   type="text"
                   value={cocowestRequest.url}
                   onChange={(e) => setCocowestRequest({ ...cocowestRequest, url: e.target.value })}
                   placeholder="https://cocowest.ca/2026/07/weekend-update-..."
-                  className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 placeholder-slate-600 transition"
+                  className="field-input focus:border-emerald-500"
                 />
               </div>
 
@@ -578,7 +615,7 @@ export default function Dashboard() {
           </div>
 
           {/* Price Efficiency Index Widget */}
-          <div className="rounded-2xl p-6 glass-panel border border-white/5 space-y-4">
+          <div className="card p-6 space-y-4">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -594,7 +631,7 @@ export default function Dashboard() {
                 <div className="text-center text-xs text-slate-500 py-6">No price spreads found yet. Add price logs for multiple stores.</div>
               ) : (
                 efficiencies.map(eff => (
-                  <div key={eff.food_id} className="p-3 bg-slate-950/60 rounded-xl border border-white/5 space-y-1.5 text-xs">
+                  <div key={eff.food_id} className="panel p-3 space-y-1.5 text-xs">
                     <div className="flex justify-between items-start">
                       <span className="font-semibold text-slate-200">{eff.food_name}</span>
                       <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold font-mono">
@@ -620,7 +657,7 @@ export default function Dashboard() {
           </div>
           
           {/* Quick Add Forms panels */}
-          <div className="rounded-2xl p-6 glass-panel border border-white/5 space-y-4">
+          <div className="card p-6 space-y-4">
             <h2 className="text-lg font-bold text-white">Administration</h2>
             
             <div className="border-t border-white/5 pt-3">
@@ -670,7 +707,7 @@ export default function Dashboard() {
 
             {/* Category Filter */}
             <div className="flex items-center space-x-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
-              {categories.slice(0, 6).map(cat => (
+              {categoryChips.map(cat => (
                 <button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
@@ -726,18 +763,37 @@ export default function Dashboard() {
           {/* Foods list cards */}
           {isLoading ? (
             <div className="text-center text-slate-500 py-12">Querying database...</div>
-          ) : filteredFoods.length === 0 ? (
+          ) : foods.length === 0 ? (
             <div className="text-center text-slate-500 py-12">No foods match search criteria.</div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {filteredFoods.map(food => (
-                <div 
-                  key={food.id} 
+              {foods.map(food => (
+                <div
+                  key={food.id}
                   onClick={() => fetchPriceHistory(food)}
-                  className="rounded-2xl p-5 glass-panel glass-panel-hover border border-white/5 space-y-4 cursor-pointer text-left relative"
+                  className="card p-5 glass-panel-hover space-y-4 cursor-pointer text-left relative"
                 >
-                  <div className="flex justify-between items-start">
-                    <div>
+                  <div className="flex justify-between items-start gap-3">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setIconPickerFood(food); }}
+                      title="Change icon"
+                      className="w-12 h-12 rounded-xl overflow-hidden border border-white/10 shrink-0 bg-slate-800/50 flex items-center justify-center hover:border-violet-500/50 transition"
+                    >
+                      {food.display_image_id ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={`${API_BASE_URL}/api/images/${food.display_image_id}`}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M14 8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                      )}
+                    </button>
+                    <div className="flex-1 min-w-0">
                       <span className="text-[10px] uppercase font-bold tracking-wider text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">
                         {food.category}
                       </span>
@@ -797,21 +853,40 @@ export default function Dashboard() {
             </div>
           )}
 
+          {!isLoading && total > PAGE_SIZE && (
+            <div className="flex items-center justify-between pt-1">
+              <button
+                onClick={() => setPage(p => Math.max(0, p - 1))}
+                disabled={page === 0}
+                className="px-3 py-1.5 rounded-xl text-xs font-medium border border-white/5 bg-slate-900/50 text-slate-300 hover:bg-white/5 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Prev
+              </button>
+              <span className="text-xs text-slate-500">
+                Page {page + 1} of {totalPages} · {total} foods
+              </span>
+              <button
+                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                disabled={page >= totalPages - 1}
+                className="px-3 py-1.5 rounded-xl text-xs font-medium border border-white/5 bg-slate-900/50 text-slate-300 hover:bg-white/5 transition disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+          )}
+
         </div>
 
       </div>
 
-      {/* Modal / Dialog showing full price history and beautiful interactive SVG graph.
-          Clicking the backdrop (outside the panel) closes it. */}
+      {/* ═══ Section: Food detail modal — price history + SVG trend + known names + facts ═══ */}
       {selectedFoodDetails && (
-        <div
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4"
-          onClick={() => setSelectedFoodDetails(null)}
+        <Modal
+          onClose={() => setSelectedFoodDetails(null)}
+          zClass="z-50"
+          maxWidth="max-w-2xl"
+          panelClassName="bg-[#090d1a] border border-white/10 rounded-3xl p-6 lg:p-8 space-y-6"
         >
-          <div
-            className="w-full max-w-2xl bg-[#090d1a] border border-white/10 rounded-3xl p-6 lg:p-8 space-y-6 relative overflow-hidden animate-slide-up"
-            onClick={e => e.stopPropagation()}
-          >
             <button 
               onClick={() => setSelectedFoodDetails(null)}
               className="absolute top-4 right-4 text-slate-500 hover:text-white p-2 rounded-full hover:bg-white/5 transition"
@@ -917,7 +992,7 @@ export default function Dashboard() {
             </div>
 
             {/* Nutrition Facts — edited via the shared MacroEditor popup */}
-            <div className="bg-slate-950/60 border border-white/5 rounded-2xl p-4 space-y-3">
+            <div className="panel rounded-2xl p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-400">
                   Nutrition Facts <span className="text-slate-600 font-normal">— per serving, feeds the Food Diary</span>
@@ -949,7 +1024,7 @@ export default function Dashboard() {
             </div>
 
             {/* Usable portion — scales prices into an effective cost per usable unit */}
-            <div className="bg-slate-950/60 border border-white/5 rounded-2xl p-4 space-y-2">
+            <div className="panel rounded-2xl p-4 space-y-2">
               <span className="text-xs font-semibold text-slate-400 block">
                 Usable Portion <span className="text-slate-600 font-normal">— % of what you buy that's actually usable</span>
               </span>
@@ -969,7 +1044,7 @@ export default function Dashboard() {
 
             {/* Density — only for foods sold by volume; converts per-volume prices to per-kg */}
             {normalizeUnit(selectedFoodDetails.unit)?.dimension === 'volume' && (
-              <div className="bg-slate-950/60 border border-white/5 rounded-2xl p-4 space-y-2">
+              <div className="panel rounded-2xl p-4 space-y-2">
                 <span className="text-xs font-semibold text-slate-400 block">
                   Density <span className="text-slate-600 font-normal">— kg per litre, to show volume prices per kg</span>
                 </span>
@@ -989,7 +1064,7 @@ export default function Dashboard() {
             )}
 
             {/* Price Trend Graphic: Custom SVG visualization */}
-            <div className="bg-slate-950/60 border border-white/5 rounded-2xl p-4">
+            <div className="panel rounded-2xl p-4">
               <span className="text-xs font-semibold text-slate-400 block mb-3">Price Trend History</span>
               
               {priceHistory.length > 1 ? (
@@ -1099,8 +1174,7 @@ export default function Dashboard() {
                 Close Audit Dialog
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
 
       {/* Shared price popup (add or edit) */}
@@ -1113,8 +1187,8 @@ export default function Dashboard() {
           usablePct={selectedFoodDetails.usable_pct}
           density={selectedFoodDetails.density}
           onClose={() => setPricePopup(null)}
-          onSaved={() => { setPricePopup(null); fetchPriceHistory(selectedFoodDetails); fetchData(); }}
-          onDeleted={() => { setPricePopup(null); fetchPriceHistory(selectedFoodDetails); fetchData(); }}
+          onSaved={() => { setPricePopup(null); fetchPriceHistory(selectedFoodDetails); fetchFoods(); }}
+          onDeleted={() => { setPricePopup(null); fetchPriceHistory(selectedFoodDetails); fetchFoods(); }}
         />
       )}
 
@@ -1126,7 +1200,18 @@ export default function Dashboard() {
           barcode={selectedFoodDetails.barcode}
           nutrition={selectedFoodDetails.nutrition}
           onClose={() => setShowMacro(false)}
-          onSaved={() => { setShowMacro(false); refreshSelectedFood(selectedFoodDetails.id); fetchData(); }}
+          onSaved={() => { setShowMacro(false); refreshSelectedFood(selectedFoodDetails.id); fetchFoods(); }}
+        />
+      )}
+
+      {/* Food icon picker (pick saved image / upload, then crop) */}
+      {iconPickerFood && (
+        <FoodIconPicker
+          foodId={iconPickerFood.id}
+          foodName={iconPickerFood.name}
+          ownImageId={iconPickerFood.image_id}
+          onClose={() => setIconPickerFood(null)}
+          onSaved={() => { setIconPickerFood(null); fetchFoods(); }}
         />
       )}
 

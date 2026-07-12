@@ -73,6 +73,7 @@ Core entities are **stores, foods, price_logs**; calorie tracking adds **food_nu
 - **History is immutable by snapshot.** Diary entries store the nutrient values computed *at log time* — editing a food's facts later never rewrites your history.
 - **One array drives the schema.** The full nutrient column set is declared once (`NUTRIENT_FIELDS` in `backend/src/nutrition.ts`); the server builds its `INSERT` / `UPDATE` / `SUM` column lists from it. Adding a nutrient is a migration plus one array entry.
 - **Meals are recipes, computed live.** A meal is a named list of ingredient amounts; its macros and cost are never stored — every read scales each ingredient's current facts and prices it against the food's latest tracked purchase (density-converting mass↔volume where needed). Logging a meal writes **one** diary entry (per-serving nutrients × portions, snapshotted like any other entry), and an LLM can draft a meal from selected "fridge" foods against macro targets — always returned as an unsaved draft the user reviews in the builder, same human-in-the-loop rule as OCR.
+- **Foods carry an optional dashboard icon** (`foods.image_id`, nullable FK → `images`). When unset it falls back to the earliest image attached to one of the food's linked price logs, so most foods get a sensible thumbnail automatically; the user can override it with any saved scan/scrape photo or a freshly cropped upload.
 
 ---
 
@@ -141,6 +142,8 @@ The same checks run in **CI** (`.github/workflows/smoke.yml`) via a portable bas
 The full list lives in [CLAUDE.md](CLAUDE.md). The load-bearing ones:
 
 - **Two input surfaces, reused everywhere.** `PriceEditor` and `MacroEditor` are the only ways to enter a price or nutrition facts — launched from the dashboard, diary, inbox, and history. Don't build a third form.
+- **One shared `Modal` for every popup.** All popup overlays render through `frontend/src/components/Modal.tsx`, which portals into `document.body` so it isn't trapped by the page's `.animate-slide-up` CSS transform (a transformed ancestor becomes the containing block for `position: fixed` — the bug behind "modals open in the middle of the page"). Don't hand-roll a `fixed inset-0` overlay.
+- **One named class vocabulary.** The recurring Tailwind strings (`.card`, `.field-input`, `.field-label`, `.btn`/`.btn-primary`/`.btn-secondary`) are defined once in `globals.css` `@layer components` and reused across every page; per-site padding/width/accent stays as inline utilities (which still override the component class because they sit in a later layer). Reuse them instead of re-pasting the raw utilities. Major JSX regions carry a `{/* ═══ Section: … ═══ */}` banner so they're easy to point at.
 - **Three hand-synced contracts** (OCR response shape, unit tables, nutrition scaling) are duplicated across languages and kept in sync by hand; each file says so.
 - **Frontend build targets pre-ES2015 iteration** — use `Array.from(...)`, never `[...set]`.
 - **Every "current price" query filters `deleted_at IS NULL`.**

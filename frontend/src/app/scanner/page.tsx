@@ -274,7 +274,7 @@ export default function Scanner() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
 
           {/* Uploader */}
-          <div className="md:col-span-1 rounded-3xl p-6 glass-panel border border-white/5 space-y-4">
+          <div className="md:col-span-1 card rounded-3xl p-6 space-y-4">
             <h2 className="text-lg font-bold text-white">Upload Receipt or Price Tag</h2>
 
             <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" multiple className="hidden" />
@@ -337,7 +337,7 @@ export default function Scanner() {
           </div>
 
           {/* Console Log */}
-          <div className="md:col-span-2 rounded-3xl p-6 glass-panel border border-white/5 space-y-4 min-h-[300px]">
+          <div className="md:col-span-2 card rounded-3xl p-6 space-y-4 min-h-[300px]">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-white">Processing Console</h2>
               <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">

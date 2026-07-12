@@ -398,7 +398,7 @@ export default function DiaryPage() {
       </div>
 
       {/* Summary: calorie ring + macros + goals */}
-      <div className="rounded-3xl p-6 lg:p-8 glass-panel border border-white/5 relative overflow-hidden">
+      <div className="card rounded-3xl p-6 lg:p-8 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-600/10 rounded-full blur-3xl -z-10" />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
 
@@ -477,24 +477,24 @@ export default function DiaryPage() {
                 ))}
                 <div className="flex gap-2 pt-1">
                   <button onClick={saveGoals} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg py-1.5 text-xs font-semibold transition">Save</button>
-                  <button onClick={() => setEditingGoals(false)} className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-lg py-1.5 text-xs font-semibold transition">Cancel</button>
+                  <button onClick={() => setEditingGoals(false)} className="btn btn-secondary flex-1 rounded-lg py-1.5 text-xs">Cancel</button>
                 </div>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="bg-slate-950/60 rounded-xl p-3 border border-white/5">
+                <div className="panel p-3">
                   <span className="block text-slate-500 text-[10px] uppercase font-semibold">Calories</span>
                   <span className="font-mono font-bold text-white">{goals?.daily_calories ? `${Math.round(Number(goals.daily_calories))}` : '—'}</span>
                 </div>
-                <div className="bg-slate-950/60 rounded-xl p-3 border border-white/5">
+                <div className="panel p-3">
                   <span className="block text-slate-500 text-[10px] uppercase font-semibold">Protein</span>
                   <span className="font-mono font-bold text-white">{goals?.protein_g ? `${Math.round(Number(goals.protein_g))}g` : '—'}</span>
                 </div>
-                <div className="bg-slate-950/60 rounded-xl p-3 border border-white/5">
+                <div className="panel p-3">
                   <span className="block text-slate-500 text-[10px] uppercase font-semibold">Carbs</span>
                   <span className="font-mono font-bold text-white">{goals?.carbs_g ? `${Math.round(Number(goals.carbs_g))}g` : '—'}</span>
                 </div>
-                <div className="bg-slate-950/60 rounded-xl p-3 border border-white/5">
+                <div className="panel p-3">
                   <span className="block text-slate-500 text-[10px] uppercase font-semibold">Fat</span>
                   <span className="font-mono font-bold text-white">{goals?.fat_g ? `${Math.round(Number(goals.fat_g))}g` : '—'}</span>
                 </div>
@@ -505,7 +505,7 @@ export default function DiaryPage() {
       </div>
 
       {/* Daily micronutrient totals */}
-      <div className="rounded-2xl p-5 glass-panel border border-white/5 space-y-3">
+      <div className="card p-5 space-y-3">
         <h2 className="text-sm font-bold text-white flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-sky-400" />
           Micronutrients Today
@@ -514,7 +514,7 @@ export default function DiaryPage() {
           {MICRO_META.map(m => {
             const v = totals[m.field] ?? 0;
             return (
-              <div key={m.field} className={`bg-slate-950/60 rounded-xl p-2.5 border border-white/5 ${v > 0 ? '' : 'opacity-50'}`}>
+              <div key={m.field} className={`panel p-2.5 ${v > 0 ? '' : 'opacity-50'}`}>
                 <span className="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold truncate">{m.label}</span>
                 <span className="font-mono font-bold text-slate-200 text-sm">
                   {Math.round(v * 10) / 10}<span className="text-slate-500 text-[10px] font-normal ml-0.5">{m.unit}</span>
@@ -527,7 +527,7 @@ export default function DiaryPage() {
       </div>
 
       {/* Add entry */}
-      <form onSubmit={handleAdd} className="rounded-2xl p-5 glass-panel border border-white/5 space-y-3">
+      <form onSubmit={handleAdd} className="card p-5 space-y-3">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <h2 className="text-sm font-bold text-white">Log Food</h2>
@@ -541,7 +541,7 @@ export default function DiaryPage() {
               onChange={e => { setQuery(e.target.value); setSelectedFood(null); setOneOffName(null); setShowSuggestions(true); }}
               onFocus={() => setShowSuggestions(true)}
               placeholder="Search the catalog (e.g. Greek Yogurt)…"
-              className="w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition"
+              className="field-input focus:border-emerald-500"
             />
             {showSuggestions && query.trim() && !selectedFood && oneOffName === null && (
               <div className="absolute z-20 mt-1 w-full bg-[#0b101f] border border-white/10 rounded-xl overflow-hidden shadow-2xl">
@@ -654,7 +654,7 @@ export default function DiaryPage() {
             const mealEntries = entries.filter(en => en.meal === m.key);
             const subtotal = mealEntries.reduce((acc, en) => acc + (en.calories ? Number(en.calories) : 0), 0);
             return (
-              <div key={m.key} className="rounded-2xl p-5 glass-panel border border-white/5 space-y-3">
+              <div key={m.key} className="card p-5 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className={`text-sm font-bold ${m.accent}`}>{m.label}</h3>
                   <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full border ${m.chip} ${m.accent}`}>
@@ -666,7 +666,7 @@ export default function DiaryPage() {
                 ) : (
                   <div className="space-y-2">
                     {mealEntries.map(en => (
-                      <div key={en.id} className="p-2.5 bg-slate-950/60 rounded-xl border border-white/5 text-xs">
+                      <div key={en.id} className="panel p-2.5 text-xs">
                         {editId === en.id ? (
                           <div className="space-y-2">
                             <div className="flex gap-2">

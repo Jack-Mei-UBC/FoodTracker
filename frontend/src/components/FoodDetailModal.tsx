@@ -10,6 +10,7 @@ import { formatCanonicalUnitPrice, normalizeUnit } from '../lib/units';
 import { NutritionFacts } from '../lib/nutrition';
 import PriceEditor, { EditablePriceLog } from './PriceEditor';
 import MacroEditor from './MacroEditor';
+import Modal from './Modal';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -143,11 +144,8 @@ export default function FoodDetailModal({
     new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   return (
-    <div className="fixed inset-0 z-[60] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-2xl bg-[#090d1a] border border-white/10 rounded-3xl p-6 lg:p-7 space-y-5 relative max-h-[90vh] overflow-y-auto animate-slide-up"
-        onClick={e => e.stopPropagation()}
-      >
+    <>
+      <Modal onClose={onClose} zClass="z-[60]" maxWidth="max-w-2xl" panelClassName="bg-[#090d1a] border border-white/10 rounded-3xl p-6 lg:p-7 space-y-5">
         <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-white p-2 rounded-full hover:bg-white/5 transition">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
@@ -266,7 +264,7 @@ export default function FoodDetailModal({
               ) : (
                 <div className="space-y-1.5">
                   {prices.map(log => (
-                    <div key={log.id} className="bg-slate-950/60 border border-white/5 rounded-xl p-2.5 text-xs">
+                    <div key={log.id} className="panel p-2.5 text-xs">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5 min-w-0">
                           {/* Attached source photo — click to view full size */}
@@ -304,7 +302,7 @@ export default function FoodDetailModal({
             </div>
           </>
         )}
-      </div>
+      </Modal>
 
       {/* Shared price popup (add or edit) */}
       {pricePopup && food && (
@@ -343,6 +341,6 @@ export default function FoodDetailModal({
           </button>
         </div>
       )}
-    </div>
+    </>
   );
 }

@@ -7,6 +7,7 @@
 //   * create mode (no log):      POST /api/foods/:foodId/prices
 
 import React, { useState, useEffect } from 'react';
+import Modal from './Modal';
 import { UNIT_OPTIONS, parseAmountInput, formatCanonicalUnitPrice } from '../lib/units';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -133,8 +134,7 @@ export default function PriceEditor({
   const field = 'w-full bg-slate-950 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500';
 
   return (
-    <div className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div className="w-full max-w-md bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4 animate-slide-up" onClick={e => e.stopPropagation()}>
+    <Modal onClose={onClose} maxWidth="max-w-md" panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-white">
             {isEdit ? 'Edit Price' : 'Add Price'}{foodName ? <span className="text-slate-400 font-normal"> — {foodName}</span> : null}
@@ -187,7 +187,7 @@ export default function PriceEditor({
         </div>
 
         <div className="flex gap-2 pt-1">
-          <button onClick={save} disabled={busy} className="flex-1 bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-lg py-2 text-sm font-semibold hover:shadow-lg transition disabled:opacity-50">
+          <button onClick={save} disabled={busy} className="btn btn-primary flex-1 rounded-lg py-2">
             {busy ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Price'}
           </button>
           {isEdit && onDeleted && (
@@ -195,11 +195,10 @@ export default function PriceEditor({
               Delete
             </button>
           )}
-          <button onClick={onClose} disabled={busy} className="bg-white/5 border border-white/10 text-slate-300 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-white/10 transition">
+          <button onClick={onClose} disabled={busy} className="btn btn-secondary rounded-lg px-4 py-2">
             Cancel
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

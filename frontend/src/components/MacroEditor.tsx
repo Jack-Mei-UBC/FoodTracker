@@ -7,6 +7,7 @@
 // nutrition form. Persists via PUT /api/foods/:id/nutrition.
 
 import React, { useState } from 'react';
+import Modal from './Modal';
 import { UNIT_OPTIONS, parseAmountInput } from '../lib/units';
 import { NutritionFacts, MACRO_META, MICRO_META } from '../lib/nutrition';
 
@@ -118,8 +119,7 @@ export default function MacroEditor({
   const num = 'bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white text-right font-mono focus:outline-none focus:border-emerald-500';
 
   return (
-    <div className="fixed inset-0 z-[80] bg-black/70 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
-      <div className="w-full max-w-lg bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto animate-slide-up" onClick={e => e.stopPropagation()}>
+    <Modal onClose={onClose} maxWidth="max-w-lg" panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-white">
             Nutrition Facts{foodName ? <span className="text-slate-400 font-normal"> — {foodName}</span> : null}
@@ -147,7 +147,7 @@ export default function MacroEditor({
           </button>
         </div>
         {fdcResults !== null && (
-          <div className="max-h-40 overflow-y-auto space-y-1 border border-white/5 rounded-lg p-1 bg-slate-950/60">
+          <div className="panel rounded-lg max-h-40 overflow-y-auto space-y-1 p-1">
             {fdcResults.length === 0 ? (
               <p className="text-[11px] text-slate-500 px-2 py-1.5">No USDA matches with calorie data.</p>
             ) : fdcResults.map((c: any) => (
@@ -209,9 +209,8 @@ export default function MacroEditor({
           <button onClick={save} disabled={busy} className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg py-2 text-sm font-semibold hover:shadow-lg transition disabled:opacity-50">
             {busy ? 'Saving…' : 'Save Facts'}
           </button>
-          <button onClick={onClose} disabled={busy} className="bg-white/5 border border-white/10 text-slate-300 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-white/10 transition">Cancel</button>
+          <button onClick={onClose} disabled={busy} className="btn btn-secondary rounded-lg px-4 py-2">Cancel</button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -6,6 +6,7 @@
 // builder's live preview mirrors the same rules client-side (display-only).
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Modal from '../../components/Modal';
 import { UNIT_OPTIONS, parseAmountInput, normalizeUnit } from '../../lib/units';
 import { scaleNutrients, isServingUnit, NutritionFacts } from '../../lib/nutrition';
 
@@ -474,7 +475,7 @@ export default function MealsPage() {
 
       {/* AI generation panel */}
       {aiOpen && (
-        <div className="rounded-2xl p-5 glass-panel border border-violet-500/20 space-y-4">
+        <div className="card p-5 space-y-4">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
             <h2 className="text-sm font-bold text-white">Draft a meal from your fridge</h2>
@@ -547,7 +548,7 @@ export default function MealsPage() {
 
       {/* Builder */}
       {builderOpen && (
-        <div className="rounded-2xl p-5 glass-panel border border-emerald-500/20 space-y-4">
+        <div className="card p-5 space-y-4">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <h2 className="text-sm font-bold text-white">{editMealId ? 'Edit Meal' : 'New Meal'}</h2>
@@ -624,7 +625,7 @@ export default function MealsPage() {
                 const rowPreview = builderPreview.perRow[i];
                 const price = (food?.latest_prices ?? []).find(p => p.unit_price != null);
                 return (
-                  <div key={`${row.food_id}-${i}`} className="flex flex-wrap items-center gap-2 p-2.5 bg-slate-950/60 rounded-xl border border-white/5 text-xs">
+                  <div key={`${row.food_id}-${i}`} className="panel flex flex-wrap items-center gap-2 p-2.5 text-xs">
                     <span className="font-semibold text-slate-200 flex-1 min-w-32 truncate">{row.food_name}</span>
                     <input
                       type="text" inputMode="text"
@@ -672,7 +673,7 @@ export default function MealsPage() {
 
           {/* Live totals */}
           {rows.length > 0 && (
-            <div className="rounded-xl p-3 bg-slate-950/60 border border-white/5 flex flex-wrap gap-x-6 gap-y-1 text-xs font-mono">
+            <div className="panel p-3 flex flex-wrap gap-x-6 gap-y-1 text-xs font-mono">
               <span className="text-slate-300">
                 Meal: <span className="font-bold text-white">{fmtKcal(builderPreview.calories)} kcal</span>
                 <span className="text-slate-500"> · P {Math.round(builderPreview.protein)} C {Math.round(builderPreview.carbs)} F {Math.round(builderPreview.fat)}</span>
@@ -706,7 +707,7 @@ export default function MealsPage() {
             </button>
             <button
               onClick={resetBuilder}
-              className="px-5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-sm font-semibold transition"
+              className="btn btn-secondary px-5 py-2"
             >
               Cancel
             </button>
@@ -718,7 +719,7 @@ export default function MealsPage() {
       {isLoading ? (
         <div className="text-center text-slate-500 py-12">Loading meals…</div>
       ) : meals.length === 0 ? (
-        <div className="text-center py-16 rounded-2xl glass-panel border border-white/5">
+        <div className="text-center py-16 card">
           <p className="text-slate-400 font-semibold">No meals yet.</p>
           <p className="text-xs text-slate-600 mt-1">Build one from your catalog foods, or let the AI draft one from your fridge.</p>
         </div>
@@ -728,7 +729,7 @@ export default function MealsPage() {
             const ps = meal.per_serving;
             const expanded = expandedId === meal.id;
             return (
-              <div key={meal.id} className="rounded-2xl glass-panel border border-white/5 overflow-hidden">
+              <div key={meal.id} className="card overflow-hidden">
                 <div className="p-4 flex flex-wrap items-center gap-3">
                   <button onClick={() => toggleExpand(meal)} className="flex-1 min-w-48 text-left group">
                     <span className="font-bold text-white group-hover:text-emerald-300 transition flex items-center gap-2">
@@ -853,8 +854,7 @@ export default function MealsPage() {
 
       {/* Log-to-diary popup */}
       {logMeal && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setLogMeal(null)}>
-          <div className="w-full max-w-sm rounded-2xl glass-panel border border-white/10 p-5 space-y-4" onClick={e => e.stopPropagation()}>
+        <Modal onClose={() => setLogMeal(null)} maxWidth="max-w-sm" panelClassName="card p-5 space-y-4">
             <h3 className="text-sm font-bold text-white">Log “{logMeal.name}” to today's diary</h3>
             <p className="text-xs text-slate-400">
               One diary entry with the meal's per-serving nutrients × portions
@@ -887,13 +887,12 @@ export default function MealsPage() {
               </button>
               <button
                 onClick={() => setLogMeal(null)}
-                className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-xl py-2 text-sm font-semibold transition"
+                className="btn btn-secondary flex-1 py-2"
               >
                 Cancel
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

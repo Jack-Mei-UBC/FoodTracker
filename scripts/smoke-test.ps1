@@ -56,17 +56,26 @@ Write-Host "backend $API"
 try {
     $foods = Get-Json "$API/api/foods"
     Check "GET /api/foods returns items" (($foods | Measure-Object).Count -gt 0)
+    Check "GET /api/foods (no limit) is a plain array, not {foods,total}" (-not (HasProp $foods 'foods'))
     $sample = $foods | Select-Object -First 1
     Check "food items expose latest_prices + nutrition + aliases" (
         (HasProp $sample 'latest_prices') -and (HasProp $sample 'nutrition') -and (HasProp $sample 'aliases'))
+    Check "food items expose display_image_id" (HasProp $sample 'display_image_id')
 
     $f1 = Get-Json "$API/api/foods/1"
     Check "GET /api/foods/:id returns that food with aliases" (($f1.id -eq 1) -and (HasProp $f1 'aliases'))
+    Check "GET /api/foods/:id exposes display_image_id" (HasProp $f1 'display_image_id')
 
     # M:N: a food's prices are read through the food_prices join table. Getting
     # here without an exception means the join query didn't 500.
     Get-Json "$API/api/foods/5/prices" | Out-Null
     Check "GET /api/foods/:id/prices (join-table read) responds" $true
+
+    # limit present -> paginated shape {foods, total, categories}.
+    $paged = Get-Json "$API/api/foods?limit=2&offset=0"
+    $pagedOk = (HasProp $paged 'foods') -and (HasProp $paged 'total') -and (HasProp $paged 'categories') -and
+               (($paged.foods | Measure-Object).Count -le 2)
+    Check "GET /api/foods?limit=2 returns {foods,total,categories}" $pagedOk
 } catch { Check "foods endpoints reachable" $false }
 
 # --- Backend: diary totals include macro + micronutrient sums ---------------

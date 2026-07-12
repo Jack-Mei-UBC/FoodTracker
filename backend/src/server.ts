@@ -102,12 +102,43 @@ app.post('/api/stores', async (req: Request, res: Response) => {
   }
 });
 
+// A food's dashboard icon: the user's explicit choice, falling back to the
+// earliest non-deleted image attached to one of its linked price logs. Shared
+// by GET /api/foods and GET /api/foods/:id so the fallback rule can't drift
+// between the list and detail views.
+const DISPLAY_IMAGE_ID_SQL = `
+  COALESCE(
+    f.image_id,
+    (
+      SELECT pl.image_id FROM price_logs pl
+      JOIN food_prices fp2 ON fp2.price_log_id = pl.id
+      WHERE fp2.food_id = f.id AND pl.image_id IS NOT NULL AND pl.deleted_at IS NULL
+      ORDER BY pl.scraped_at ASC, pl.id ASC LIMIT 1
+    )
+  ) AS display_image_id
+`;
+
+// Appends the shared category/search predicates (used by both the row query
+// and the count query in the paginated GET /api/foods branch) to keep them
+// from drifting apart as filters are added.
+function appendFoodFilters(base: string, params: any[], category: unknown, search: unknown): string {
+  if (category) {
+    params.push(category);
+    base += ` AND f.category = $${params.length}`;
+  }
+  if (search) {
+    params.push(`%${search}%`);
+    base += ` AND (f.name ILIKE $${params.length} OR f.description ILIKE $${params.length} OR f.barcode ILIKE $${params.length})`;
+  }
+  return base;
+}
+
 // 4. Get All Foods (with latest prices)
 app.get('/api/foods', async (req: Request, res: Response) => {
   const { category, search } = req.query;
   try {
     let queryText = `
-      SELECT f.*, 
+      SELECT f.*,
         (
           SELECT json_agg(prices)
           FROM (
@@ -129,23 +160,41 @@ app.get('/api/foods', async (req: Request, res: Response) => {
           JOIN food_macros fm ON fm.nutrition_id = fn.id
           WHERE fm.food_id = f.id
           ORDER BY (fn.food_id = f.id) DESC, fn.id LIMIT 1
-        ) as nutrition
+        ) as nutrition,
+        ${DISPLAY_IMAGE_ID_SQL}
       FROM foods f
       WHERE 1=1
     `;
     const params: any[] = [];
-
-    if (category) {
-      params.push(category);
-      queryText += ` AND f.category = $${params.length}`;
-    }
-
-    if (search) {
-      params.push(`%${search}%`);
-      queryText += ` AND (f.name ILIKE $${params.length} OR f.description ILIKE $${params.length} OR f.barcode ILIKE $${params.length})`;
-    }
+    queryText = appendFoodFilters(queryText, params, category, search);
 
     queryText += ' ORDER BY f.name ASC';
+
+    // limit absent -> legacy plain-array response (back-compat for callers
+    // that need the full catalog: ReviewItems fuzzy-match, meals/diary pickers).
+    const hasLimit = req.query.limit !== undefined;
+    if (hasLimit) {
+      const limit = Math.max(1, Math.min(100, parseInt(String(req.query.limit), 10) || 24));
+      const offset = Math.max(0, parseInt(String(req.query.offset), 10) || 0);
+      const pagedParams = [...params, limit, offset];
+      const pagedQuery = queryText + ` LIMIT $${pagedParams.length - 1} OFFSET $${pagedParams.length}`;
+
+      const countParams: any[] = [];
+      const countQuery = appendFoodFilters('SELECT COUNT(*)::int AS count FROM foods f WHERE 1=1', countParams, category, search);
+
+      const [rowsResult, countResult, categoriesResult] = await Promise.all([
+        db.query(pagedQuery, pagedParams),
+        db.query(countQuery, countParams),
+        db.query(`SELECT DISTINCT category FROM foods WHERE category IS NOT NULL ORDER BY category`),
+      ]);
+
+      res.json({
+        foods: rowsResult.rows,
+        total: countResult.rows[0].count,
+        categories: categoriesResult.rows.map((r: any) => r.category),
+      });
+      return;
+    }
 
     const result = await db.query(queryText, params);
     res.json(result.rows);
@@ -189,7 +238,8 @@ app.get('/api/foods/:id', async (req: Request, res: Response) => {
          (SELECT row_to_json(fn) FROM food_nutrition fn
           JOIN food_macros fm ON fm.nutrition_id = fn.id
           WHERE fm.food_id = f.id
-          ORDER BY (fn.food_id = f.id) DESC, fn.id LIMIT 1) as nutrition
+          ORDER BY (fn.food_id = f.id) DESC, fn.id LIMIT 1) as nutrition,
+         ${DISPLAY_IMAGE_ID_SQL}
        FROM foods f WHERE f.id = $1`,
       [parseInt(req.params.id)]
     );
@@ -908,17 +958,33 @@ app.put('/api/foods/:id', async (req: Request, res: Response) => {
   if (density !== undefined && density !== null && !(Number(density) > 0)) {
     return res.status(400).json({ error: 'density must be a positive number' });
   }
+  // image_id is presence-based, not COALESCE: the key being absent leaves the
+  // icon untouched, but {image_id: null} must be able to CLEAR it back to the
+  // display_image_id fallback (COALESCE alone can never express "set to null").
+  const hasImageId = Object.prototype.hasOwnProperty.call(req.body, 'image_id');
+  const imageId = req.body.image_id;
+  if (hasImageId && imageId !== null && !(Number.isInteger(imageId) && imageId > 0)) {
+    return res.status(400).json({ error: 'image_id must be a positive integer or null' });
+  }
   try {
+    if (hasImageId && imageId !== null) {
+      const imgCheck = await db.query('SELECT 1 FROM images WHERE id = $1', [imageId]);
+      if (imgCheck.rows.length === 0) {
+        return res.status(400).json({ error: 'image_id does not reference a saved image' });
+      }
+    }
     const result = await db.query(
       `UPDATE foods SET
          name = COALESCE($1, name), category = COALESCE($2, category),
          unit = COALESCE($3, unit), description = COALESCE($4, description),
          barcode = COALESCE($5, barcode), usable_pct = COALESCE($6, usable_pct),
-         density = COALESCE($8, density)
+         density = COALESCE($8, density),
+         image_id = CASE WHEN $9::boolean THEN $10::int ELSE image_id END
        WHERE id = $7 RETURNING *`,
       [name ?? null, category ?? null, unit ?? null, description ?? null, barcode ?? null,
        usable_pct != null ? Number(usable_pct) : null, parseInt(req.params.id),
-       density != null ? Number(density) : null]
+       density != null ? Number(density) : null,
+       hasImageId, hasImageId && imageId != null ? Number(imageId) : null]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Food not found' });
     res.json(result.rows[0]);

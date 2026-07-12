@@ -46,6 +46,12 @@ CREATE TABLE IF NOT EXISTS images (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Food icon: a cropped image the user chose to represent this food on the
+-- dashboard. NULL falls back to the earliest non-deleted image attached to
+-- one of the food's linked price logs (see GET /api/foods `display_image_id`).
+-- Must be added here (after `images` exists) since `foods` is defined above it.
+ALTER TABLE foods ADD COLUMN IF NOT EXISTS image_id INTEGER REFERENCES images(id) ON DELETE SET NULL;
+
 -- Create Price Logs Table
 CREATE TABLE IF NOT EXISTS price_logs (
     id SERIAL PRIMARY KEY,
