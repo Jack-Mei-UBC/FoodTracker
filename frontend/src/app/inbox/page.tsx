@@ -183,7 +183,7 @@ export default function Inbox() {
           return (
             <div key={job.id} className="flex items-center justify-between bg-slate-900/50 border border-white/5 rounded-xl px-4 py-3">
               <div className="flex items-center gap-3 text-sm min-w-0">
-                <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase ${STATUS_STYLES[job.status] ?? STATUS_STYLES.queued}`}>{job.status}</span>
+                <span className={`badge text-[9px] ${STATUS_STYLES[job.status] ?? STATUS_STYLES.queued}`}>{job.status}</span>
                 <span className="text-white font-medium truncate">{job.original_filename ?? `job #${job.id}`}</span>
                 {job.status === 'done' && <span className="text-slate-500 text-xs">{job.result_type} · {job.item_count} item{job.item_count !== 1 ? 's' : ''}</span>}
                 {job.status === 'failed' && <span className="text-rose-400 text-xs truncate max-w-[220px]">{job.error}</span>}

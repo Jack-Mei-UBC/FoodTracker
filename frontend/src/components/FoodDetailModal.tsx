@@ -159,7 +159,7 @@ export default function FoodDetailModal({
         ) : (
           <>
             <div>
-              <span className="text-[10px] uppercase font-bold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">{food.category}</span>
+              <span className="badge text-[10px] text-violet-400 bg-violet-500/10 border-violet-500/20">{food.category}</span>
               <h2 className="text-2xl font-extrabold text-white mt-1.5">{food.name}</h2>
               <p className="text-xs text-slate-400 mt-1">Barcode: {food.barcode || 'N/A'}</p>
             </div>

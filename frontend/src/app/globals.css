@@ -88,6 +88,13 @@ h1, h2, h3, h4, h5, h6 {
   .btn-secondary {
     @apply bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10;
   }
+
+  /* Small pill/tag badge: category chips, status/source tags, approval states.
+     Text size (text-[9px]/text-[10px]), tracking, and color (text-*/bg-*/border-*)
+     stay inline since they vary per badge. */
+  .badge {
+    @apply font-bold uppercase px-2 py-0.5 rounded-full border;
+  }
 }
 
 /* Glassmorphism utility */

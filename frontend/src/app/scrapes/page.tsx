@@ -144,8 +144,8 @@ function ScrapesInner() {
               {/* Header row */}
               <button onClick={() => toggle(job.id)} className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-white/[0.02] transition">
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase shrink-0 ${STATUS_STYLES[job.status] ?? STATUS_STYLES.queued}`}>{job.status}</span>
-                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase shrink-0 ${job.source === 'cocowest' ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20' : 'text-violet-300 bg-violet-500/10 border-violet-500/20'}`}>
+                  <span className={`badge text-[9px] shrink-0 ${STATUS_STYLES[job.status] ?? STATUS_STYLES.queued}`}>{job.status}</span>
+                  <span className={`badge text-[9px] shrink-0 ${job.source === 'cocowest' ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20' : 'text-violet-300 bg-violet-500/10 border-violet-500/20'}`}>
                     {job.source === 'cocowest' ? 'Costco' : 'Flipp'}
                   </span>
                   <span className="text-white font-semibold truncate">{job.store_name ?? `Store #${job.store_id}`}</span>

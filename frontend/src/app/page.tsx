@@ -794,11 +794,11 @@ export default function Dashboard() {
                       )}
                     </button>
                     <div className="flex-1 min-w-0">
-                      <span className="text-[10px] uppercase font-bold tracking-wider text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">
+                      <span className="badge text-[10px] tracking-wider text-violet-400 bg-violet-500/10 border-violet-500/20">
                         {food.category}
                       </span>
                       {Number(food.usable_pct) !== 100 && (
-                        <span className="ml-1.5 text-[10px] uppercase font-bold tracking-wider text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20" title="Usable portion of what you buy">
+                        <span className="badge ml-1.5 text-[10px] tracking-wider text-amber-400 bg-amber-500/10 border-amber-500/20" title="Usable portion of what you buy">
                           {Number(food.usable_pct)}% usable
                         </span>
                       )}
@@ -897,7 +897,7 @@ export default function Dashboard() {
             </button>
 
             <div>
-              <span className="text-[10px] uppercase font-bold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">
+              <span className="badge text-[10px] text-violet-400 bg-violet-500/10 border-violet-500/20">
                 {selectedFoodDetails.category}
               </span>
               <h2 className="text-2xl font-extrabold text-white mt-1.5">{selectedFoodDetails.name}</h2>

@@ -657,7 +657,7 @@ export default function DiaryPage() {
               <div key={m.key} className="card p-5 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className={`text-sm font-bold ${m.accent}`}>{m.label}</h3>
-                  <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded-full border ${m.chip} ${m.accent}`}>
+                  <span className={`badge normal-case text-xs font-mono ${m.chip} ${m.accent}`}>
                     {Math.round(subtotal)} kcal
                   </span>
                 </div>

@@ -315,8 +315,8 @@ export default function ReviewItems({
                   <div className="flex gap-3 items-start">
                     <div className="shrink-0 mt-0.5">
                       {item.reviewReason === 'new_product'
-                        ? <span className="text-[9px] font-bold text-violet-300 bg-violet-500/15 px-2 py-0.5 rounded-full border border-violet-500/25 uppercase">NEW</span>
-                        : <span className="text-[9px] font-bold text-amber-300 bg-amber-500/15 px-2 py-0.5 rounded-full border border-amber-500/25 uppercase">⚠ PRICE</span>}
+                        ? <span className="badge text-[9px] text-violet-300 bg-violet-500/15 border-violet-500/25">NEW</span>
+                        : <span className="badge text-[9px] text-amber-300 bg-amber-500/15 border-amber-500/25">⚠ PRICE</span>}
                     </div>
                     <div className="flex-1 space-y-1.5">
                       <input type="text" value={item.name} onChange={e => updateParsedItem(idx, 'name', e.target.value)}
@@ -430,10 +430,10 @@ export default function ReviewItems({
                 </td>
                 <td className="py-2.5 text-center">
                   {!item.needsReview
-                    ? <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">✓ OK</span>
+                    ? <span className="badge text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ OK</span>
                     : item.approved
-                    ? <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">✓ Approved</span>
-                    : <button onClick={() => approveItem(idx)} className="text-[9px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 hover:bg-amber-500/20 transition">Approve</button>}
+                    ? <span className="badge text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ Approved</span>
+                    : <button onClick={() => approveItem(idx)} className="badge text-[9px] text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20 transition">Approve</button>}
                 </td>
                 <td className="py-2.5 text-center">
                   <button onClick={() => removeItem(idx)} title="Remove this item" aria-label="Remove item"

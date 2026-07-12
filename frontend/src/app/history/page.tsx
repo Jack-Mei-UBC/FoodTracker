@@ -172,7 +172,7 @@ export default function History() {
                     {formatUnitPrice(Number(log.price), log.amount ? Number(log.amount) : null, log.amount_unit) ?? '—'}
                   </td>
                   <td className="py-2.5 pr-4">
-                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase ${SOURCE_COLORS[log.source] ?? SOURCE_COLORS.manual}`}>
+                    <span className={`badge text-[9px] ${SOURCE_COLORS[log.source] ?? SOURCE_COLORS.manual}`}>
                       {log.source}
                     </span>
                   </td>
