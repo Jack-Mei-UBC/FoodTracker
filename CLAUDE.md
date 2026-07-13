@@ -9,6 +9,8 @@ This file is the source of truth. It records the invariants and gotchas that a c
 
 **When the user corrects an approach mid-task** (wrong assumption, rejected pattern, a gotcha that bit them), add it to this file in the moment — under Critical gotchas if it's a durable invariant, or inline near the relevant section otherwise — rather than only fixing the immediate diff. This file is shared by every future session in this repo, so a correction recorded here won't need to be repeated.
 
+**Git / PRs — push over SSH; there is no `gh` CLI or GitHub token on this machine.** The `origin` remote is SSH (`git@github.com:Jack-Mei-UBC/FoodTracker.git`) and authenticates with the key at `~/.ssh/id_ed25519` (user `Jack-Mei-UBC`). Use plain `git push` for all remote work — do **not** reach for `gh` or the GitHub HTTPS API to push. `gh` is not installed and no `GH_TOKEN`/`GITHUB_TOKEN` is set, so PRs cannot be opened programmatically; after pushing, hand the user the `https://github.com/Jack-Mei-UBC/FoodTracker/pull/new/<branch>` compare link to open the PR themselves (or ask them to install `gh` / set a token if API access is needed).
+
 ## Project context
 FoodTracker is a grocery price-intelligence app. Core entities: **stores, foods, price_logs**. The OCR service is a data-ingestion supplement — it turns photos of receipts / shelf price tags into structured price data that maps onto the `foods` / `price_logs` schema. Nothing extracted by OCR is ever saved without passing through a human review step first.
 
