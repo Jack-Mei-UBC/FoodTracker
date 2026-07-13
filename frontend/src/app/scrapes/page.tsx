@@ -120,15 +120,17 @@ function ScrapesInner() {
   const modeLabel = (j: ScrapeJob) => (j.source === 'cocowest' ? 'Sale post' : (j.query ? `“${j.query}”` : 'Full catalog'));
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
-      <div>
+    <div data-loc="page.scrapes" className="space-y-8 max-w-5xl mx-auto">
+      {/* ═══ Section: Header ═══ */}
+      <div data-loc="scrapes.header">
         <h1 className="text-2xl font-bold text-white">Scraper Activity</h1>
         <p className="text-sm text-slate-400 mt-1">
           Live progress of Flipp flyer scrapes and cocowest.ca Costco sale-post imports. Expand a run to see every logged price with its source image and a link to where it came from.
         </p>
       </div>
 
-      <div className="space-y-3">
+      {/* ═══ Section: Job list ═══ */}
+      <div data-loc="scrapes.job-list" className="space-y-3">
         {jobs.length === 0 && (
           <div className="card rounded-3xl p-8 text-center text-slate-600 text-sm">
             No scrapes yet. Dispatch one from the <span className="text-violet-400 font-semibold">Dashboard</span>.
@@ -240,9 +242,9 @@ function ScrapesInner() {
         })}
       </div>
 
-      {/* Image lightbox */}
+      {/* ═══ Section: Image lightbox (hand-rolled, not via Modal — see CLAUDE.md) ═══ */}
       {lightbox != null && (
-        <div className="fixed inset-0 z-[80] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setLightbox(null)}>
+        <div data-loc="scrapes.lightbox" className="fixed inset-0 z-[80] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setLightbox(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={`${API_BASE_URL}/api/images/${lightbox}`} alt="flyer" className="max-h-[85vh] max-w-[85vw] rounded-2xl border border-white/10 shadow-2xl" onClick={e => e.stopPropagation()} />
           <button onClick={() => setLightbox(null)} className="absolute top-5 right-5 text-slate-300 hover:text-white p-2 rounded-full bg-white/5 hover:bg-white/10 transition">

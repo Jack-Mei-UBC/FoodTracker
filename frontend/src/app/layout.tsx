@@ -16,7 +16,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="antialiased min-h-screen flex flex-col">
         {/* Navigation Bar */}
-        <header className="sticky top-0 z-50 glass-panel border-b border-white/5 px-4 lg:px-8 py-4 flex items-center justify-between">
+        <header data-loc="layout.header" className="sticky top-0 z-50 glass-panel border-b border-white/5 px-4 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             {/* Logo */}
             <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
@@ -74,12 +74,12 @@ export default function RootLayout({
         </header>
 
         {/* Main Content Area */}
-        <main className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-8 animate-slide-up">
+        <main data-loc="layout.main" className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-8 animate-slide-up">
           {children}
         </main>
 
         {/* Footer */}
-        <footer className="py-6 text-center text-xs text-slate-600 border-t border-white/5 bg-black/20">
+        <footer data-loc="layout.footer" className="py-6 text-center text-xs text-slate-600 border-t border-white/5 bg-black/20">
           <p>© {new Date().getFullYear()} FoodTracker Inc. Premium Grocery Price Scraping & Analysis Platform.</p>
         </footer>
       </body>

@@ -358,7 +358,7 @@ export default function DiaryPage() {
   ];
 
   return (
-    <div className="space-y-8 animate-slide-up relative">
+    <div data-loc="page.diary" className="space-y-8 animate-slide-up relative">
       {notification && (
         <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl shadow-xl flex items-center space-x-3 ${
           notification.type === 'success' ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950/90 text-rose-300 border border-rose-500/30'
@@ -368,8 +368,8 @@ export default function DiaryPage() {
         </div>
       )}
 
-      {/* Header: title + date navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* ═══ Section: Header — title + date navigation ═══ */}
+      <div data-loc="diary.header" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-emerald-300 bg-clip-text text-transparent">
             Food Diary
@@ -397,8 +397,8 @@ export default function DiaryPage() {
         </div>
       </div>
 
-      {/* Summary: calorie ring + macros + goals */}
-      <div className="card rounded-3xl p-6 lg:p-8 relative overflow-hidden">
+      {/* ═══ Section: Summary — calorie ring + macros + goals ═══ */}
+      <div data-loc="diary.summary" className="card rounded-3xl p-6 lg:p-8 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-600/10 rounded-full blur-3xl -z-10" />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
 
@@ -504,8 +504,8 @@ export default function DiaryPage() {
         </div>
       </div>
 
-      {/* Daily micronutrient totals */}
-      <div className="card p-5 space-y-3">
+      {/* ═══ Section: Daily micronutrient totals ═══ */}
+      <div data-loc="diary.micronutrients" className="card p-5 space-y-3">
         <h2 className="text-sm font-bold text-white flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-sky-400" />
           Micronutrients Today
@@ -526,8 +526,8 @@ export default function DiaryPage() {
         <p className="text-[10px] text-slate-500">Summed from the nutrition facts of everything logged this day. Foods without recorded facts contribute 0.</p>
       </div>
 
-      {/* Add entry */}
-      <form onSubmit={handleAdd} className="card p-5 space-y-3">
+      {/* ═══ Section: Add entry ═══ */}
+      <form data-loc="diary.add-entry" onSubmit={handleAdd} className="card p-5 space-y-3">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <h2 className="text-sm font-bold text-white">Log Food</h2>
@@ -645,11 +645,11 @@ export default function DiaryPage() {
         )}
       </form>
 
-      {/* Meals */}
+      {/* ═══ Section: Meals grid ═══ */}
       {isLoading ? (
         <div className="text-center text-slate-500 py-12">Loading diary…</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div data-loc="diary.meals-grid" className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {MEALS.map(m => {
             const mealEntries = entries.filter(en => en.meal === m.key);
             const subtotal = mealEntries.reduce((acc, en) => acc + (en.calories ? Number(en.calories) : 0), 0);

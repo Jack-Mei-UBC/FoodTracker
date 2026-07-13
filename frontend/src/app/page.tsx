@@ -431,8 +431,8 @@ export default function Dashboard() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="space-y-8 animate-slide-up relative">
-      
+    <div data-loc="page.dashboard" className="space-y-8 animate-slide-up relative">
+
       {/* Toast Notification */}
       {notification && (
         <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl shadow-xl flex items-center space-x-3 transition duration-300 transform translate-y-0 ${
@@ -444,7 +444,7 @@ export default function Dashboard() {
       )}
 
       {/* ═══ Section: Hero banner ═══ */}
-      <div className="card rounded-3xl p-6 lg:p-10 relative overflow-hidden">
+      <div data-loc="dashboard.hero" className="card rounded-3xl p-6 lg:p-10 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-80 h-80 bg-violet-600/10 rounded-full blur-3xl -z-10" />
         <div className="absolute bottom-0 left-0 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl -z-10" />
         
@@ -459,7 +459,7 @@ export default function Dashboard() {
       </div>
 
       {/* ═══ Section: Summary Cards ═══ */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div data-loc="dashboard.summary-cards" className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="card p-6 glass-panel-hover flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">Tracked Foods</span>
@@ -505,13 +505,13 @@ export default function Dashboard() {
       </div>
 
       {/* ═══ Section: Main grid — left = scrapers · efficiency · admin, right = inventory ═══ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        
+      <div data-loc="dashboard.main-grid" className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
         {/* Left Column (Scraper controller and high discrepancy highlights) */}
         <div className="lg:col-span-1 space-y-8">
-          
+
           {/* Dispatch Web Scraper Pipeline */}
-          <div className="card p-6 space-y-4">
+          <div data-loc="dashboard.scraper-flipp" className="card p-6 space-y-4">
             <div className="flex items-center space-x-2">
               <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
               <h2 className="text-lg font-bold text-white">Scrape Flyer Deals</h2>
@@ -570,7 +570,7 @@ export default function Dashboard() {
           </div>
 
           {/* Import a cocowest.ca Costco Sale Post */}
-          <div className="card p-6 space-y-4">
+          <div data-loc="dashboard.scraper-cocowest" className="card p-6 space-y-4">
             <div className="flex items-center space-x-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <h2 className="text-lg font-bold text-white">Import Costco Sale Post</h2>
@@ -615,7 +615,7 @@ export default function Dashboard() {
           </div>
 
           {/* Price Efficiency Index Widget */}
-          <div className="card p-6 space-y-4">
+          <div data-loc="dashboard.efficiency" className="card p-6 space-y-4">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -657,7 +657,7 @@ export default function Dashboard() {
           </div>
           
           {/* Quick Add Forms panels */}
-          <div className="card p-6 space-y-4">
+          <div data-loc="dashboard.admin" className="card p-6 space-y-4">
             <h2 className="text-lg font-bold text-white">Administration</h2>
             
             <div className="border-t border-white/5 pt-3">
@@ -687,7 +687,7 @@ export default function Dashboard() {
         </div>
 
         {/* Right Column: Inventory database logs */}
-        <div className="lg:col-span-2 space-y-6">
+        <div data-loc="dashboard.inventory" className="lg:col-span-2 space-y-6">
           
           {/* Filtering and search header */}
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
@@ -879,13 +879,14 @@ export default function Dashboard() {
 
       </div>
 
-      {/* ═══ Section: Food detail modal — price history + SVG trend + known names + facts ═══ */}
+      {/* ═══ Section: Food detail modal (data-loc="modal.price-history") — price history + SVG trend + known names + facts ═══ */}
       {selectedFoodDetails && (
         <Modal
           onClose={() => setSelectedFoodDetails(null)}
           zClass="z-50"
           maxWidth="max-w-2xl"
           panelClassName="bg-[#090d1a] border border-white/10 rounded-3xl p-6 lg:p-8 space-y-6"
+          dataLoc="modal.price-history"
         >
             <button 
               onClick={() => setSelectedFoodDetails(null)}

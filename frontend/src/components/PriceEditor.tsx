@@ -134,7 +134,7 @@ export default function PriceEditor({
   const field = 'w-full bg-slate-950 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500';
 
   return (
-    <Modal onClose={onClose} maxWidth="max-w-md" panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
+    <Modal onClose={onClose} maxWidth="max-w-md" panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4" dataLoc="modal.price-editor">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-white">
             {isEdit ? 'Edit Price' : 'Add Price'}{foodName ? <span className="text-slate-400 font-normal"> — {foodName}</span> : null}

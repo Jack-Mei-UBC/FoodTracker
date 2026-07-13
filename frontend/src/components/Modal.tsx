@@ -28,6 +28,8 @@ interface ModalProps {
   backdropClass?: string;
   /** Panel cosmetics (bg, border, radius, padding, spacing). */
   panelClassName?: string;
+  /** data-loc marker for inspect-element -> source mapping, e.g. "modal.price-editor". */
+  dataLoc?: string;
 }
 
 // Modals can stack (e.g. FoodDetailModal z-[60] under PriceEditor z-[80]);
@@ -41,6 +43,7 @@ export default function Modal({
   zClass = 'z-[80]',
   backdropClass = 'bg-black/75 backdrop-blur-sm',
   panelClassName = 'bg-[#0b0f1e] border border-white/10 rounded-2xl p-5',
+  dataLoc,
 }: ModalProps) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -76,6 +79,7 @@ export default function Modal({
       <div
         className={`w-full ${maxWidth} max-h-[90vh] overflow-y-auto relative animate-slide-up ${panelClassName}`}
         onClick={e => e.stopPropagation()}
+        data-loc={dataLoc}
       >
         {children}
       </div>

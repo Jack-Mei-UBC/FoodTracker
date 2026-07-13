@@ -439,7 +439,7 @@ export default function MealsPage() {
   const inputCls = "bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition";
 
   return (
-    <div className="space-y-8 animate-slide-up relative">
+    <div data-loc="page.meals" className="space-y-8 animate-slide-up relative">
       {notification && (
         <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl shadow-xl flex items-center space-x-3 ${
           notification.type === 'success' ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950/90 text-rose-300 border border-rose-500/30'
@@ -449,8 +449,8 @@ export default function MealsPage() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* ═══ Section: Header ═══ */}
+      <div data-loc="meals.header" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-emerald-300 bg-clip-text text-transparent">
             Meal Plans
@@ -473,9 +473,9 @@ export default function MealsPage() {
         </div>
       </div>
 
-      {/* AI generation panel */}
+      {/* ═══ Section: AI generation panel ═══ */}
       {aiOpen && (
-        <div className="card p-5 space-y-4">
+        <div data-loc="meals.ai-panel" className="card p-5 space-y-4">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
             <h2 className="text-sm font-bold text-white">Draft a meal from your fridge</h2>
@@ -546,9 +546,9 @@ export default function MealsPage() {
         </div>
       )}
 
-      {/* Builder */}
+      {/* ═══ Section: Builder ═══ */}
       {builderOpen && (
-        <div className="card p-5 space-y-4">
+        <div data-loc="meals.builder" className="card p-5 space-y-4">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <h2 className="text-sm font-bold text-white">{editMealId ? 'Edit Meal' : 'New Meal'}</h2>
@@ -715,7 +715,7 @@ export default function MealsPage() {
         </div>
       )}
 
-      {/* Meal list */}
+      {/* ═══ Section: Meal list ═══ */}
       {isLoading ? (
         <div className="text-center text-slate-500 py-12">Loading meals…</div>
       ) : meals.length === 0 ? (
@@ -724,7 +724,7 @@ export default function MealsPage() {
           <p className="text-xs text-slate-600 mt-1">Build one from your catalog foods, or let the AI draft one from your fridge.</p>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div data-loc="meals.list" className="space-y-3">
           {meals.map(meal => {
             const ps = meal.per_serving;
             const expanded = expandedId === meal.id;
@@ -852,9 +852,9 @@ export default function MealsPage() {
         </div>
       )}
 
-      {/* Log-to-diary popup */}
+      {/* ═══ Section: Log-to-diary popup (data-loc="modal.meal-log") ═══ */}
       {logMeal && (
-        <Modal onClose={() => setLogMeal(null)} maxWidth="max-w-sm" panelClassName="card p-5 space-y-4">
+        <Modal onClose={() => setLogMeal(null)} maxWidth="max-w-sm" panelClassName="card p-5 space-y-4" dataLoc="modal.meal-log">
             <h3 className="text-sm font-bold text-white">Log “{logMeal.name}” to today's diary</h3>
             <p className="text-xs text-slate-400">
               One diary entry with the meal's per-serving nutrients × portions

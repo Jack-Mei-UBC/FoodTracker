@@ -255,7 +255,7 @@ export default function Scanner() {
   const busy = isScanning || queuing;
 
   return (
-    <div className="space-y-8 max-w-4xl mx-auto relative">
+    <div data-loc="page.scanner" className="space-y-8 max-w-4xl mx-auto relative">
       {statusMsg && (
         <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl shadow-xl flex items-center space-x-3 transition duration-300 ${
           statusMsg.type === 'success'
@@ -265,7 +265,8 @@ export default function Scanner() {
         </div>
       )}
 
-      <div className="border-b border-white/5 pb-3">
+      {/* ═══ Section: Header ═══ */}
+      <div data-loc="scanner.header" className="border-b border-white/5 pb-3">
         <h1 className="text-lg font-bold text-white">Receipt OCR Scanner</h1>
         <p className="text-xs text-slate-500 mt-0.5">Upload, drag &amp; drop, or paste (Ctrl+V) a receipt or shelf price tag — scan now, or queue it to process in the background.</p>
       </div>
@@ -273,8 +274,8 @@ export default function Scanner() {
       <div className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
 
-          {/* Uploader */}
-          <div className="md:col-span-1 card rounded-3xl p-6 space-y-4">
+          {/* ═══ Section: Uploader ═══ */}
+          <div data-loc="scanner.uploader" className="md:col-span-1 card rounded-3xl p-6 space-y-4">
             <h2 className="text-lg font-bold text-white">Upload Receipt or Price Tag</h2>
 
             <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" multiple className="hidden" />
@@ -336,8 +337,8 @@ export default function Scanner() {
             </button>
           </div>
 
-          {/* Console Log */}
-          <div className="md:col-span-2 card rounded-3xl p-6 space-y-4 min-h-[300px]">
+          {/* ═══ Section: Console Log ═══ */}
+          <div data-loc="scanner.console" className="md:col-span-2 card rounded-3xl p-6 space-y-4 min-h-[300px]">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-bold text-white">Processing Console</h2>
               <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">

@@ -119,7 +119,7 @@ export default function MacroEditor({
   const num = 'bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white text-right font-mono focus:outline-none focus:border-emerald-500';
 
   return (
-    <Modal onClose={onClose} maxWidth="max-w-lg" panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
+    <Modal onClose={onClose} maxWidth="max-w-lg" panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4" dataLoc="modal.macro-editor">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-white">
             Nutrition Facts{foodName ? <span className="text-slate-400 font-normal"> — {foodName}</span> : null}

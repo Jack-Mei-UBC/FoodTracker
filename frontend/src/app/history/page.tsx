@@ -113,7 +113,7 @@ export default function History() {
   });
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
+    <div data-loc="page.history" className="space-y-8 max-w-6xl mx-auto">
       {statusMsg && (
         <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl shadow-xl ${
           statusMsg.type === 'success'
@@ -124,7 +124,8 @@ export default function History() {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      {/* ═══ Section: Header ═══ */}
+      <div data-loc="history.header" className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-white">Price History</h1>
           <p className="text-sm text-slate-400 mt-1">Every logged price. Edit or delete entries — all changes are revertible below.</p>
@@ -135,8 +136,8 @@ export default function History() {
         </label>
       </div>
 
-      {/* Price log table */}
-      <div className="card rounded-3xl p-6 overflow-x-auto">
+      {/* ═══ Section: Price log table ═══ */}
+      <div data-loc="history.price-table" className="card rounded-3xl p-6 overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
             <tr className="border-b border-white/5 text-slate-500">
@@ -208,8 +209,8 @@ export default function History() {
         </table>
       </div>
 
-      {/* Change history / revert feed */}
-      <div className="card rounded-3xl p-6 space-y-4">
+      {/* ═══ Section: Change history / revert feed ═══ */}
+      <div data-loc="history.audit-log" className="card rounded-3xl p-6 space-y-4">
         <h2 className="text-lg font-bold text-white">Change History</h2>
         <p className="text-xs text-slate-400">Every edit, delete, and revert. Revert any change to undo it.</p>
         <div className="space-y-2 max-h-[420px] overflow-y-auto">

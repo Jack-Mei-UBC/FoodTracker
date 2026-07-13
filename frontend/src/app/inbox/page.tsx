@@ -155,7 +155,7 @@ export default function Inbox() {
   const openableCount = jobs.filter(j => j.status === 'done' && !openReviews.some(r => r.jobId === j.id)).length;
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div data-loc="page.inbox" className="space-y-8 max-w-5xl mx-auto">
       {statusMsg && (
         <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl shadow-xl ${
           statusMsg.type === 'success' ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950/90 text-rose-300 border border-rose-500/30'}`}>
@@ -163,7 +163,8 @@ export default function Inbox() {
         </div>
       )}
 
-      <div className="flex items-start justify-between gap-4">
+      {/* ═══ Section: Header ═══ */}
+      <div data-loc="inbox.header" className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-white">Scan Inbox</h1>
           <p className="text-sm text-slate-400 mt-1">Images processed in the background. Review finished scans — individually or all at once — with the source photo shown alongside.</p>
@@ -176,7 +177,8 @@ export default function Inbox() {
         )}
       </div>
 
-      <div className="card rounded-3xl p-6 space-y-2">
+      {/* ═══ Section: Job list ═══ */}
+      <div data-loc="inbox.job-list" className="card rounded-3xl p-6 space-y-2">
         {jobs.length === 0 && <p className="text-slate-600 text-sm py-6 text-center">Inbox empty. Queue an image from the Scanner.</p>}
         {jobs.map(job => {
           const isOpen = openReviews.some(r => r.jobId === job.id);
@@ -206,7 +208,8 @@ export default function Inbox() {
         })}
       </div>
 
-      {/* Stacked review panels — one per opened job, each with its source photo */}
+      {/* ═══ Section: Review panels — one per opened job, each with its source photo ═══ */}
+      <div data-loc="inbox.review-panels" className="space-y-8">
       {openReviews.map(review => (
         <div key={review.jobId} className="relative">
           {review.result.type === 'unknown' && !manualOverrideIds.has(review.jobId) ? (
@@ -246,6 +249,7 @@ export default function Inbox() {
           )}
         </div>
       ))}
+      </div>
     </div>
   );
 }
