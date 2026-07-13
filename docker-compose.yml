@@ -42,11 +42,15 @@ services:
       # AI meal drafting (POST /api/meals/generate) via OpenRouter chat models.
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - MEAL_MODEL=${MEAL_MODEL:-google/gemini-2.5-flash}
+      # Synchronous OCR proxy (POST /api/scan) forwards here; the worker uses the
+      # same URL for the background scan-jobs path.
+      - OCR_SERVICE_URL=http://ocr-service:8000
     volumes:
       - uploads:/data/uploads
     depends_on:
       - db
       - redis
+      - ocr-service
 
   worker:
     build:
@@ -99,10 +103,8 @@ services:
       - "3000:3000"
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:4000
-      - OCR_SERVICE_URL=http://ocr-service:8000
     depends_on:
       - backend
-      - ocr-service
 
 volumes:
   postgres_data:

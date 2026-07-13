@@ -134,7 +134,7 @@ export default function Scanner() {
       const formData = new FormData();
       formData.append('image', pendingFile);
       setScanStageLabel('Vision AI is reading the image... (sending to model)');
-      const scanRes = await fetch('/api/scan', { method: 'POST', body: formData });
+      const scanRes = await fetch(`${API_BASE_URL}/api/scan`, { method: 'POST', body: formData });
       if (!scanRes.ok) {
         const err = await scanRes.json().catch(() => ({ error: scanRes.statusText }));
         appendLog(`Scan Error: ${err.error || err.detail || scanRes.statusText}`);
