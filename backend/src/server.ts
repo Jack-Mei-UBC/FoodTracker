@@ -33,6 +33,20 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024, files: 20 },
 });
 
+// In-memory upload for the synchronous OCR proxy (POST /api/scan): the image is
+// forwarded straight to the OCR service and never persisted, so it doesn't need
+// to touch the uploads volume like the background scan-jobs path does.
+const memoryUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
+
+// The OCR service is reached over the internal Docker network. This used to be a
+// Next.js API route in the frontend, but it moved here so the frontend can be
+// built as a static bundle (Capacitor/mobile) with no server — see
+// frontend/next.config.js.
+const OCR_SERVICE_URL = process.env.OCR_SERVICE_URL || 'http://ocr-service:8000';
+
 // Registers an uploaded file as an images row, extracting EXIF GPS when present.
 // GPS failures are non-fatal — most screenshots/scans simply have no location.
 async function registerImage(file: Express.Multer.File): Promise<{ id: number; latitude: number | null; longitude: number | null }> {
@@ -72,6 +86,33 @@ app.get('/api/health', async (req: Request, res: Response) => {
       status: 'unhealthy',
       error: err.message,
     });
+  }
+});
+
+// 1b. Synchronous OCR proxy — forwards an uploaded image straight to the OCR
+// service and returns the structured ScanResponse without persisting anything
+// (the /scanner page's "scan now" path). Mirrors the worker's background OCR
+// call. The background/queue path is POST /api/scan-jobs, which does persist.
+app.post('/api/scan', memoryUpload.single('image'), async (req: Request, res: Response) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No image file provided' });
+  }
+  try {
+    const form = new FormData();
+    // Wrap the Buffer in a Uint8Array — a raw Node Buffer isn't a valid BlobPart
+    // under current @types/node (its backing store may be a SharedArrayBuffer).
+    const bytes = Uint8Array.from(req.file.buffer);
+    form.append(
+      'image',
+      new Blob([bytes], { type: req.file.mimetype || 'image/jpeg' }),
+      req.file.originalname || 'capture.jpg'
+    );
+    const ocrRes = await fetch(`${OCR_SERVICE_URL}/scan`, { method: 'POST', body: form });
+    const body = await ocrRes.json().catch(() => ({ error: 'OCR service returned a non-JSON response' }));
+    return res.status(ocrRes.status).json(body);
+  } catch (err) {
+    console.error('scan route error:', err);
+    return res.status(502).json({ error: 'OCR service unavailable' });
   }
 });
 

@@ -51,7 +51,7 @@ flowchart LR
 
 **Two OCR ingestion paths, both ending in human review — nothing extracted is ever saved without a person approving it:**
 
-1. **Synchronous** (`/scanner`): browser → Next.js proxy → `ocr-service` → structured result rendered in a review grid for edit/approve/commit.
+1. **Synchronous** (`/scanner`): browser → Express `POST /api/scan` (proxies to `ocr-service`, persists nothing) → structured result rendered in a review grid for edit/approve/commit.
 2. **Background queue** (`/inbox`): browser → API (stores the image) → worker calls `ocr-service` → result held on a `scan_jobs` row → reviewed in the **same** shared review component.
 
 The OCR service sends the image **directly to a vision model** (no Tesseract): one call classifies `receipt | price_tag | unknown` and extracts structured fields, with a reprompt-retry and graceful degradation for flaky free models.
@@ -92,6 +92,19 @@ docker compose up -d --build  # whole stack
 - Follow logs: `docker compose logs -f worker`
 
 **Schema note:** `db/schema.sql` only runs on a *fresh* Postgres volume. Migrations are written idempotently (`ADD COLUMN IF NOT EXISTS`, …) and applied to a running DB by hand via `psql` — documented in [CLAUDE.md](CLAUDE.md).
+
+### Mobile (iOS / Android)
+
+The frontend is a client-side SPA that talks to the REST API, so it packages into native App Store / Play Store apps via [Capacitor](https://capacitorjs.com/) with no rewrite. `frontend/next.config.js` produces a static bundle when `BUILD_TARGET=static`; `capacitor.config.ts` wraps `./out` in a native WebView shell.
+
+```bash
+cd frontend
+npx cap add android          # and/or:  npx cap add ios   (iOS requires macOS)
+NEXT_PUBLIC_API_URL=https://your-public-backend npm run mobile:sync   # build:mobile + cap sync
+npm run mobile:open:android  # opens Android Studio / Xcode to build & sign
+```
+
+The one requirement is infrastructure, not code: the backend stack must be hosted publicly over **HTTPS**, and `NEXT_PUBLIC_API_URL` (baked in at build time) must point at it — a phone has no `localhost:4000`. The backend already sends permissive CORS for the Capacitor origin.
 
 ---
 
