@@ -1,0 +1,60 @@
+# DEV overlay — loaded AUTOMATICALLY by a bare `docker compose up`.
+#
+# This is the file that gives you hot reload. It swaps each Node service to its
+# Dockerfile `dev` target and bind-mounts the source over the image.
+#
+# The `- /usr/src/app/node_modules` line in each service is load-bearing: an
+# anonymous volume mounted at that path MASKS the host directory, so the
+# node_modules baked into the image survive the source bind mount. That is what
+# lets the container start instantly instead of running `npm install` on boot.
+#
+#   Changing source        → hot reload, nothing to do.
+#   Changing package.json  → docker compose up -d --build <service>
+#
+# To run the production-shaped stack instead (no bind mounts, no watcher):
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --wait
+
+services:
+  backend:
+    build:
+      target: dev
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./backend:/usr/src/app
+      - /usr/src/app/node_modules
+      - uploads:/data/uploads
+
+  worker:
+    build:
+      target: dev
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./worker:/usr/src/app
+      - /usr/src/app/node_modules
+      - uploads:/data/uploads
+
+  frontend:
+    build:
+      target: dev
+    environment:
+      - NODE_ENV=development
+      # Baked into the CLIENT bundle, so it must be an address the BROWSER can
+      # reach — not an address the container can reach. `localhost` only works
+      # when the browser runs on this same machine; a phone or another device on
+      # the LAN resolves `localhost` to ITSELF and reports the backend as
+      # unreachable. To test from a phone, set this to the host's LAN IP in
+      # .env, e.g. NEXT_PUBLIC_API_URL=http://192.168.1.130:4000
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+      # Docker Desktop on Windows/macOS doesn't propagate inotify events into
+      # the container, so the watcher has to poll.
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    volumes:
+      - ./frontend:/usr/src/app
+      - /usr/src/app/node_modules
+
+  ocr-service:
+    volumes:
+      - ./ocr-service/app:/app/app

@@ -1,3 +1,17 @@
+# BASE stack — production-shaped. No bind mounts, no `command:` overrides; each
+# service runs its image's own CMD (the Dockerfile `prod` target).
+#
+#   docker compose up -d                  → base + docker-compose.override.yml
+#                                           (the DEV stack: hot reload, bind
+#                                           mounts. The override is picked up
+#                                           automatically — that's the point.)
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --wait
+#                                         → CI/prod-shaped, override excluded
+#
+# Dependencies are installed in the IMAGE (see the Dockerfiles), never in a
+# container start command. That is why a cold boot is fast now. The tradeoff:
+# a package.json change needs `--build`, not just a restart.
+
 services:
   db:
     image: postgres:15-alpine
@@ -12,6 +26,12 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d foodtracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   redis:
     image: redis:7-alpine
@@ -21,11 +41,18 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      target: prod
     container_name: foodtracker-backend
     restart: always
     ports:
@@ -34,45 +61,68 @@ services:
       - PORT=4000
       - DATABASE_URL=postgresql://postgres:password@db:5432/foodtracker
       - REDIS_URL=redis://redis:6379
-      - NODE_ENV=development
       - UPLOAD_DIR=/data/uploads
       - FDC_API_KEY=${FDC_API_KEY}
       # Default postal code for Flipp flyer scrapes (per-request override allowed)
       - FLIPP_POSTAL_CODE=${FLIPP_POSTAL_CODE:-V5A3J2}
       # AI meal drafting (POST /api/meals/generate) via OpenRouter chat models.
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      # Text model pool (meal/tag/merge) — comma-separated free/paid lists; the
+      # text half of the 4-list model-pool contract. Empty FREE list seeds from
+      # MEAL_MODEL. See backend/src/modelPool.ts.
+      - FREE_TEXT_MODELS=${FREE_TEXT_MODELS:-}
+      - PAID_TEXT_MODELS=${PAID_TEXT_MODELS:-}
+      - USE_PAID_MODELS=${USE_PAID_MODELS:-false}
       - MEAL_MODEL=${MEAL_MODEL:-google/gemini-2.5-flash}
-      # Synchronous OCR proxy (POST /api/scan) forwards here; the worker uses the
-      # same URL for the background scan-jobs path.
-      - OCR_SERVICE_URL=http://ocr-service:8000
+      # Single-model overrides for the tagger / duplicate-finder (bypass the pool).
+      - TAG_MODEL=${TAG_MODEL:-}
+      - MERGE_MODEL=${MERGE_MODEL:-}
     volumes:
       - uploads:/data/uploads
     depends_on:
-      - db
-      - redis
-      - ocr-service
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 15s
 
   worker:
     build:
       context: ./worker
       dockerfile: Dockerfile
+      target: prod
     container_name: foodtracker-worker
     restart: always
     environment:
       - DATABASE_URL=postgresql://postgres:password@db:5432/foodtracker
       - REDIS_URL=redis://redis:6379
-      - NODE_ENV=development
       - OCR_SERVICE_URL=http://ocr-service:8000
+      # Image model pool — the worker selects one model per scan and runs many
+      # scans in parallel (concurrency = pool size). Comma-separated free/paid
+      # lists (the image half of the 4-list model-pool contract). Empty FREE list
+      # seeds from OCR_MODEL. See worker/src/modelPool.ts.
+      - FREE_IMAGE_MODELS=${FREE_IMAGE_MODELS:-}
+      - PAID_IMAGE_MODELS=${PAID_IMAGE_MODELS:-}
+      - USE_PAID_MODELS=${USE_PAID_MODELS:-false}
+      - OCR_MODEL=${OCR_MODEL:-nvidia/nemotron-nano-12b-v2-vl:free}
+      - OCR_MAX_ATTEMPTS=${OCR_MAX_ATTEMPTS:-3}
       # Scraped prices are written through the backend REST API so they get
       # normalization, food_prices join rows, and audit entries.
       - BACKEND_URL=http://backend:4000
     volumes:
       - uploads:/data/uploads
     depends_on:
-      - db
-      - redis
-      - ocr-service
-      - backend
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
 
   ocr-service:
     build:
@@ -97,14 +147,23 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      target: prod
+      args:
+        # NEXT_PUBLIC_* is baked in at build time — override for a real deploy.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
     container_name: foodtracker-frontend
     restart: always
     ports:
       - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:4000
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 15s
 
 volumes:
   postgres_data:
