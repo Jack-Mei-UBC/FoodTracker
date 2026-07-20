@@ -20,6 +20,7 @@ export interface EditablePriceLog {
   amount: string | number | null;
   amount_unit: string | null;
   is_sale: boolean;
+  sale_ends_at?: string | null;
   store_id: number | null;
 }
 
@@ -52,6 +53,8 @@ export default function PriceEditor({
     amount_unit: log?.amount_unit ?? '',
     store_id: log?.store_id != null ? String(log.store_id) : '',
     is_sale: !!(log && log.is_sale),
+    // Blank means "let the backend apply the configured default sale length".
+    sale_ends_at: log?.sale_ends_at ? String(log.sale_ends_at).slice(0, 10) : '',
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +95,9 @@ export default function PriceEditor({
       amount_unit: draft.amount_unit || null,
       store_id: Number(draft.store_id),
       is_sale: draft.is_sale,
+      // Only sent when set; omitting it lets the backend fill the default for a
+      // sale, and it's ignored outright for a non-sale price.
+      sale_ends_at: draft.is_sale ? (draft.sale_ends_at || null) : null,
     };
     try {
       let res: Response;
@@ -184,6 +190,20 @@ export default function PriceEditor({
             </label>
             {preview && <span className="text-xs font-mono text-emerald-400">{preview}</span>}
           </div>
+          {/* A sale price is hidden from current-price views once this date passes. */}
+          {draft.is_sale && (
+            <div>
+              <label className="field-label">Sale ends</label>
+              <input type="date" value={draft.sale_ends_at}
+                onChange={e => setDraft({ ...draft, sale_ends_at: e.target.value })}
+                className="field-input w-full" />
+              <p className="text-[10px] text-slate-500 mt-1">
+                {draft.sale_ends_at
+                  ? 'After this date the price stops showing as current (history keeps it).'
+                  : 'Leave blank to use the default sale length from Settings.'}
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2 pt-1">

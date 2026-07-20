@@ -9,6 +9,12 @@ CREATE TABLE IF NOT EXISTS stores (
     longitude DECIMAL(9,6),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+-- Soft delete for stores (same convention as foods/price_logs). NOT a hard delete:
+-- price_logs.store_id is ON DELETE CASCADE, so a real DELETE would wipe a store's
+-- whole price history. Soft-deleting hides it from the pickers (GET /api/stores
+-- filters deleted_at) while old prices/receipts still resolve its name by id.
+-- Added post-hoc, so existing DBs need the manual ALTER too (schema.sql gotcha).
+ALTER TABLE stores ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
 
 -- Create Foods Table
 CREATE TABLE IF NOT EXISTS foods (
@@ -34,6 +40,15 @@ CREATE TABLE IF NOT EXISTS foods (
 -- this manually to a running DB — see CLAUDE.md).
 ALTER TABLE foods ADD COLUMN IF NOT EXISTS density DECIMAL(8,4) NOT NULL DEFAULT 1 CHECK (density > 0);
 
+-- Soft delete (same convention as price_logs / consumption_logs / receipts), so a
+-- food can be archived out of the catalog and restored. Needed because the
+-- cocowest scraper logs every item in a Costco post — including non-food
+-- (electronics, luggage) — and the /audit page bulk-archives those. Every catalog
+-- read filters `deleted_at IS NULL`; meal/diary history still resolves archived
+-- foods by id so past records keep working.
+ALTER TABLE foods ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP;
+CREATE INDEX IF NOT EXISTS idx_foods_deleted ON foods(deleted_at);
+
 -- Uploaded scan images (one row per capture). GPS extracted from EXIF when present;
 -- used to auto-locate stores. price_logs / scan_jobs link here so every logged
 -- price keeps its source photo. Defined before those tables so they can reference it.
@@ -45,6 +60,12 @@ CREATE TABLE IF NOT EXISTS images (
     longitude DECIMAL(9,6),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- A cropped image links back to the full-resolution original it was derived from
+-- (the scanner's crop-before-OCR step stores both; the crop is the row referenced
+-- by price_logs/scan_jobs, and it points at its original here). NULL for originals
+-- and non-crop uploads. Self-referential, so it must be added after `images` exists.
+ALTER TABLE images ADD COLUMN IF NOT EXISTS original_image_id INTEGER REFERENCES images(id) ON DELETE SET NULL;
 
 -- Food icon: a cropped image the user chose to represent this food on the
 -- dashboard. NULL falls back to the earliest non-deleted image attached to
@@ -74,11 +95,32 @@ CREATE TABLE IF NOT EXISTS price_logs (
     image_id INTEGER REFERENCES images(id) ON DELETE SET NULL
 );
 
+-- When a SALE price stops being valid. Only meaningful with is_sale = true; a
+-- regular (non-sale) price never expires, so NULL means "no expiry". Every read
+-- that surfaces a food's CURRENT price filters expired sales out (see the
+-- ACTIVE_PRICE_SQL predicate in backend/src/server.ts) — history deliberately
+-- still shows them, since the sale really did happen.
+-- Added post-hoc: existing DBs need the manual ALTER (see the schema.sql gotcha).
+ALTER TABLE price_logs ADD COLUMN IF NOT EXISTS sale_ends_at DATE;
+CREATE INDEX IF NOT EXISTS idx_price_logs_sale_ends ON price_logs(sale_ends_at) WHERE sale_ends_at IS NOT NULL;
+
+-- App-wide settings, single row (id = 1) — same bootstrap pattern as user_goals
+-- and budget_goals. default_sale_days is how long a sale is assumed to run when
+-- a scan finds a sale price but no printed end date.
+CREATE TABLE IF NOT EXISTS app_settings (
+    id INTEGER PRIMARY KEY DEFAULT 1,
+    default_sale_days INTEGER NOT NULL DEFAULT 7,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT app_settings_singleton CHECK (id = 1),
+    CONSTRAINT app_settings_days_positive CHECK (default_sale_days > 0)
+);
+INSERT INTO app_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING;
+
 -- Background OCR jobs: images uploaded for server-side processing, results
 -- held for pending review (never auto-committed).
 CREATE TABLE IF NOT EXISTS scan_jobs (
     id SERIAL PRIMARY KEY,
-    status VARCHAR(20) NOT NULL DEFAULT 'queued', -- queued|processing|done|failed|reviewed|discarded
+    status VARCHAR(20) NOT NULL DEFAULT 'queued', -- staged|queued|processing|done|failed|reviewed|discarded ('staged' = uploaded, awaiting crop+send on /staging; not yet enqueued)
     image_path TEXT,
     original_filename TEXT,
     store_id INTEGER REFERENCES stores(id) ON DELETE SET NULL,
@@ -89,6 +131,17 @@ CREATE TABLE IF NOT EXISTS scan_jobs (
     processed_at TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_scan_jobs_status ON scan_jobs(status);
+-- Whether the worker's model pool may use PAID vision models for this job (the
+-- per-batch "Use paid models" toggle on /staging). Added post-hoc, so existing
+-- DBs need the manual ALTER too (see the schema.sql gotcha in CLAUDE.md).
+ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS use_paid BOOLEAN NOT NULL DEFAULT false;
+-- Per-model attempt log: one record per vision model the worker tried for this
+-- job — [{ model, ok, type, item_count, confidence, raw_text, error }]. `result`
+-- keeps only the single best body, so without this every other model's output
+-- (including the text a model DID read while returning type=unknown) is lost.
+-- Written on both the done and failed paths, so a hard failure keeps a trace too.
+-- Added post-hoc: existing DBs need the manual ALTER (see the schema.sql gotcha).
+ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS attempts JSONB;
 
 -- Background scrape jobs — progress tracking for both scraper sources (Flipp
 -- flyers and cocowest.ca Costco sale posts). One row per POST /api/scrape/:storeId
@@ -289,6 +342,61 @@ CREATE TABLE IF NOT EXISTS user_goals (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 INSERT INTO user_goals (id) VALUES (1) ON CONFLICT DO NOTHING;
+
+-- ── Tags ─────────────────────────────────────────────────────────────────────
+
+-- Free-form labels for foods, many-to-many (a food has many tags, a tag has many
+-- foods) — unlike `foods.category`, which is single-valued. Created and applied
+-- from the /audit page, including by the LLM auto-tagger (which only ever
+-- proposes; the user applies). Name is unique case-insensitively.
+CREATE TABLE IF NOT EXISTS tags (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(60) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tags_name ON tags(lower(name));
+
+CREATE TABLE IF NOT EXISTS food_tags (
+    food_id INTEGER NOT NULL REFERENCES foods(id) ON DELETE CASCADE,
+    tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (food_id, tag_id)
+);
+CREATE INDEX IF NOT EXISTS idx_food_tags_tag ON food_tags(tag_id);
+
+-- ── Budget / spending tracking ───────────────────────────────────────────────
+
+-- One row per shopping trip / receipt: the store it came from and the total
+-- spent. Populated automatically when a receipt scan is committed in ReviewItems
+-- (source='scan', linked to its photo + scan job), and addable by hand for cash
+-- or un-scanned purchases (source='manual'). store_name is denormalized so the
+-- spend record survives the store being deleted (store_id ON DELETE SET NULL).
+-- Soft-deleted like price_logs.
+CREATE TABLE IF NOT EXISTS receipts (
+    id SERIAL PRIMARY KEY,
+    store_id INTEGER REFERENCES stores(id) ON DELETE SET NULL,
+    store_name VARCHAR(255),
+    total DECIMAL(10, 2) NOT NULL CHECK (total >= 0),
+    purchased_on DATE NOT NULL DEFAULT CURRENT_DATE,
+    item_count INTEGER NOT NULL DEFAULT 0,
+    source VARCHAR(20) NOT NULL DEFAULT 'manual', -- scan | manual
+    notes TEXT,
+    image_id INTEGER REFERENCES images(id) ON DELETE SET NULL,
+    scan_job_id INTEGER REFERENCES scan_jobs(id) ON DELETE SET NULL,
+    deleted_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_receipts_purchased ON receipts(purchased_on);
+CREATE INDEX IF NOT EXISTS idx_receipts_store ON receipts(store_id);
+
+-- Single-row monthly spending target (single-user app; id=1 always), mirroring
+-- user_goals. NULL monthly_budget = no target set (tracking still works without one).
+CREATE TABLE IF NOT EXISTS budget_goals (
+    id INTEGER PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    monthly_budget DECIMAL(10, 2),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+INSERT INTO budget_goals (id) VALUES (1) ON CONFLICT DO NOTHING;
 
 -- Create indexes for performance optimization
 CREATE INDEX IF NOT EXISTS idx_price_logs_food ON price_logs(food_id);

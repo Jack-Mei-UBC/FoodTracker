@@ -35,13 +35,12 @@ Six containers orchestrated by `docker-compose.yml`. Each service is its own pac
 ```mermaid
 flowchart LR
   UI[Next.js PWA] -->|REST| API[Express API]
-  UI -->|/scanner proxy| OCR[FastAPI OCR]
-  API -->|enqueue| Q[(Redis / BullMQ)]
+  API -->|enqueue scan/scrape| Q[(Redis / BullMQ)]
   W[Worker] -->|dequeue| Q
   W -->|flyer JSON| Flipp[(Flipp flyer API)]
   W -->|sale post HTML| Cocowest[(cocowest.ca)]
   W -->|write prices via REST| API
-  W -->|extract| OCR
+  W -->|extract, one model per scan| OCR[FastAPI OCR]
   OCR -->|vision LLM| OR[OpenRouter]
   API -->|meal drafting LLM| OR
   API --> DB[(Postgres)]
@@ -49,12 +48,17 @@ flowchart LR
   API -->|nutrition lookup| FDC[USDA FoodData Central]
 ```
 
-**Two OCR ingestion paths, both ending in human review — nothing extracted is ever saved without a person approving it:**
+**One OCR ingestion path, ending in human review — nothing extracted is ever saved without a person approving it:**
 
-1. **Synchronous** (`/scanner`): browser → Express `POST /api/scan` (proxies to `ocr-service`, persists nothing) → structured result rendered in a review grid for edit/approve/commit.
-2. **Background queue** (`/inbox`): browser → API (stores the image) → worker calls `ocr-service` → result held on a `scan_jobs` row → reviewed in the **same** shared review component.
+**Intake → Staging → background OCR → Inbox** (`/scanner` → `/staging` → `/inbox`): the **Scanner** is a pure uploader — browser → `POST /api/scan-jobs` stores each image as a **staged** job (nothing runs yet). On **Staging** the user crops the ones that need it and sends them for processing (with an optional "use paid models" toggle) → the worker runs them through its **multi-model pool** → each result is held on a `scan_jobs` row → reviewed in the shared review grid in the **Inbox** for edit/approve/commit.
 
-The OCR service sends the image **directly to a vision model** (no Tesseract): one call classifies `receipt | price_tag | unknown` and extracts structured fields, with a reprompt-retry and graceful degradation for flaky free models.
+**Multi-model pool for throughput.** Free vision models are individually slow (~60–90s) and flaky, so the worker runs the `ocr-queue` in parallel — **all free models busy at once, each on a different scan** — and **retries a scan on the next model** if one fails. Model selection lives entirely in the worker (`worker/src/modelPool.ts`); the OCR service is a dumb per-model executor that sends the image **directly to one vision model** (no Tesseract), classifying `receipt | price_tag | unknown` and extracting structured fields, with a reprompt-retry and graceful `unknown`+`raw_text` degradation. The four model lists (free/paid × image/text) are configured by env — see `.env.example`.
+
+Cropping uses a shared **`<ImageCropper>`** (also reused by the food-icon picker) on the **Staging** page, letting you crop a whole batch before sending it. The cropped image is what gets read and what committed prices reference; the full original is stored too and linked back from the crop (`images.original_image_id`), so nothing is lost. The Inbox shows **both** — the crop beside its uncropped original — so a crop that cut off the product name is obvious rather than a mystery.
+
+**When a scan comes back useless, the Inbox is where it gets fixed** (the loop runs backwards, not into the bin):
+- **Every model's output is kept.** The worker tries several models and stores only the best result, so it also records a per-model trace on `scan_jobs.attempts` — what each model returned, or why it errored. The Inbox surfaces all of it in a collapsible "Raw model output" panel (auto-expanded when nothing parsed), including on **failed** jobs, which otherwise have no diagnostic at all. A scan often reads fine and merely fails to *parse* — that text is now recoverable instead of discarded.
+- **Send it back to Staging to re-crop.** `POST /api/scan-jobs/:id/restage` returns the job to `staged` and **restores the uncropped original**, so the re-crop starts from the full photo rather than tightening a bad one.
 
 **Flyer scraping (two sources, one queue).** The worker drains a `scraping-queue` shared by both scrapers, branching on a `source` field in the job payload:
 - **Flipp** (`source: 'flipp'`, default): hits Flipp's public flyer JSON API (`backflipp.wishabi.com` — **no headless browser**, the worker image is plain `node:20-slim`), fuzzy-matches merchants to the store name, and either logs one deal per tracked food (catalog mode) or every matching deal for a search query (query mode).
@@ -66,14 +70,17 @@ Both parse pack sizes into `amount`/`amount_unit` with a shared regex-based pars
 
 ## Data model
 
-Core entities are **stores, foods, price_logs**; calorie tracking adds **food_nutrition, consumption_logs, user_goals**; meal planning adds **meals, meal_ingredients**. A few decisions worth calling out because they show up throughout the code:
+Core entities are **stores, foods, price_logs**; calorie tracking adds **food_nutrition, consumption_logs, user_goals**; meal planning adds **meals, meal_ingredients**; budget tracking adds **receipts, budget_goals**. A few decisions worth calling out because they show up throughout the code:
 
-- **Many-to-many by design.** Foods relate to prices and nutrition through join tables (`food_prices`, `food_macros`), so one price observation or nutrition profile can be shared across foods. The origin `food_id` columns are retained for the audit trail and back-compat.
+- **Many-to-many by design.** Foods relate to prices and nutrition through join tables (`food_prices`, `food_macros`), so one price observation or nutrition profile can be shared across foods — two different products can point at the same nutrition facts, and editing them updates both. The origin `food_id` columns are retained for the audit trail and back-compat.
 - **Audit + revert on every price mutation.** Create / update / delete each write a before/after JSONB snapshot in the same transaction as the mutation. Deletes are soft; reverts are themselves audited, so reverts are revertible.
 - **History is immutable by snapshot.** Diary entries store the nutrient values computed *at log time* — editing a food's facts later never rewrites your history.
+- **Sales expire, so sale prices do too.** A price logged as a sale carries the last day it's valid (`price_logs.sale_ends_at`), and once that day passes it stops counting as a current price — it drops out of the dashboard, best-price comparisons and meal costs, while History keeps it, because the sale really did happen. The date comes from whatever knows best: the scan reads it off the receipt or shelf tag, flyer scrapes take the flyer's own end date, and anything left over falls back to a configurable default duration (**Settings** page) that you can override per item while reviewing a scan. Without this a one-week special would be quoted as the item's price forever.
 - **One array drives the schema.** The full nutrient column set is declared once (`NUTRIENT_FIELDS` in `backend/src/nutrition.ts`); the server builds its `INSERT` / `UPDATE` / `SUM` column lists from it. Adding a nutrient is a migration plus one array entry.
 - **Meals are recipes, computed live.** A meal is a named list of ingredient amounts; its macros and cost are never stored — every read scales each ingredient's current facts and prices it against the food's latest tracked purchase (density-converting mass↔volume where needed). Logging a meal writes **one** diary entry (per-serving nutrients × portions, snapshotted like any other entry), and an LLM can draft a meal from selected "fridge" foods against macro targets — always returned as an unsaved draft the user reviews in the builder, same human-in-the-loop rule as OCR.
 - **Foods carry an optional dashboard icon** (`foods.image_id`, nullable FK → `images`). When unset it falls back to the earliest image attached to one of the food's linked price logs, so most foods get a sensible thumbnail automatically; the user can override it with any saved scan/scrape photo or a freshly cropped upload.
+- **The catalog is auditable in bulk.** The Costco scraper logs everything in a flyer post — including phones and luggage — so the **Audit** page lets you sweep the whole catalog, filter it, and archive, recategorize, tag, or **merge** items en masse. Archiving is a soft delete (`foods.deleted_at`): archived items disappear from every list but keep their data and can be restored. Merging collapses duplicate rows (three "pork tenderloin" entries → one) into a chosen survivor that inherits every source's prices, names, nutrition and tags — done by hand, or from an LLM "find duplicates" scan you review before anything merges.
+- **Receipts track spending, not just prices.** Committing a receipt scan records **one** `receipts` row — the store source and the receipt's total cost — linked to its photo and scan job; you can also add receipts by hand for cash trips. The **Budget** page tracks the month's spend against an optional monthly target, broken down by store and over time. This is separate from `price_logs`: prices answer "what does milk cost?", receipts answer "how much did I spend this month?".
 
 ---
 
@@ -144,7 +151,7 @@ There is no unit-test suite by design — this is an integration-heavy system wh
 powershell -File scripts/smoke-test.ps1
 ```
 
-It gates on backend health, then asserts the foods/diary/goals/efficiency endpoints, the join-table reads, micronutrient aggregation, the scraper contract (unknown-store 404 + the `scrape-jobs` progress feed), the USDA lookup, and every page. Exit `0` = green, `2` = regression, and it no-ops when the stack isn't running.
+It gates on backend health, then asserts the foods/diary/goals/efficiency endpoints, the join-table reads, micronutrient aggregation, the scraper contract (unknown-store 404 + the `scrape-jobs` progress feed), the budget/receipts contract (summary shape + negative-total 400), the USDA lookup, and every page. Exit `0` = green, `2` = regression, and it no-ops when the stack isn't running.
 
 The same checks run in **CI** (`.github/workflows/smoke.yml`) via a portable bash twin, `scripts/smoke-test.sh`, so the "every change is verified" guarantee holds for outside contributors too — not just on my machine. CI boots only the services the checks need (`db`, `redis`, `backend`, `frontend`) and runs in strict mode, so a stack that fails to boot is a failing build.
 
@@ -168,7 +175,7 @@ The full list lives in [CLAUDE.md](CLAUDE.md). The load-bearing ones:
 
 ```
 backend/       Express API, audit trail, unit + nutrition + FDC logic
-frontend/      Next.js PWA (dashboard, meals, diary, scanner, inbox, scrapes, history)
+frontend/      Next.js PWA (dashboard, meals, diary, scanner, staging, inbox, scrapes, history, budget, audit, settings)
 worker/        BullMQ consumer: Flipp + cocowest.ca flyer scrapers + OCR job runner
 ocr-service/   FastAPI vision-LLM extraction
 db/schema.sql  Idempotent schema + seed data

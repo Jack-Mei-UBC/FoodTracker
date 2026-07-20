@@ -4,6 +4,15 @@ name: smoke
 # hook runs — so "every change is verified" is enforced in CI, not just on my
 # machine. Only the services the smoke tests need are built (db, redis, backend,
 # frontend); the heavier worker/OCR images are skipped for speed.
+#
+# Two deliberate choices:
+#   * `-f docker-compose.yml -f docker-compose.ci.yml` names both files, which
+#     SUPPRESSES the automatic docker-compose.override.yml — so CI builds the
+#     `prod` image targets with no bind mounts and no dev watcher. A frontend
+#     build error now fails CI at the build step; under the old dev-mode CI the
+#     pages compiled lazily and a build error could never surface.
+#   * `--wait` blocks until every healthcheck passes, replacing the hand-rolled
+#     curl poll loops this workflow used to carry.
 
 on:
   push:
@@ -15,33 +24,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Start stack
-        run: docker compose up -d --build db redis backend frontend
-
-      - name: Wait for backend to be healthy
+      - name: Start stack (prod-shaped, dev override excluded)
         run: |
-          for i in $(seq 1 60); do
-            if curl -fsS http://127.0.0.1:4000/api/health >/dev/null 2>&1; then
-              echo "backend healthy"; exit 0
-            fi
-            sleep 3
-          done
-          echo "backend never became healthy"; docker compose logs backend | tail -120; exit 1
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml \
+            up -d --build --wait db redis backend frontend
 
-      - name: Wait for frontend
-        run: |
-          for i in $(seq 1 40); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/ || true)
-            if [ "$code" = "200" ]; then echo "frontend up"; exit 0; fi
-            sleep 3
-          done
-          echo "frontend did not come up in time (page checks will be skipped)"
+      # A fresh volume boots an EMPTY catalog — db/schema.sql ships no seed data
+      # (its inserts are commented out). Without this step every catalog-dependent
+      # assertion would skip, which is how the suite silently lost coverage.
+      - name: Seed fixtures
+        run: node frontend/e2e/fixtures/seed.mjs
 
       - name: Run smoke tests
         env:
           STRICT: "1"
         run: bash scripts/smoke-test.sh
 
+      # UI test net (Playwright). Runs against the same prod-shaped stack the
+      # smoke tests just checked. Layers 1-2 only for now: route smoke and the
+      # style-agnostic interaction contracts. See frontend/e2e/README.md.
+      - name: Install Playwright
+        working-directory: frontend
+        run: |
+          npm ci --prefer-offline --no-audit || npm install --no-audit
+          npx playwright install --with-deps chromium
+
+      - name: Run UI tests
+        working-directory: frontend
+        run: npm run test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
+
       - name: Dump logs on failure
         if: failure()
-        run: docker compose logs --no-color | tail -300
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml \
+            logs --no-color | tail -300

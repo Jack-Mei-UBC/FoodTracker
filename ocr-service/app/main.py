@@ -1,6 +1,7 @@
 import logging
+from typing import Optional
 
-from fastapi import FastAPI, File, UploadFile
+from fastapi import FastAPI, File, Form, UploadFile
 
 from .config import settings
 from .imaging import prepare_image
@@ -18,7 +19,14 @@ async def health() -> dict:
 
 
 @app.post("/scan", response_model=ScanResponse)
-async def scan(image: UploadFile = File(...)) -> ScanResponse:
+async def scan(
+    image: UploadFile = File(...),
+    # The worker's model pool selects one model per request and passes it here;
+    # omitted (direct host/manual calls) falls back to OCR_MODEL. `use_paid` is
+    # accepted for symmetry/logging but the worker already resolves the model.
+    model: Optional[str] = Form(None),
+    use_paid: Optional[str] = Form(None),
+) -> ScanResponse:
     raw = await image.read()
     jpeg = prepare_image(raw)
-    return await scan_image(jpeg)
+    return await scan_image(jpeg, model=model)

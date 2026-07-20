@@ -5,8 +5,10 @@
 // The server computes the authoritative totals (GET /api/meals[/:id]); the
 // builder's live preview mirrors the same rules client-side (display-only).
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Modal from '../../components/Modal';
+import FoodDetailModal from '../../components/FoodDetailModal';
+import NutritionSearch, { SavedFood } from '../../components/NutritionSearch';
 import { UNIT_OPTIONS, parseAmountInput, normalizeUnit } from '../../lib/units';
 import { scaleNutrients, isServingUnit, NutritionFacts } from '../../lib/nutrition';
 
@@ -130,9 +132,14 @@ export default function MealsPage() {
   const [rationale, setRationale] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Ingredient search inside the builder
+  // Ingredient search inside the builder — from the catalog, or from USDA (which
+  // only saves the item you actually pick, not every search result).
   const [query, setQuery] = useState('');
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [ingredientSource, setIngredientSource] = useState<'catalog' | 'usda'>('catalog');
+  // Food whose prices/names/macros are being edited via the shared FoodDetailModal
+  // (which launches the shared PriceEditor / MacroEditor popups).
+  const [detailFoodId, setDetailFoodId] = useState<number | null>(null);
 
   // Log-to-diary popup
   const [logMeal, setLogMeal] = useState<MealListItem | null>(null);
@@ -166,12 +173,18 @@ export default function MealsPage() {
     }
   };
 
-  useEffect(() => {
-    fetchMeals();
+  // Reload the catalog — also called after a FoodDetailModal edit so the builder's
+  // live macro/cost preview picks up newly added facts or prices.
+  const fetchFoods = useCallback(() => {
     fetch(`${API_BASE_URL}/api/foods`)
       .then(r => (r.ok ? r.json() : []))
       .then(setFoods)
       .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchMeals();
+    fetchFoods();
     // Prefill AI targets from the daily goals (rough per-meal defaults).
     fetch(`${API_BASE_URL}/api/goals`)
       .then(r => (r.ok ? r.json() : null))
@@ -201,7 +214,7 @@ export default function MealsPage() {
         f.name.toLowerCase().indexOf(q) !== -1 ||
         (f.aliases ?? []).some(a => a.alias.toLowerCase().indexOf(q) !== -1)
       )
-      .slice(0, 6);
+      .slice(0, 40);
   }, [query, foods]);
 
   // Live builder preview: kcal + macros per ingredient (client-side scaling)
@@ -272,15 +285,39 @@ export default function MealsPage() {
     }
   };
 
+  // Default a new ingredient row to the food's serving *weight* (e.g. 28 g) when it
+  // has nutrition facts — concrete and editable, rather than an abstract "1 serving"
+  // (both scale to the same macros). Falls back to 1 serving / the food's own unit.
+  // Shared by the Catalog and USDA add paths so they stay consistent.
+  const rowDefaults = (f: { nutrition?: NutritionFacts | null; unit?: string }): { amount: string; unit: string } => {
+    const n = f?.nutrition;
+    if (n && Number(n.serving_size) > 0 && n.serving_unit) {
+      return { amount: String(Number(n.serving_size)), unit: n.serving_unit };
+    }
+    return { amount: '1', unit: n ? 'serving' : (f?.unit || 'each') };
+  };
+
   const addRow = (f: CatalogFood) => {
-    setRows(rows.concat({
-      food_id: f.id,
-      food_name: f.name,
-      amount: '1',
-      unit: f.nutrition ? 'serving' : (f.unit || 'each'),
-    }));
+    const d = rowDefaults(f);
+    setRows(rows.concat({ food_id: f.id, food_name: f.name, amount: d.amount, unit: d.unit }));
     setQuery('');
     setShowSuggestions(false);
+  };
+
+  // Keep a just-saved USDA food in the local catalog list so the live preview can
+  // scale it (functional update so several picked in a row don't clobber each other).
+  const registerSavedFood = (f: SavedFood) => {
+    const cf = f as unknown as CatalogFood;
+    setFoods(prev => (prev.some(x => x.id === cf.id) ? prev : prev.concat(cf)));
+  };
+
+  // The user picked a USDA result (NutritionSearch already saved just that one to the
+  // catalog): register it for the preview and drop it into the meal at its serving weight.
+  const addSavedFoodToMeal = (f: SavedFood) => {
+    const cf = f as unknown as CatalogFood;
+    registerSavedFood(f);
+    const d = rowDefaults(cf);
+    setRows(prev => prev.concat({ food_id: cf.id, food_name: cf.name, amount: d.amount, unit: d.unit }));
   };
 
   const saveMeal = async () => {
@@ -580,40 +617,70 @@ export default function MealsPage() {
             </div>
           </div>
 
-          {/* Ingredient search */}
-          <div className="relative">
-            <input
-              type="text"
-              value={query}
-              onChange={e => { setQuery(e.target.value); setShowSuggestions(true); }}
-              onFocus={() => setShowSuggestions(true)}
-              placeholder="Add an ingredient from the catalog…"
-              className={`w-full ${inputCls}`}
-            />
-            {showSuggestions && query.trim() && (
-              <div className="absolute z-20 mt-1 w-full bg-[#0b101f] border border-white/10 rounded-xl overflow-hidden shadow-2xl">
-                {suggestions.map(f => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => addRow(f)}
-                    className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-white/5 transition flex justify-between items-center"
-                  >
-                    <span>{f.name} <span className="text-slate-500">· {f.category}</span></span>
-                    <span className="flex items-center gap-2">
-                      {f.nutrition ? (
-                        <span className="font-mono text-emerald-400">{fmtKcal(Number(f.nutrition.calories))} kcal/serv</span>
-                      ) : (
-                        <span className="text-[10px] text-amber-500">no facts</span>
-                      )}
-                      {!(f.latest_prices ?? []).length && <span className="text-[10px] text-slate-600">no price</span>}
-                    </span>
-                  </button>
-                ))}
-                {suggestions.length === 0 && (
-                  <p className="px-3 py-2 text-xs text-slate-500">No catalog match — add the food from the Dashboard first.</p>
+          {/* Ingredient search — from the catalog, or from USDA. The USDA tab is
+              save-on-pick: nothing is added to the catalog until you press "Add to
+              meal" on a specific result (a recipe ingredient must reference a food). */}
+          <div className="space-y-2">
+            <div className="flex gap-1 text-[11px] font-semibold">
+              <button type="button" onClick={() => setIngredientSource('catalog')}
+                className={`px-3 py-1 rounded-lg border transition ${ingredientSource === 'catalog' ? 'text-violet-200 bg-violet-500/15 border-violet-500/30' : 'text-slate-400 border-white/10 hover:bg-white/5'}`}>
+                Catalog
+              </button>
+              <button type="button" onClick={() => setIngredientSource('usda')}
+                className={`px-3 py-1 rounded-lg border transition ${ingredientSource === 'usda' ? 'text-sky-200 bg-sky-500/15 border-sky-500/30' : 'text-slate-400 border-white/10 hover:bg-white/5'}`}>
+                USDA database
+              </button>
+            </div>
+
+            {ingredientSource === 'catalog' ? (
+              <div className="relative">
+                <input
+                  type="text"
+                  value={query}
+                  onChange={e => { setQuery(e.target.value); setShowSuggestions(true); }}
+                  onFocus={() => setShowSuggestions(true)}
+                  placeholder="Add an ingredient from the catalog…"
+                  className={`w-full ${inputCls}`}
+                />
+                {showSuggestions && query.trim() && (
+                  <div className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto overflow-x-hidden scrolling-touch bg-[#0b101f] border border-white/10 rounded-xl shadow-2xl">
+                    {suggestions.map(f => (
+                      <div key={f.id} className="flex items-center hover:bg-white/5 transition">
+                        <button
+                          type="button"
+                          onClick={() => addRow(f)}
+                          className="flex-1 min-w-0 text-left px-3 py-2 text-xs text-slate-200 flex justify-between items-center gap-2"
+                        >
+                          <span className="truncate">{f.name} <span className="text-slate-500">· {f.category}</span></span>
+                          <span className="flex items-center gap-2 shrink-0">
+                            {f.nutrition ? (
+                              <span className="font-mono text-emerald-400">{fmtKcal(Number(f.nutrition.calories))} kcal/serv</span>
+                            ) : (
+                              <span className="text-[10px] text-amber-500">no facts</span>
+                            )}
+                            {!(f.latest_prices ?? []).length && <span className="text-[10px] text-slate-600">no price</span>}
+                          </span>
+                        </button>
+                        {/* Add facts/price to this food before adding it as an ingredient */}
+                        <button
+                          type="button"
+                          onClick={() => setDetailFoodId(f.id)}
+                          title="Edit this food's prices, names & nutrition facts"
+                          className="shrink-0 px-2.5 py-2 text-slate-500 hover:text-violet-300 transition"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                        </button>
+                      </div>
+                    ))}
+                    {suggestions.length === 0 && (
+                      <p className="px-3 py-2 text-xs text-slate-500">No catalog match — try the USDA database tab, or add the food from the Dashboard.</p>
+                    )}
+                  </div>
                 )}
               </div>
+            ) : (
+              <NutritionSearch category="USDA" pickLabel="Add to meal"
+                onSaved={registerSavedFood} onPick={addSavedFoodToMeal} notify={showToast} />
             )}
           </div>
 
@@ -657,6 +724,15 @@ export default function MealsPage() {
                     <span className="font-mono text-slate-400 w-16 text-right" title={price ? `${fmtCost(Number(price.price))} at ${price.store_name} (${fmtDate(price.scraped_at)})` : 'No tracked price'}>
                       {rowPreview && rowPreview.cost !== null ? fmtCost(rowPreview.cost) : <span className="text-slate-600">no price</span>}
                     </span>
+                    {/* Fix a missing price / missing facts without leaving the builder */}
+                    <button
+                      type="button"
+                      onClick={() => setDetailFoodId(row.food_id)}
+                      title="Edit this food's prices, names & nutrition facts"
+                      className="text-slate-500 hover:text-violet-300 transition"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                    </button>
                     <button
                       type="button"
                       onClick={() => setRows(rows.filter((_, j) => j !== i))}
@@ -893,6 +969,18 @@ export default function MealsPage() {
               </button>
             </div>
         </Modal>
+      )}
+
+      {/* Shared food editor (prices / names / macros) — launched from the ingredient
+          rows and the catalog picker, so a missing price or missing facts can be
+          fixed without leaving the builder. Refetch the catalog on change so the
+          live macro/cost preview updates immediately. */}
+      {detailFoodId !== null && (
+        <FoodDetailModal
+          foodId={detailFoodId}
+          onChange={fetchFoods}
+          onClose={() => { setDetailFoodId(null); fetchFoods(); }}
+        />
       )}
     </div>
   );

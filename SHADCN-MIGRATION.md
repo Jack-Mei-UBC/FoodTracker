@@ -1,0 +1,439 @@
+# shadcn/ui migration plan
+
+Living plan for reworking the FoodTracker frontend onto shadcn/ui, plus the
+prerequisite work: a repaired smoke test that survives a cold Docker stack, and
+a UI test net that makes a restyling migration safe.
+
+**Ordering is not negotiable.** Phases 0 and 1 exist because Phase 3 is the
+riskiest change ever made to this repo and there is currently nothing to catch a
+regression. Do not start Phase 3 until Phase 1's Layer 2 contracts are green.
+
+---
+
+## Status at a glance
+
+| Phase | State | Notes |
+|---|---|---|
+| **0 — smoke repair + compose split** | ✅ **shipped** | All of F1–F7 landed. Smoke suite is 50/50 green and the two twins are back in sync. |
+| **1 — UI test net** | 🟡 **partly shipped** | Layers 1 & 2 exist (22 Playwright tests). Layer 3 (visual) and the Vitest secondary are **not started**. 4 open items, incl. a **false-green smoke exit** — see that phase. |
+| **2 — shadcn prerequisites** | 🟡 **decided, not built** | P5/P6/P7 decided; **P2 blocked** on the Next 14 → Tailwind 4 cascade. Nothing installed. **The Path A/B decision here blocks Phase 3.** |
+| **3 — the migration** | ⬜ not started | Gated on Phase 1 Layer 2, which is now green. |
+| **4 — docs & guardrails** | ⬜ not started | Folded into each Phase 3 step. |
+
+Phase 0's findings below are kept as the **historical record of why** the fixes
+look the way they do — they read in the past tense on purpose. The problems they
+describe are fixed; don't re-diagnose them.
+
+---
+
+## Phase 0 — Repair the smoke test on a cold stack ✅ SHIPPED
+
+### Why it failed — confirmed against a real CI run *(resolved)*
+
+> **Outcome.** Every fix in the F-table below shipped. The smoke suite now runs
+> **50 assertions, all passing**, against a healthy stack, and the two twins were
+> re-verified as in sync (same 10 frontend routes, same API coverage — the only
+> textual difference is `$VAR` vs `${VAR}` interpolation). The drift described
+> below is closed, and CLAUDE.md now documents the pair as a hand-synced contract.
+
+The failure happened in **GitHub Actions** (`.github/workflows/smoke.yml`), not on
+a local Docker stack, and the failing script is **`scripts/smoke-test.sh`** — a
+bash twin of the PowerShell hook that I had not accounted for. The observed run
+fails exactly five assertions, all from one root cause:
+
+1. ✅ **There is no seed data.** `db/schema.sql:411-425` has the `stores` /
+   `foods` / `price_logs` inserts commented out, so CI's fresh volume boots an
+   empty catalog:
+   - `GET /api/foods returns items` fails on `len(d)>0`;
+   - the next two assertions index `d[0]` of an empty list → `IndexError: list
+     index out of range` (the tracebacks in the log);
+   - `GET /api/foods/1` 404s → the two `/api/foods/:id` assertions fail.
+2. ✅ **Hard-coded row ids** (`/api/foods/1`, `/api/foods/5/prices`) — brittle
+   even against a seeded database.
+3. ❌ **Hook timeout — not a factor.** CI doesn't use the Stop hook, and every
+   frontend route returned 200.
+4. ❌ **Readiness gating — not a factor.** The workflow already polls backend
+   health (60×3s) and the frontend (40×3s) before running the suite.
+
+**Newly discovered, and more serious than the failure itself: the two smoke
+scripts have drifted.** `smoke-test.sh` is a much older subset of
+`smoke-test.ps1` — it sweeps **6** frontend routes to the PowerShell version's
+**10** (missing `/staging`, `/budget`, `/audit`, `/settings`), and is missing
+entire assertion blocks: the images endpoint, audit/bulk validation,
+`from-nutrition`, catalog merge, receipts/budget, scan-job detail, app settings,
+and the **expired-sale `ACTIVE_PRICE_SQL` invariant**. So **CI green does not
+mean local green** — the gate that's supposed to enforce "every change is
+verified" is enforcing a weaker contract than the one on the developer's
+machine. This is a third hand-synced cross-language contract of exactly the kind
+CLAUDE.md already warns about, and it isn't documented as one.
+
+### Also found: compose is discarding the Docker images' work
+
+Every Dockerfile is already multi-stage and installs dependencies at build time.
+But `docker-compose.yml` overrides each service's `CMD` with
+`command: sh -c "npm install --include=dev && npm run dev"`, so the container
+**re-installs on every boot**, throwing away the image layer it just built. The
+frontend is worse: its builder stage runs `npm run build`, then compose ignores
+the result and runs `npm run dev`. This — not any missing healthcheck — is why
+cold starts take minutes. See Phase 0 F6 below.
+
+### Fixes
+
+| # | Fix | Files |
+|---|---|---|
+| F1 | **Static fixtures + seeder.** `e2e/fixtures/seed-data.mjs` is the single static source of truth; `e2e/fixtures/seed.mjs` inserts it **through the backend REST API**. Playwright tests import the same file for assertions, so expectations can't drift from the data. | `e2e/fixtures/*` |
+| F2 | **Discover ids.** Take the id from `GET /api/foods` instead of hard-coding `1`/`5`. | both smoke scripts |
+| F3 | **Skip, don't fail, on an empty catalog.** Catalog-dependent assertions emit `[SKIP]` when the DB is empty (the idiom already used for scan jobs), so an unseeded stack degrades to skips. Guards `d[0]` so an empty list can never raise `IndexError`. | both smoke scripts |
+| F4 | **Re-sync the two scripts** to the same assertion set and route list, and document them in CLAUDE.md as a hand-synced pair alongside the other cross-language contracts. | both smoke scripts, `CLAUDE.md` |
+| F5 | **Seed in CI** after the health gate, before the suite. | `.github/workflows/smoke.yml` |
+| F6 | **Dev/CI compose split + real Dockerfile targets.** See below. | `docker-compose*.yml`, `*/Dockerfile` |
+| F7 | **Healthchecks** — `pg_isready`, `redis-cli ping`, `/api/health` — with `depends_on: {condition: service_healthy}`, so `docker compose up -d --wait` is meaningful and CI can drop its hand-rolled poll loops. | `docker-compose.yml` |
+
+### Why the seeder goes through the REST API, not raw SQL
+
+A price row is invisible to every catalog read unless its `food_prices` join row
+exists, and `unit_price` normalization happens in the route handler — both
+documented in CLAUDE.md. Raw `INSERT`s would produce fixtures that look right in
+the database and wrong in the UI. Going through `POST /api/foods` +
+`POST /api/foods/:id/prices` gets the joins, normalization, and audit rows for
+free, and has the side benefit of exercising those endpoints on every seed. It's
+~15 rows; the speed cost is irrelevant.
+
+### Fixture set (F1)
+
+Chosen so it doubles as deterministic Playwright data:
+
+- 2 stores (one with lat/long for the GPS auto-match path).
+- Foods covering every display branch: mass-based, volume-based **with density**,
+  count-based, one archived, one with an alias, one with nutrition, one with
+  `usable_pct != 100`.
+- **One active sale and one expired sale** (`sale_ends_at` in the past) so the
+  `ACTIVE_PRICE_SQL` invariant is actually exercised rather than assumed.
+- One meal with ingredients.
+
+Marked clearly as dev fixtures. Never loaded into a production volume.
+
+### Docker: dev vs CI (F6)
+
+The problem isn't the Dockerfiles — they're already multi-stage and install
+dependencies at build time. It's that compose overrides `CMD` with
+`npm install && npm run dev`, re-installing on every boot.
+
+**The fix is the standard Compose dev pattern**, which keeps hot reload *and*
+gets fast cold starts:
+
+- **`docker-compose.yml`** — base. No bind mounts, no `command:` overrides; runs
+  the image's own production `CMD`. This is what CI and any deploy use.
+- **`docker-compose.override.yml`** — **loaded automatically** by a bare
+  `docker compose up`. Adds the source bind mounts, `target: dev`, and the
+  hot-reload command. Your day-to-day workflow is unchanged: still
+  `docker compose up -d`, still hot reload.
+- **`docker-compose.ci.yml`** — explicit overlay for CI
+  (`-f docker-compose.yml -f docker-compose.ci.yml`), which pointedly does *not*
+  load the dev override.
+
+Hot reload survives without a runtime install because the source bind mount is
+paired with an **anonymous volume on `node_modules`** (already present), which
+masks the host directory and preserves the image's installed dependencies. The
+tradeoff — and it's the correct one — is that **changing `package.json` now
+requires an image rebuild** (`docker compose up -d --build <svc>`) instead of a
+container restart. That's the normal contract, and it's what makes the boot fast.
+
+Dockerfiles gain explicit `dev` and `prod` stages so `target: dev` gets
+devDependencies and the watcher, while the base image stays lean.
+
+---
+
+## Phase 1 — UI test net (before any shadcn work) 🟡 PARTLY SHIPPED
+
+**What exists today** (`frontend/e2e/`, run with `npm run seed && npm run test:e2e`):
+
+| Layer | State | Detail |
+|---|---|---|
+| 1 — route smoke | ✅ | `routes.spec.ts`, 5 tests, sweeping **all 11 routes** including `/scanner`. |
+| 2 — interaction contracts | ✅ | `modal.spec.ts` (6 tests: centering, stacking, backdrop) + `dashboard.spec.ts` (11 tests: search/sort/filter, per-100 basis, expired-sale rule). |
+| 3 — visual regression | ⬜ | **Not started.** No `toHaveScreenshot()` anywhere yet. Per the revision below this is a *forward* net captured per-component during Phase 3, so starting it now would be premature — but the flake-control list must be in place before the first baseline. |
+| Vitest secondary | ⬜ | **Not started.** No `vitest` dependency, no `test:unit` script. `units.ts` / `nutrition.ts` / `match.ts` remain unit-untested. |
+
+Wired: `test:e2e`, `test:e2e:ui`, `test:e2e:update`, `seed`. **`test:unit` is
+referenced further down but does not exist yet** — add it with Vitest.
+
+### Open items
+
+- [ ] **`/scanner` is missing from both smoke-test twins.** Playwright's
+      `routes.spec.ts` covers it, but `scripts/smoke-test.ps1` and
+      `scripts/smoke-test.sh` sweep 10 frontend routes and omit `/scanner` — so
+      the **Stop hook** (which runs only the smoke test, not Playwright) has a
+      blind spot on that page. It matters more than the usual missing route:
+      `/scanner` was rewritten into a pure uploader in this changeset, and it is
+      also on the Phase 3 page-sweep list. Add the route to **both** scripts —
+      per CLAUDE.md, an assertion goes into both or neither.
+- [ ] **The smoke scripts exit 0 when the stack is down.** Observed for real:
+      with no containers running, `smoke-test.ps1` printed `backend not
+      reachable - skipping` and returned **exit 0** — a green result that
+      asserted nothing. That's the same degrade-don't-fail idiom used for an
+      empty catalog (`[SKIP]`), but unreachable-backend is a different case: an
+      unseeded stack genuinely isn't a regression, whereas *no stack at all*
+      means the net didn't run. As-is, the Stop hook reports success on a turn
+      where nothing was verified. Options: exit non-zero on unreachable, or keep
+      exit 0 but print an unmissable banner and make CI treat it as failure.
+      Fix in **both** twins.
+- [ ] Add the Vitest secondary (`test:unit`) for the three pure-logic libs.
+- [ ] Put the Layer 3 flake controls in place *before* the first snapshot:
+      fixed viewport, `reducedMotion: 'reduce'`, the `.animate-slide-up`
+      test-only override, self-hosted fonts, and masked dynamic regions.
+
+### Tooling
+
+**Playwright (`@playwright/test`) as the primary net.** Real browser, works
+against the running Docker stack, understands portals and dialogs natively, has
+first-class visual snapshots (`toHaveScreenshot`) and a trace viewer.
+
+Rejected: jsdom-based (Vitest + Testing Library) as the *primary* net — the
+failure mode this project actually suffers from is layout and overlay
+positioning (the `position: fixed` inside a transformed ancestor bug), which
+jsdom cannot see.
+
+**Vitest as a cheap secondary** for pure logic: `lib/units.ts`
+(`canonicalUnitPrice`, `formatCanonicalUnitPrice`), `lib/nutrition.ts`
+(`scaleNutrients`, `nutrientsPer100`, `per100Basis`), `lib/match.ts`. Fast, no
+browser, high value per line.
+
+Location: `frontend/e2e/`. Config points `baseURL` at `http://localhost:3000`
+with a global setup that reuses the Phase 0 readiness logic. No `webServer`
+block — the stack comes from docker compose.
+
+### Three layers
+
+**Layer 1 — route smoke.** Every page returns 200, renders its root `data-loc`,
+and logs no console errors. Cheap, catches catastrophic breakage. *Shipped as 5
+parametrized tests sweeping all 11 routes.*
+
+**Layer 2 — interaction contracts.** Anchored on `data-loc` selectors, which the
+project already maintains and which *must survive the migration*. Priority:
+
+- **Modal behavior** — this is the contract most at risk in Phase 3:
+  - opens centered **in the viewport** (assert bounding box against viewport, the
+    exact regression documented in CLAUDE.md);
+  - Escape closes only the **topmost** modal when stacked
+    (FoodDetailModal → PriceEditor → Escape closes only PriceEditor);
+  - backdrop click closes; body scroll is locked.
+- Dashboard: table renders, column sort reorders, search filters, thumbnail
+  click opens the icon picker without opening the row modal.
+- `modal.price-history`: opens, shows the food photo, shows per-serving **and**
+  per-100 nutrition chips.
+- PriceEditor / MacroEditor: render, validate, and save paths.
+- Audit: tab switch, row selection, bulk bar appears.
+- Meals: Catalog/USDA tab switch, add an ingredient.
+
+**Layer 3 — visual regression.** `toHaveScreenshot()` per page and per modal at
+a fixed viewport.
+
+> **Revised — the "adopt shadcn defaults" decision changes what this layer is
+> for.** The original plan captured baselines *before* Phase 3 so they'd define
+> "still looks right." That only works for a pixel-preserving migration. Since
+> the look is deliberately changing, a pre-migration baseline would diff on
+> every single snapshot and teach everyone to run `--update-snapshots` without
+> reading it — worse than no net at all.
+>
+> So: **Layer 3 is a forward net, not a migration gate.** Baselines are captured
+> **per component, immediately after** that component is migrated and eyeballed.
+> It protects everything migrated so far from the *next* step's collateral
+> damage, which is the real risk in a page-by-page sweep.
+>
+> That makes **Layer 2 the migration gate instead** — interaction contracts are
+> style-agnostic, so they should pass unchanged before and after a restyle. If a
+> Layer 2 test needs editing during Phase 3, that's the signal something
+> behavioural broke. Layer 2 therefore gets the coverage budget that would have
+> gone to pre-migration snapshots.
+
+Flake control (all required, or Layer 3 will be abandoned within a week):
+
+- deterministic fixtures from Phase 0;
+- fixed viewport, `reducedMotion: 'reduce'`, and a test-only override for
+  `.animate-slide-up` (a 0.4s animation guarantees flake);
+- **self-host or preload the Google Fonts** in `globals.css:1` — a network font
+  fetch mid-screenshot is a classic snapshot flake;
+- mask dynamic regions (dates, timestamps, "scraped at").
+
+### Deliberately out of scope
+
+OCR/scan *results* (nondeterministic, external models). Those pages are tested
+with fixture rows only.
+
+### Wiring
+
+`npm run test:e2e`, `npm run test:e2e:update`, `npm run test:unit`. The Stop hook
+keeps running the **fast** smoke test only — Playwright is too slow for a
+per-turn hook, so it runs manually and in CI. Document that split.
+
+---
+
+## Phase 2 — shadcn prerequisites 🟡 DECIDED, NOT BUILT
+
+> **State:** the decisions below are made (P5, P6, P7 marked ✅), but **nothing is
+> installed** — no `class-variance-authority`, no `@radix-ui/*`, no `cmdk`, no
+> `components.json`, no `cn()` helper. P2 is hard-blocked; see the cascade.
+
+| # | Item | Notes |
+|---|---|---|
+| P1 | **tsconfig `target: es5` → `ES2020`** | Removes the documented `[...set]` spread ban. Radix/cmdk ship modern syntax; es5 without `downlevelIteration` is real friction. Next transpiles for browsers via SWC/browserslist regardless, so this is a type-check-level change. **Update the CLAUDE.md gotcha when done.** |
+| P2 | **Tailwind version — BLOCKED, see below** ⛔ | Attempted 3.3 → 4 and rolled it back. Tailwind 4 cannot run on Next 14. See "The dependency cascade" below. |
+| P3 | **Dependencies** | `class-variance-authority`, `clsx`, `tailwind-merge`, `tailwindcss-animate`, `@radix-ui/react-*` (per component), `cmdk` (combobox), and finally *using* `lucide-react` (installed, currently zero imports). |
+| P4 | **`cn()` helper** at `src/lib/utils.ts` (clsx + tailwind-merge). shadcn assumes it exists. |
+| P5 | **`components.json`** | `aliases.components: "@/components/ui"`, `aliases.utils: "@/lib/utils"`, `tailwind.css: "src/app/globals.css"`, `tsx: true`, and **`rsc: false`** — mandatory, the static export has no server. The `@/*` path alias already exists in tsconfig. ✅ |
+| P6 | **Theme tokens — shadcn defaults** ✅ *decided* | Take shadcn's **default** CSS variable block verbatim rather than hand-mapping to the current palette. `baseColor: slate` (closest to the existing slate-heavy palette, so the shift is the least jarring option that's still a default). Default `--radius: 0.5rem` replaces the current `rounded-2xl` feel. See "What adopting the defaults actually changes" below. |
+| P7 | **Retire the old vocabulary, don't preserve it** ✅ *decided* | Because the look is changing anyway, `.card` / `.panel` / `.btn*` / `.field-*` / `.badge` in `@layer components` get **deleted** as they're replaced, rather than kept in sync with shadcn variants. That also dissolves the `.card`-class-vs-`<Card>`-component collision by deletion. Same for `.glass-panel`, `.glass-panel-hover`, and `pulse-glow` once nothing references them. |
+| P8 | **`data-loc` forwarding** | Verify every adopted component spreads `...props` so `data-loc` reaches the DOM. Radix and shadcn's generated components do. Layer 1 tests assert the key slugs still exist, which turns this from a documented hope into an enforced contract. |
+| P9 | **Static-export gate** | Run `npm run build:mobile` (`BUILD_TARGET=static`) after prereqs **and after every migration phase**, to prove nothing pulled in a server-only dependency. This is the constraint most likely to break silently. |
+
+### The dependency cascade (attempted 2026-07-19, rolled back)
+
+Ran `@tailwindcss/upgrade` for real and backed it out. What it surfaced, in order:
+
+1. **The upgrade tool needs Node ≥ 20.** Local Node is 18.20.8 (nvm has only 16
+   and 18). Worked around by running the tool in a `node:22-alpine` container
+   with an anonymous volume masking `node_modules`, so the Windows-built modules
+   were never touched.
+2. **The tool itself worked fine** — migrated 16 source files, converted
+   `tailwind.config.js` into `@theme`, swapped PostCSS to `@tailwindcss/postcss`,
+   dropped `autoprefixer`, and rewrote `@layer components` → `@utility`, plus
+   renames (`focus:outline-none`→`outline-hidden`,
+   `bg-gradient-to-r`→`bg-linear-to-r`, `z-[60]`→`z-60`).
+3. **⛔ Tailwind 4 cannot run on Next 14.** `@tailwindcss/postcss@4.3.3` requires
+   `postcss ^8.5.16`. The root install has 8.5.19 — but **Next 14.2.35 bundles
+   its own nested `postcss@8.4.31`**, and Next's webpack CSS pipeline runs the
+   plugin through *that* copy. Result:
+   `TypeError: Cannot read properties of undefined (reading 'All')` on
+   `globals.css:1`. Not fixable from the app side; it needs **Next 15+**.
+
+So the real chain is **Tailwind 4 → Node 20+ → Next 15+ → (likely React 19)**,
+not the single step the plan assumed.
+
+**Kept from the attempt:** the Dockerfile bump to `node:22-alpine`. Node 18 is
+EOL and the stack runs fine on 22 with Tailwind 3, so that's an independent win.
+
+**Also learned — a `--build` alone is not enough.** The dev override masks
+`node_modules` with an *anonymous volume*, and that volume **survives
+`--build`**, so a rebuilt image's modules stay hidden behind the stale ones.
+After any dependency change the correct command is:
+
+```bash
+docker compose up -d --build -V frontend   # -V = --renew-anon-volumes
+```
+
+Without `-V` you get a confusing `Cannot find module` for a package that is
+demonstrably in `package.json`.
+
+### Two ways forward
+
+| | Path | Cost | Ceiling |
+|---|---|---|---|
+| **A** | Stay on Tailwind 3, `shadcn@2.3.0`, **Radix** | None beyond the original plan | Frozen CLI; no Base UI; no new components |
+| **B** | Next 14→15 first, then Tailwind 4, then current shadcn + **Base UI** | A framework major | Fully current, indefinitely |
+
+**B is less scary than it sounds for this codebase specifically.** Next 15's
+breaking changes are overwhelmingly about *server* APIs — async
+`cookies()`/`headers()`/`params`, caching defaults, server actions. This app has
+none of them: the Capacitor static-export constraint already forces every page
+to be a client component fetching `${API_BASE_URL}` at runtime. The unknown is
+React 19 compatibility for `react-easy-crop` and `lucide-react`.
+
+### Open items
+
+- [ ] **Decide Path A vs Path B — this is the blocker for the whole migration.**
+      It determines whether components come from **Radix** (A, frozen
+      `shadcn@2.3.0`) or **Base UI** (B, current shadcn), which changes every
+      import in Phase 3's M1–M8. Phase 3 cannot start until it's settled, so
+      this is the single highest-leverage open item in the document.
+- [ ] Before committing to B, spike **React 19 compatibility for
+      `react-easy-crop` and `lucide-react`** — the one genuine unknown in that
+      path, and cheap to test ahead of the framework major. `ImageCropper` is on
+      the never-migrated list, so a `react-easy-crop` break would have to be
+      solved rather than designed around.
+- [ ] Once a path is picked, do P3–P5 together (deps, `cn()` helper,
+      `components.json`) — they're inert until a component actually uses them.
+
+### What adopting the defaults actually changes
+
+Going with shadcn's defaults is the *less work* option, but it is a real visual
+change, not a neutral one. Concretely, these go away unless deliberately kept:
+
+- **The glassmorphism.** `.glass-panel` / `.card` are `rgba(8,12,28,0.65)` +
+  `backdrop-filter: blur(12px)`. shadcn surfaces are flat and opaque.
+- **The gradient identity.** `.btn-primary` is a violet→indigo gradient; shadcn's
+  primary button is a flat solid fill.
+- **The body treatment.** The two radial gradients over `#05070f`, and the
+  violet custom scrollbars, are app-specific, not shadcn concepts.
+- **Corner radius.** `--radius: 0.5rem` default vs the current `rounded-2xl`
+  (1rem) house style.
+
+Worth keeping on purpose (cheap, and they carry most of the brand):
+
+- **The fonts** — Inter body / Outfit headings. shadcn prescribes no font, so
+  keeping these costs nothing and preserves a lot of the app's character.
+- **Dark mode as the default.** The app is dark-only today; shadcn ships both
+  themes, so a light mode comes along free. Decide whether to expose a toggle or
+  pin `.dark` on `<html>` and ignore it.
+
+---
+
+## Phase 3 — The migration ⬜ NOT STARTED
+
+**Golden rule: rewrite internals, freeze public props.** The existing shared
+components are the seam. Call sites don't move, and each diff stays reviewable.
+
+| # | Step | Why here |
+|---|---|---|
+| M1 | **`Modal.tsx` internals → Radix Dialog**, props unchanged | Highest leverage in the whole plan. 16 call sites untouched; you gain focus trap, scroll lock, and ARIA that the hand-rolled version lacks. Delete the hand-rolled `modalStack` (Radix handles stacked dismissal). **Also:** 13 of 16 call sites pass a `panelClassName` that is *byte-identical to the component's own default plus `space-y-4`* — fold that into the default and delete all 13. Bake in the close button (price-history and MacroEditor implement it differently today). Watch: Radix's own Escape/outside-click semantics replace the current ones, and `animate-slide-up` must move to Radix `data-state` animations. |
+| M2 | **Primitives: Button, Input, Label, Badge, Card** | Adopt shadcn's stock variants **as-is** — the look changes here, deliberately, and that's the step where the app starts looking like shadcn. Delete the corresponding `@layer components` class as each one is replaced. Collapses the 23 hand-pasted input strings and 26 `.field-input` uses into `<Input>`. |
+| M3 | **Select** (native `<select>` → Radix Select) | Store pickers, unit dropdowns. Markup changes substantially — expect snapshot churn. |
+| M4 | **Tabs** | Audit Active/Archived, meals Catalog/USDA. |
+| M5 | **Toast** — `StatusToast`/`useToast` → Sonner | Keep the `useToast()` call signature so call sites don't move. |
+| M6 | **Combobox (cmdk)** | The four catalog-search pickers (`ReviewItems` match, meals ingredient picker, `ShareNutritionModal`, `NutritionSearch`). Biggest UX win, biggest rewrite — do it last among components. |
+| M7 | **Popover / DropdownMenu** | Retires `lib/useClickOutside.ts` and fixes the `overflow-x-auto` clipping workaround in `ReviewItems`. |
+| M8 | **Tooltip, Checkbox** | Low risk, mop-up. |
+
+**Never migrated** (bespoke, not primitives): `ImageCropper` (react-easy-crop),
+the SVG price-trend chart, image lightboxes, `ScanImages`, `RawModelOutput`.
+
+**Page sweep last.** Once primitives exist, go page by page replacing pasted
+utilities — dashboard → audit → meals → diary → budget → history → inbox →
+staging → scanner → scrapes → settings. **One page per commit**, snapshots
+reviewed each time.
+
+---
+
+## Phase 4 — Documentation and guardrails ⬜ NOT STARTED
+
+- **CLAUDE.md**: rewrite the shared-class-vocabulary section (now
+  `src/components/ui` + `cva` variants); update the Modal invariant (portaling is
+  now Radix's job, but **keep the explanation** — the transform/containing-block
+  gotcha is still *why* portaling is required); delete the es5 iteration gotcha;
+  update the `data-loc` section for forwarding through shadcn components; add a
+  new invariant: *UI primitives live in `src/components/ui` — don't hand-roll,
+  and don't paste raw utilities for anything a primitive covers.*
+- **README.md**: the verification story now includes Playwright.
+- **A drift guard.** An ESLint rule or a grep check in the smoke script that
+  fails when a known pasted utility string reappears (e.g.
+  `bg-slate-950 border border-white/10 rounded-lg`). **This is the part a
+  library alone does not give you** — shadcn narrows the easy path, it doesn't
+  close it. Without this, drift returns.
+
+---
+
+## Sequencing
+
+```
+Phase 0 ✅  →  Phase 1 🟡  →  Phase 2 🟡  →  Phase 3 ⬜  →  Phase 4 ⬜
+(smoke+seed)  (test net)     (prereqs)      (migration)    (docs)
+```
+
+Rough effort: Phase 0 ≈ half a session · Phase 1 ≈ 1–2 sessions · Phase 2 ≈ half
+a session · Phase 3 ≈ the bulk, several sessions · Phase 4 ≈ folded into each.
+
+**Next action:** Phase 2's blocker is the real fork in the road — pick Path A
+(stay on Tailwind 3 + frozen `shadcn@2.3.0`) or Path B (Next 14→15 first). Phase
+3 cannot start until that's decided, since it determines whether components come
+from Radix or Base UI. The Phase 1 open items above are independent and can be
+picked up in any order meanwhile.

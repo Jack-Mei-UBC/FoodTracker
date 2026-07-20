@@ -1,0 +1,24 @@
+# CI overlay — production-shaped, explicitly EXCLUDING docker-compose.override.yml.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.ci.yml \
+#     up -d --build --wait db redis backend frontend
+#
+# Naming both files on the command line suppresses the automatic dev override,
+# so CI gets the built images with no bind mounts, no watcher, and no source
+# volume — i.e. it tests what would actually be deployed. `--wait` blocks until
+# every named service's healthcheck passes, which replaces the workflow's
+# hand-rolled poll loops.
+#
+# The heavy `worker` and `ocr-service` images aren't needed by the smoke tests,
+# so CI simply doesn't name them on the command line.
+
+services:
+  # Containers should not resurrect after a CI failure — it hides the exit.
+  backend:
+    restart: "no"
+
+  frontend:
+    restart: "no"
+
+  worker:
+    restart: "no"

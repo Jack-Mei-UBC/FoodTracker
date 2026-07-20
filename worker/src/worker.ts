@@ -7,6 +7,7 @@ import * as dotenv from 'dotenv';
 import { FlippItem, searchFlipp, usableItems, parseFlippAmount, nameMatchScore, flippItemUrl } from './flipp';
 import { symmetricMatchScore, parseAmount } from './scrape-common';
 import { fetchCocowestItems, usableCocowestItems } from './cocowest';
+import { imageModelsFor, orderedModels, nextStartIndex, poolSize, maxAttempts, usePaidDefault } from './modelPool';
 
 dotenv.config();
 
@@ -154,6 +155,9 @@ async function scrapeFlippFlyers(scrapeJobId: number, storeId: number, storeName
         amount: parsed.amount,
         amount_unit: parsed.unit,
         is_sale: parsed.multiBuy || item.original_price != null || !!item.sale_story,
+        // The flyer states when the deal stops — far better than the app's
+        // default duration guess, so pass it through as the sale expiry.
+        sale_ends_at: item.valid_to ? String(item.valid_to).slice(0, 10) : null,
         source: 'scraper',
         image_id: imageId,
       }),
@@ -311,6 +315,9 @@ async function scrapeCocowest(scrapeJobId: number, storeId: number, storeName: s
         amount: parsed.amount,
         amount_unit: parsed.unit,
         is_sale: isSale,
+        // cocowest posts print "EXPIRES ON <date>" per item — same reasoning as
+        // the Flipp path: a stated end date beats the default duration guess.
+        sale_ends_at: item.expires_on ? String(item.expires_on).slice(0, 10) : null,
         source: 'scraper',
         image_id: imageId,
       }),
@@ -388,8 +395,95 @@ const CONTENT_TYPES: Record<string, string> = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
 };
 
+// How many product lines a scan result carries — drives the quality gate below.
+function resultItemCount(body: any): number {
+  if (!body || typeof body !== 'object') return 0;
+  if (body.type === 'receipt') return Array.isArray(body?.data?.items) ? body.data.items.length : 0;
+  // price_tag carries items[] (a shelf photo can show several tags). Rows/models
+  // predating that returned ONE flat tag — count it as 1 so the quality gate
+  // below doesn't reject a perfectly good legacy-shaped result as "0 items".
+  if (body.type === 'price_tag') {
+    if (Array.isArray(body?.data?.items)) return body.data.items.length;
+    return body?.data?.name ? 1 : 0;
+  }
+  return 0;
+}
+
+// A result is "acceptable" if the model actually recognized the capture and got
+// at least one item out of it. An `unknown` (flaky/refused) result is not.
+function isAcceptable(body: any): boolean {
+  return !!body && body.type && body.type !== 'unknown' && resultItemCount(body) >= 1;
+}
+
+// Rank results so that, if NO model produces an acceptable one, we still keep the
+// best-effort output (recognized type > more items > higher confidence). This is
+// what reaches /inbox — its raw_text lets the user copy-paste / enter manually.
+function scoreResult(body: any): number {
+  if (!body || typeof body !== 'object') return -1;
+  const recognized = body.type && body.type !== 'unknown' ? 1000 : 0;
+  return recognized + resultItemCount(body) * 10 + (Number(body.confidence) || 0);
+}
+
+// One record per model tried, persisted to scan_jobs.attempts so the inbox can
+// show what EVERY model read — `result` keeps only the best single body, and the
+// discarded ones often contain the text a failed scan actually needs.
+interface ScanAttempt {
+  model: string;
+  ok: boolean;          // did the call return a usable body at all
+  type?: string | null; // receipt | price_tag | unknown
+  item_count?: number;
+  confidence?: number | null;
+  raw_text?: string | null;
+  error?: string;       // network/HTTP failure detail (ok: false)
+}
+
+// One OCR call against one model. Always returns an attempt record; `body` is
+// null on a network/HTTP failure (so the caller can rotate to the next model)
+// and the reason is kept on the record rather than swallowed. The image bytes
+// are read once by the caller and reused across retries.
+async function ocrOnce(
+  scanJob: any,
+  image: { bytes: Uint8Array<ArrayBuffer>; contentType: string },
+  model: string
+): Promise<{ body: any | null; attempt: ScanAttempt }> {
+  const form = new FormData();
+  // Uint8Array (not a raw Buffer) is the valid BlobPart under current @types/node.
+  form.append('image', new Blob([image.bytes], { type: image.contentType }), scanJob.original_filename || 'capture.jpg');
+  form.append('model', model);
+
+  try {
+    const res = await fetch(`${ocrServiceUrl}/scan`, { method: 'POST', body: form });
+    const body = await res.json().catch(() => null);
+    if (!res.ok || body == null) {
+      const detail = body?.detail || body?.error || 'no detail';
+      console.warn(`OCR job ${scanJob.id}: model "${model}" returned ${res.status} (${detail})`);
+      return { body: null, attempt: { model, ok: false, error: `HTTP ${res.status}: ${detail}` } };
+    }
+    return {
+      body,
+      attempt: {
+        model,
+        ok: true,
+        type: body.type ?? null,
+        item_count: resultItemCount(body),
+        confidence: body.confidence ?? null,
+        raw_text: body.raw_text ?? null,
+      },
+    };
+  } catch (err: any) {
+    const message = String(err?.message || err);
+    console.warn(`OCR job ${scanJob.id}: model "${model}" errored: ${message}`);
+    return { body: null, attempt: { model, ok: false, error: message } };
+  }
+}
+
 // Sends a stored image to the OCR service and stashes the structured result on
 // the scan_jobs row for later review. Never auto-commits to the catalog.
+//
+// Multi-model: this scan cycles through its model list (see modelPool.ts) up to
+// OCR_MAX_ATTEMPTS times, accepting the first ACCEPTABLE result and otherwise
+// keeping the best-effort one. Parallelism across scans comes from the worker's
+// concurrency (poolSize), so different scans run on different models at once.
 async function processScanJob(scanJobId: number) {
   const jobRes = await pool.query('SELECT * FROM scan_jobs WHERE id = $1', [scanJobId]);
   if (jobRes.rows.length === 0) {
@@ -398,30 +492,48 @@ async function processScanJob(scanJobId: number) {
   const scanJob = jobRes.rows[0];
   await pool.query('UPDATE scan_jobs SET status = $1 WHERE id = $2', ['processing', scanJobId]);
 
+  // Collected across every model tried and written on BOTH exit paths below, so
+  // a job that fails outright still lands in the inbox with a diagnostic trace.
+  const attempts: ScanAttempt[] = [];
+
   try {
-    const buffer = fs.readFileSync(scanJob.image_path);
+    // Read the image bytes once and reuse them across every model attempt.
     const ext = path.extname(scanJob.image_path).toLowerCase();
-    const contentType = CONTENT_TYPES[ext] || 'image/jpeg';
+    const image = { bytes: Uint8Array.from(fs.readFileSync(scanJob.image_path)), contentType: CONTENT_TYPES[ext] || 'image/jpeg' };
 
-    const form = new FormData();
-    form.append('image', new Blob([buffer], { type: contentType }), scanJob.original_filename || 'capture.jpg');
+    const usePaid = !!scanJob.use_paid || usePaidDefault();
+    const models = orderedModels(imageModelsFor(usePaid), nextStartIndex());
+    const attemptCount = Math.min(maxAttempts(), models.length);
 
-    const res = await fetch(`${ocrServiceUrl}/scan`, { method: 'POST', body: form });
-    const body = await res.json().catch(() => ({ error: 'non-JSON response from OCR service' }));
+    let best: any = null;
+    let bestScore = -1;
+    let accepted: any = null;
 
-    if (!res.ok) {
-      throw new Error(body.detail || body.error || `OCR service returned ${res.status}`);
+    for (let i = 0; i < attemptCount; i++) {
+      const model = models[i];
+      const { body, attempt } = await ocrOnce(scanJob, image, model);
+      attempts.push(attempt);
+      if (body == null) continue; // network/HTTP failure — try the next model
+      if (isAcceptable(body)) { accepted = body; break; }
+      const score = scoreResult(body);
+      if (score > bestScore) { bestScore = score; best = body; }
+    }
+
+    const result = accepted ?? best;
+    if (result == null) {
+      // Every attempt was a hard failure (all models unreachable / non-JSON).
+      throw new Error(`OCR failed on all ${attemptCount} model attempt(s)`);
     }
 
     await pool.query(
-      'UPDATE scan_jobs SET status = $1, result = $2, processed_at = now(), error = NULL WHERE id = $3',
-      ['done', JSON.stringify(body), scanJobId]
+      'UPDATE scan_jobs SET status = $1, result = $2, attempts = $3, processed_at = now(), error = NULL WHERE id = $4',
+      ['done', JSON.stringify(result), JSON.stringify(attempts), scanJobId]
     );
-    console.log(`Scan job ${scanJobId} done (type=${body.type}).`);
+    console.log(`Scan job ${scanJobId} done (type=${result.type}, model=${result.model}, accepted=${!!accepted}).`);
   } catch (err: any) {
     await pool.query(
-      'UPDATE scan_jobs SET status = $1, error = $2, processed_at = now() WHERE id = $3',
-      ['failed', String(err.message || err), scanJobId]
+      'UPDATE scan_jobs SET status = $1, error = $2, attempts = $3, processed_at = now() WHERE id = $4',
+      ['failed', String(err.message || err), JSON.stringify(attempts), scanJobId]
     );
     throw err;
   }
@@ -435,7 +547,11 @@ const ocrWorker = new Worker<OcrJobData>(
   },
   {
     connection: redisConnection,
-    concurrency: 1, // one image at a time; the free OCR model is slow/rate-limited
+    // Run as many scans in parallel as there are models in the pool, so every
+    // (slow) free model stays busy on a DIFFERENT scan. Round-robin assignment
+    // in modelPool.ts keeps concurrent jobs on distinct models (≤1 request per
+    // model at a time, respecting per-model rate limits).
+    concurrency: poolSize(),
   }
 );
 

@@ -16,6 +16,12 @@ frontend/out/
 # Build outputs
 backend/dist/
 worker/dist/
+frontend/tsconfig.tsbuildinfo
+frontend/next-env.d.ts
+
+# Python bytecode (ocr-service)
+__pycache__/
+*.py[cod]
 
 # Docker volumes (local state)
 postgres_data/
@@ -28,3 +34,9 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Playwright (UI test net) — artifacts only; specs + fixtures ARE committed
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/.playwright/

@@ -90,6 +90,51 @@ export function servingsFor(
   return (amount * amountDef.toBase) / (servingSize * servingDef.toBase);
 }
 
+// ── Per-100 readout ───────────────────────────────────────────────────────────
+// A label's serving ("55 g", "1 cup") isn't comparable between foods, so every
+// surface that shows facts also shows them per 100 g (solid) / 100 ml (liquid) —
+// the nutrition twin of the canonical per-kg price display in units.ts.
+// The basis dimension comes from the serving unit, falling back to the food's
+// own unit; anything not mass/volume (a serving counted in `each`) can't be
+// converted and yields null, since 100 g of "1 each" is unknowable.
+
+export interface Per100Basis {
+  amount: 100;
+  unit: 'g' | 'ml';
+  label: '100 g' | '100 ml';
+}
+
+export function per100Basis(
+  facts: NutritionFacts,
+  foodUnit?: string | null
+): Per100Basis | null {
+  const dim = normalizeUnit(facts.serving_unit)?.dimension ?? normalizeUnit(foodUnit)?.dimension;
+  if (dim === 'volume') return { amount: 100, unit: 'ml', label: '100 ml' };
+  if (dim === 'mass') return { amount: 100, unit: 'g', label: '100 g' };
+  return null;
+}
+
+// The facts scaled to 100 g / 100 ml, plus the basis label. Null when the
+// serving unit isn't a mass/volume unit.
+export function nutrientsPer100(
+  facts: NutritionFacts,
+  foodUnit?: string | null
+): (ScaledNutrients & { label: string }) | null {
+  const basis = per100Basis(facts, foodUnit);
+  if (!basis) return null;
+  const scaled = scaleNutrients(facts, basis.amount, basis.unit);
+  return scaled ? { ...scaled, label: basis.label } : null;
+}
+
+// "455 kcal / 100 g", or null when not convertible.
+export function formatCaloriesPer100(
+  facts: NutritionFacts,
+  foodUnit?: string | null
+): string | null {
+  const per100 = nutrientsPer100(facts, foodUnit);
+  return per100 ? `${Math.round(per100.calories)} kcal / ${per100.label}` : null;
+}
+
 export function scaleNutrients(
   facts: NutritionFacts,
   amount: number,
