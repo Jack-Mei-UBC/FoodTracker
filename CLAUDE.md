@@ -3,7 +3,20 @@
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## How to work in this repo (the loop)
-This file is the source of truth. It records the invariants and gotchas that a change will otherwise get wrong — read it before editing, and write anything non-obvious you learn back into it. The development loop is: **plan against these invariants → implement across services → let the `Stop` hook run `scripts/smoke-test.ps1` against the running stack → fix any regression before finishing → humans approve anything OCR extracted → close the loop by updating the docs.** There is no unit-test suite; the smoke tests are the regression net, so keep them green and extend them when you add a contract. See [README.md](README.md) for the architecture and a fuller description of this loop.
+This file is the source of truth. It records the invariants and gotchas that a change will otherwise get wrong — read it before editing, and write anything non-obvious you learn back into it. The development loop is: **plan against these invariants → implement across services → let the `Stop` hooks typecheck edited services and run `scripts/smoke-test.ps1` against the running stack → fix any regression before finishing → humans approve anything OCR extracted → close the loop by updating the docs.** There is no unit-test suite; the smoke tests are the regression net, so keep them green and extend them when you add a contract. See [README.md](README.md) for the architecture and a fuller description of this loop.
+
+**The loop is wired into tooling, not just described here** (`.claude/settings.json` + `scripts/hooks/`):
+- **PreToolUse guard** (`scripts/hooks/pre-bash-guard.ps1`): denies state-destroying commands — `docker compose down -v` / `docker volume rm|prune` (the postgres volume IS the price history), force-pushes, and `DROP`/`TRUNCATE` via psql. If a denied command is genuinely needed, the *user* runs it.
+- **Doc-sync push gate** (same script): `git push` of a branch that changes **>5 files or >150 lines** vs `origin/main` without touching any doc file is denied — run the **doc-sync agent** (below) first, or bypass deliberately with `SKIP_DOC_GATE=1 git push ...` when you've stated in your final message why no doc update is needed.
+- **Stop hooks**: `scripts/hooks/stop-typecheck.ps1` (per-service `tsc --noEmit`, only for services with uncommitted changes) then `scripts/smoke-test.ps1`. Both use a 20s marker debounce; exit 2 feeds the failure back — no green, no done.
+
+**Four subagents live in `.claude/agents/` — they ARE steps of the loop, not optional extras.** Launch them at these checkpoints:
+| Agent | When |
+|---|---|
+| **contract-guard** (read-only) | After touching ANY side of a hand-synced contract pair (see Critical gotchas); before merging a big PR. |
+| **invariant-reviewer** (read-only) | Before finishing any multi-file change — reviews the diff against this file's invariants. |
+| **doc-sync** (edits docs only) | Before pushing/PRing anything beyond a trivial fix; mandatory when the push gate fires. |
+| **verifier** | Before opening a PR / after a cross-service change — runs the full ladder (tsc ×3, STRICT smoke, Playwright when frontend changed, `build:mobile` static gate). |
 
 **Closing the loop — the last step of any change is documentation.** Before you report a change as done, update the docs to match reality: **CLAUDE.md** for a new/changed contract, invariant, endpoint, gotcha, schema shape, or architectural rule; **README.md** when the change alters the architecture, service roles, the data model, the page list, or the verification story. If a change genuinely touches none of those (a pure bug fix, a refactor with no contract change, a docs-only edit), say so explicitly in your final message — "no doc update needed because …" — so the omission is a decision, not an oversight. When in doubt, add the line to CLAUDE.md; a stale spec costs the next session more than an extra sentence costs you.
 
