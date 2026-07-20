@@ -1,12 +1,34 @@
 # FoodTracker
 
+![FoodTracker](docs/banner.svg)
+
 [![smoke](https://github.com/Jack-Mei-UBC/FoodTracker/actions/workflows/smoke.yml/badge.svg)](https://github.com/Jack-Mei-UBC/FoodTracker/actions/workflows/smoke.yml)
+&nbsp;![Next.js](https://img.shields.io/badge/Next.js-14-000?logo=next.js)
+&nbsp;![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)
+&nbsp;![FastAPI](https://img.shields.io/badge/FastAPI-Python%203.12-009688?logo=fastapi&logoColor=white)
+&nbsp;![Postgres](https://img.shields.io/badge/Postgres-15-4169e1?logo=postgresql&logoColor=white)
+&nbsp;![Docker](https://img.shields.io/badge/Docker-compose-2496ed?logo=docker&logoColor=white)
+&nbsp;![License](https://img.shields.io/badge/License-MIT-a78bfa)
 
 **Grocery price-intelligence + calorie tracking, built as a polyglot microservice stack — and developed with a disciplined agentic loop.**
 
 FoodTracker turns photos of receipts and shelf tags into structured price data, tracks prices across stores, and doubles as a nutrition diary (with USDA FoodData Central lookup). It's a real, running system: six containers, three languages, a human-in-the-loop OCR pipeline, and a full audit/revert trail on every price mutation.
 
 This README covers both **how the system works** and **how it's built** — the second half describes the agent loop used to develop it, which is the part I'm most deliberate about.
+
+---
+
+## Screenshots
+
+> Captured against the seeded dev stack — see [`docs/screenshots/CAPTURE.md`](docs/screenshots/CAPTURE.md) to regenerate.
+
+| Dashboard — sortable catalog, canonical per-kg prices | Price history — trend + per-serving & per-100 |
+|---|---|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Price history](docs/screenshots/price-history.png) |
+| **Inbox — OCR review, crop beside original, raw model output** | **Audit — bulk clean-up, tags, merge** |
+| ![Inbox review](docs/screenshots/inbox-review.png) | ![Audit](docs/screenshots/audit.png) |
+| **Meals — live macro & cost preview** | **Budget — spend vs. target, by store & month** |
+| ![Meals](docs/screenshots/meals.png) | ![Budget](docs/screenshots/budget.png) |
 
 ---
 
