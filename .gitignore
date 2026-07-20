@@ -12,6 +12,12 @@ yarn-debug.log*
 # Next.js
 frontend/.next/
 frontend/out/
+frontend/next-env.d.ts
+frontend/test-results/
+
+# Python
+__pycache__/
+*.pyc
 
 # Build outputs
 backend/dist/
