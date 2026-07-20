@@ -15,8 +15,8 @@ regression. Do not start Phase 3 until Phase 1's Layer 2 contracts are green.
 | Phase | State | Notes |
 |---|---|---|
 | **0 — smoke repair + compose split** | ✅ **shipped** | All of F1–F7 landed. Smoke suite is 50/50 green and the two twins are back in sync. |
-| **1 — UI test net** | 🟡 **partly shipped** | Layers 1 & 2 exist (22 Playwright tests). Layer 3 (visual) and the Vitest secondary are **not started** — see the open items in that phase. |
-| **2 — shadcn prerequisites** | 🟡 **decided, not built** | P5/P6/P7 decided; **P2 blocked** on the Next 14 → Tailwind 4 cascade. Nothing installed yet. |
+| **1 — UI test net** | 🟡 **partly shipped** | Layers 1 & 2 exist (22 Playwright tests). Layer 3 (visual) and the Vitest secondary are **not started**. 4 open items, incl. a **false-green smoke exit** — see that phase. |
+| **2 — shadcn prerequisites** | 🟡 **decided, not built** | P5/P6/P7 decided; **P2 blocked** on the Next 14 → Tailwind 4 cascade. Nothing installed. **The Path A/B decision here blocks Phase 3.** |
 | **3 — the migration** | ⬜ not started | Gated on Phase 1 Layer 2, which is now green. |
 | **4 — docs & guardrails** | ⬜ not started | Folded into each Phase 3 step. |
 
@@ -168,6 +168,16 @@ referenced further down but does not exist yet** — add it with Vitest.
       `/scanner` was rewritten into a pure uploader in this changeset, and it is
       also on the Phase 3 page-sweep list. Add the route to **both** scripts —
       per CLAUDE.md, an assertion goes into both or neither.
+- [ ] **The smoke scripts exit 0 when the stack is down.** Observed for real:
+      with no containers running, `smoke-test.ps1` printed `backend not
+      reachable - skipping` and returned **exit 0** — a green result that
+      asserted nothing. That's the same degrade-don't-fail idiom used for an
+      empty catalog (`[SKIP]`), but unreachable-backend is a different case: an
+      unseeded stack genuinely isn't a regression, whereas *no stack at all*
+      means the net didn't run. As-is, the Stop hook reports success on a turn
+      where nothing was verified. Options: exit non-zero on unreachable, or keep
+      exit 0 but print an unmissable banner and make CI treat it as failure.
+      Fix in **both** twins.
 - [ ] Add the Vitest secondary (`test:unit`) for the three pure-logic libs.
 - [ ] Put the Layer 3 flake controls in place *before* the first snapshot:
       fixed viewport, `reducedMotion: 'reduce'`, the `.animate-slide-up`
@@ -328,6 +338,21 @@ breaking changes are overwhelmingly about *server* APIs — async
 none of them: the Capacitor static-export constraint already forces every page
 to be a client component fetching `${API_BASE_URL}` at runtime. The unknown is
 React 19 compatibility for `react-easy-crop` and `lucide-react`.
+
+### Open items
+
+- [ ] **Decide Path A vs Path B — this is the blocker for the whole migration.**
+      It determines whether components come from **Radix** (A, frozen
+      `shadcn@2.3.0`) or **Base UI** (B, current shadcn), which changes every
+      import in Phase 3's M1–M8. Phase 3 cannot start until it's settled, so
+      this is the single highest-leverage open item in the document.
+- [ ] Before committing to B, spike **React 19 compatibility for
+      `react-easy-crop` and `lucide-react`** — the one genuine unknown in that
+      path, and cheap to test ahead of the framework major. `ImageCropper` is on
+      the never-migrated list, so a `react-easy-crop` break would have to be
+      solved rather than designed around.
+- [ ] Once a path is picked, do P3–P5 together (deps, `cn()` helper,
+      `components.json`) — they're inert until a component actually uses them.
 
 ### What adopting the defaults actually changes
 
