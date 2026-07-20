@@ -42,3 +42,19 @@ directly, so no other wiring is needed.
 
 Keep them under ~500 KB each (PNG, the built-in capture is already compressed).
 Once they're in, the gallery in the README renders automatically.
+
+## The hero banner (already done, regenerate only if you edit it)
+
+`docs/banner.svg` is the standalone hero/social-preview graphic — hand-authored,
+no screenshot needed. The README embeds the SVG directly, but GitHub's repo
+**social-preview** upload (Settings → General → Social preview) requires a
+raster image, so a PNG twin lives alongside it (`docs/banner.png`, 1280×640).
+
+Regenerate after editing the SVG:
+
+```powershell
+powershell -File scripts/render-banner.ps1
+```
+
+Then upload `docs/banner.png` to the repo's Social preview setting by hand —
+that setting has no API/CLI, it's a GitHub Settings page upload only.

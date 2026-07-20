@@ -101,9 +101,9 @@
       <g transform="translate(0, 104)">
         <rect x="0" y="0" width="28" height="28" rx="7" fill="url(#primary)" opacity="0.55"/>
         <text x="40" y="14" font-size="14" font-weight="600" fill="#e2e8f0">Greek yogurt</text>
-        <text x="40" y="30" font-size="11" fill="#7c8497">On sale · ends in 3d</text>
-        <rect x="330" y="1" width="44" height="15" rx="7" fill="#f59e0b" opacity="0.16"/>
-        <text x="352" y="12" font-size="9" font-weight="700" fill="#fbbf24" text-anchor="middle">SALE</text>
+        <rect x="40" y="20" width="38" height="14" rx="7" fill="#f59e0b" opacity="0.16"/>
+        <text x="59" y="30" font-size="9" font-weight="700" fill="#fbbf24" text-anchor="middle">SALE</text>
+        <text x="84" y="30" font-size="11" fill="#7c8497">ends in 3d</text>
         <text x="402" y="14" font-size="15" font-weight="700" fill="#34d399" text-anchor="end">$5.98/kg</text>
       </g>
       <g transform="translate(0, 156)">
