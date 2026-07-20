@@ -128,11 +128,37 @@ const displayUnit = (unit: string): string => {
   return UNIT_DISPLAY[key] ?? key;
 };
 
-// Canonical per-unit price for the dashboard: always the dimension's standard
-// unit (kg for weight & volume, each for count), with the *as-entered* unit
-// price appended in brackets when it differs — e.g. "$4.41/kg ($2.00/lb)" or
-// "$1.20/kg ($1.20/L)". Volume is converted to a per-kg price using `density`
-// (kg per litre, default 1). Returns null when not computable.
+// The NUMERIC canonical price — mass → per kg, volume → per kg via density,
+// count → per each. Returned as a number so callers can compare/sort on it (the
+// dashboard table's price column) instead of parsing a formatted string.
+// `formatCanonicalUnitPrice` below is the display wrapper around this, so the
+// two can never disagree. Display-only (no backend twin).
+export function canonicalUnitPrice(
+  price: number,
+  amount: number | null | undefined,
+  amountUnit: string | null | undefined,
+  density?: number | string | null
+): { value: number; label: string } | null {
+  const def = normalizeUnit(amountUnit);
+  if (!def || !amount || amount <= 0 || !isFinite(price)) return null;
+  const baseAmount = amount * def.toBase;
+  if (baseAmount <= 0) return null;
+
+  const canon = CANONICAL[def.dimension];
+  let value = (price / baseAmount) * canon.toBase; // $/kg (mass), $/L (volume), $/each
+  let label = canon.label;
+  if (def.dimension === 'volume') {
+    const d = density == null ? 1 : Number(density);
+    if (d > 0) { value = value / d; label = 'kg'; } // $/L → $/kg
+  }
+  return { value, label };
+}
+
+// Canonical per-unit price for display: always the dimension's standard unit
+// (kg for weight & volume, each for count), with the *as-entered* unit price
+// appended in brackets when it differs — e.g. "$4.41/kg ($2.00/lb)" or
+// "$1.20/kg ($1.20/L)". Volume converts to per-kg via `density` (kg per litre,
+// default 1). Returns null when not computable.
 export function formatCanonicalUnitPrice(
   price: number,
   amount: number | null | undefined,
@@ -140,19 +166,11 @@ export function formatCanonicalUnitPrice(
   density?: number | string | null
 ): string | null {
   const def = normalizeUnit(amountUnit);
-  if (!def || !amount || amount <= 0 || !isFinite(price)) return null;
-  const baseAmount = amount * def.toBase;
-  if (baseAmount <= 0) return null;
-
+  const canonical = canonicalUnitPrice(price, amount, amountUnit, density);
+  if (!def || !canonical || !amount) return null;
   const canon = CANONICAL[def.dimension];
-  let canonPrice = (price / baseAmount) * canon.toBase; // $/kg (mass), $/L (volume), $/each
-  let canonLabel = canon.label;
-  if (def.dimension === 'volume') {
-    const d = density == null ? 1 : Number(density);
-    if (d > 0) { canonPrice = canonPrice / d; canonLabel = 'kg'; } // $/L → $/kg
-  }
 
-  const main = `$${canonPrice.toFixed(2)}/${canonLabel}`;
+  const main = `$${canonical.value.toFixed(2)}/${canonical.label}`;
 
   // Show the as-entered unit whenever it isn't already the canonical unit
   // (volume is always shown since its canonical unit is a mass unit).

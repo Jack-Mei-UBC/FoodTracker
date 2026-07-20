@@ -2,35 +2,16 @@
 
 // Popup for setting a food's dashboard-card icon. Two steps:
 //   pick: choose one of the food's saved scan/scrape images, or upload a new one
-//   crop: crop the chosen image to a square via react-easy-crop, then save
+//   crop: crop the chosen image to a square via the shared <ImageCropper>, then save
 // Saving = POST the cropped blob to /api/images, then PUT { image_id } on the food.
 // {image_id: null} (the "Reset to default" button) reverts to the food's
 // display_image_id fallback (earliest linked price-log image) — see CLAUDE.md.
 
 import React, { useEffect, useRef, useState } from 'react';
-import Cropper, { Area } from 'react-easy-crop';
 import Modal from './Modal';
+import ImageCropper from './ImageCropper';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-
-async function getCroppedBlob(imageUrl: string, area: Area): Promise<Blob> {
-  const img = new Image();
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () => reject(new Error('Failed to load image for cropping'));
-    img.src = imageUrl;
-  });
-  const size = Math.min(512, Math.max(area.width, area.height));
-  const canvas = document.createElement('canvas');
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Canvas not supported');
-  ctx.drawImage(img, area.x, area.y, area.width, area.height, 0, 0, size, size);
-  return new Promise((resolve, reject) => {
-    canvas.toBlob(blob => (blob ? resolve(blob) : reject(new Error('Crop failed'))), 'image/jpeg', 0.9);
-  });
-}
 
 export default function FoodIconPicker({
   foodId,
@@ -49,9 +30,6 @@ export default function FoodIconPicker({
   const [candidateIds, setCandidateIds] = useState<number[]>([]);
   const [loadingCandidates, setLoadingCandidates] = useState(true);
   const [source, setSource] = useState<{ url: string; isObjectUrl: boolean } | null>(null);
-  const [crop, setCrop] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
-  const [croppedArea, setCroppedArea] = useState<Area | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -97,8 +75,6 @@ export default function FoodIconPicker({
       if (!res.ok) throw new Error();
       const blob = await res.blob();
       setSource({ url: URL.createObjectURL(blob), isObjectUrl: true });
-      setCrop({ x: 0, y: 0 });
-      setZoom(1);
       setStep('crop');
     } catch {
       setError('Failed to load that image.');
@@ -109,8 +85,6 @@ export default function FoodIconPicker({
     const file = e.target.files?.[0];
     if (!file) return;
     setSource({ url: URL.createObjectURL(file), isObjectUrl: true });
-    setCrop({ x: 0, y: 0 });
-    setZoom(1);
     setStep('crop');
   };
 
@@ -131,12 +105,12 @@ export default function FoodIconPicker({
     }
   };
 
-  const saveCrop = async () => {
-    if (!source || !croppedArea) return;
+  // The crop → JPEG blob now comes from the shared <ImageCropper>; this just
+  // persists it (POST /api/images) and points the food's icon at the new image.
+  const handleCropped = async (blob: Blob) => {
     setBusy(true);
     setError(null);
     try {
-      const blob = await getCroppedBlob(source.url, croppedArea);
       const form = new FormData();
       form.append('image', blob, `food-${foodId}-icon.jpg`);
       const uploadRes = await fetch(`${API_BASE_URL}/api/images`, { method: 'POST', body: form });
@@ -208,44 +182,18 @@ export default function FoodIconPicker({
             </button>
           )}
         </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="relative w-full h-72 bg-slate-950 rounded-lg overflow-hidden">
-            {source && (
-              <Cropper
-                image={source.url}
-                crop={crop}
-                zoom={zoom}
-                aspect={1}
-                onCropChange={setCrop}
-                onZoomChange={setZoom}
-                onCropComplete={(_, areaPixels) => setCroppedArea(areaPixels)}
-              />
-            )}
-          </div>
-          <input
-            type="range" min={1} max={3} step={0.1} value={zoom}
-            onChange={e => setZoom(Number(e.target.value))}
-            className="w-full accent-violet-500"
-          />
-          <div className="flex gap-2">
-            <button
-              onClick={() => { setStep('pick'); setSource(null); }}
-              disabled={busy}
-              className="btn btn-secondary rounded-lg px-4 py-2"
-            >
-              Back
-            </button>
-            <button
-              onClick={saveCrop}
-              disabled={busy || !croppedArea}
-              className="btn btn-primary flex-1 rounded-lg py-2"
-            >
-              {busy ? 'Saving…' : 'Save Icon'}
-            </button>
-          </div>
-        </div>
-      )}
+      ) : source ? (
+        <ImageCropper
+          source={source}
+          aspect={1}
+          maxSize={512}
+          busy={busy}
+          primaryLabel="Save Icon"
+          busyLabel="Saving…"
+          onBack={() => { setStep('pick'); setSource(null); }}
+          onCropped={handleCropped}
+        />
+      ) : null}
     </Modal>
   );
 }

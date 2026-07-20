@@ -1,205 +1,63 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import type { ScanResponse } from '../../types/scan';
-import ReviewItems, { RawItem } from '../../components/ReviewItems';
+import Link from 'next/link';
+import StatusToast, { useToast } from '../../components/StatusToast';
 
-// Staged status shown while the (possibly slow) vision call is in flight.
-// We update this explicitly at each step of `scanNow` instead of using a timer.
+// Scanner is now a pure INTAKE surface: every capture is staged for the
+// background queue (there is no synchronous "scan now" path anymore — see
+// CLAUDE.md "OCR ingestion"). Uploads/drops/pastes go to /staging as `staged`
+// scan_jobs; the user crops there and sends them for multi-model OCR, then
+// reviews the results in /inbox.
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
 interface Store { id: number; name: string; }
 
 export default function Scanner() {
-  const [isScanning, setIsScanning] = useState(false);
   const [queuing, setQueuing] = useState(false);
-  const [ocrProgress, setOcrProgress] = useState<string[]>([]);
-  const [scanStageLabel, setScanStageLabel] = useState<string | null>(null);
-
-  // Selected-but-not-yet-processed image, and the extracted result for review.
-  const [pendingFile, setPendingFile] = useState<File | null>(null);
-  const [pendingPreview, setPendingPreview] = useState<string | null>(null);
-  const [rawItems, setRawItems] = useState<RawItem[] | null>(null);
-  const [scanConfidence, setScanConfidence] = useState(1);
-  // Stored image id + EXIF GPS for the scan under review (attached to committed logs).
-  const [scanImageId, setScanImageId] = useState<number | null>(null);
-  const [scanGps, setScanGps] = useState<{ lat: number; lng: number } | null>(null);
-  // True when the AI found nothing usable — review renders empty, ready for manual entry.
-  const [manualEntryMode, setManualEntryMode] = useState(false);
+  const [lastStaged, setLastStaged] = useState<number>(0);
 
   const [targetStoreId, setTargetStoreId] = useState<string>('1');
   const [stores, setStores] = useState<Store[]>([]);
 
-  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const notify = (text: string, type: 'success' | 'error' = 'success') => {
-    setStatusMsg({ type, text });
-    setTimeout(() => setStatusMsg(null), 5000);
-  };
+  const { statusMsg, notify } = useToast();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const appendLog = (line: string) => setOcrProgress(prev => [...prev, line]);
 
   useEffect(() => {
     fetch(`${API_BASE_URL}/api/stores`).then(r => r.ok ? r.json() : []).then(setStores).catch(() => {});
   }, []);
 
-  // progress mapping for the staged bar
-  const progressForStage = (label: string | null) => {
-    if (!label) return 0;
-    if (label.startsWith('Uploading')) return 10;
-    if (label.startsWith('Vision AI is reading')) return 40;
-    if (label.startsWith('Classifying')) return 60;
-    if (label.startsWith('Extracting')) return 85;
-    if (label.startsWith('Still working')) return 95;
-    return 50;
-  };
-
-  // Send one or more images straight to the background queue (Inbox).
-  const queueImages = async (files: File[]): Promise<boolean> => {
-    try {
-      const form = new FormData();
-      files.forEach(f => form.append('images', f));
-      form.append('store_id', targetStoreId);
-      const res = await fetch(`${API_BASE_URL}/api/scan-jobs`, { method: 'POST', body: form });
-      if (!res.ok) throw new Error();
-      notify(`${files.length} image${files.length > 1 ? 's' : ''} queued — check the Inbox shortly.`);
-      return true;
-    } catch {
-      notify('Failed to queue image(s).', 'error');
-      return false;
-    }
-  };
-
-  // Select an image for the live-scan slot. If an image is already waiting there,
-  // it auto-queues to the background (starts processing) instead of being replaced.
-  const selectImage = async (file: File) => {
-    if (isScanning) {
-      // A live scan is running — don't disturb it; process the new image in the background.
-      queueImages([file]);
-      return;
-    }
-    if (pendingFile) {
-      const ok = await queueImages([pendingFile]);
-      if (!ok) return; // keep both: old stays pending, user can retry
-    }
-    setPendingFile(file);
-    setPendingPreview(prev => { if (prev) URL.revokeObjectURL(prev); return URL.createObjectURL(file); });
-    setRawItems(null);
-    setManualEntryMode(false);
-    setScanImageId(null);
-    setScanGps(null);
-    setOcrProgress([]);
-  };
-
-  // Batch intake: one image goes to the live slot, several go to the background queue.
-  const intakeFiles = (files: File[]) => {
+  // Stage one or more images (the ONLY intake action now). They land on /staging
+  // as `staged` jobs — nothing is OCR'd until the user sends them there.
+  const stageImages = async (files: File[]): Promise<boolean> => {
     const images = files.filter(f => f.type.startsWith('image/'));
     if (images.length === 0) {
       notify('Please provide image files.', 'error');
-      return;
+      return false;
     }
-    if (images.length === 1) selectImage(images[0]);
-    else queueImages(images);
-  };
-
-  // Synchronous scan path (vision AI now → review below).
-  const scanNow = async () => {
-    if (!pendingFile) return;
-    setIsScanning(true);
-    setOcrProgress(['Uploading image to vision AI...']);
-    setScanStageLabel('Uploading image to vision AI...');
-    setRawItems(null);
-    setManualEntryMode(false);
-    // stages will be updated inline as each network step completes
-    try {
-      // Store the image first (fast, local) so committed logs can link to it,
-      // and pick up EXIF GPS for store auto-selection.
-      try {
-        const imgForm = new FormData();
-        imgForm.append('image', pendingFile);
-        setScanStageLabel('Uploading image to vision AI... (storing image)');
-        const imgRes = await fetch(`${API_BASE_URL}/api/images`, { method: 'POST', body: imgForm });
-        if (imgRes.ok) {
-          const img = await imgRes.json();
-          setScanImageId(img.id);
-          if (img.latitude != null && img.longitude != null) {
-            setScanGps({ lat: Number(img.latitude), lng: Number(img.longitude) });
-            appendLog('Photo has GPS location — will try to auto-match the store.');
-          }
-        }
-      } catch { /* attachment is best-effort; the scan itself continues */ }
-
-      setScanStageLabel('Vision AI is reading the image...');
-      const formData = new FormData();
-      formData.append('image', pendingFile);
-      setScanStageLabel('Vision AI is reading the image... (sending to model)');
-      const scanRes = await fetch(`${API_BASE_URL}/api/scan`, { method: 'POST', body: formData });
-      if (!scanRes.ok) {
-        const err = await scanRes.json().catch(() => ({ error: scanRes.statusText }));
-        appendLog(`Scan Error: ${err.error || err.detail || scanRes.statusText}`);
-        notify('Image scan failed.', 'error');
-        return;
-      }
-      setScanStageLabel('Classifying receipt vs. price tag...');
-      const scan: ScanResponse = await scanRes.json();
-      setScanConfidence(scan.confidence);
-
-      let items: RawItem[];
-      setScanStageLabel('Extracting products, prices, and sizes...');
-      if (scan.type === 'receipt') {
-        const { store_name, purchase_date, items: receiptItems } = scan.data;
-        appendLog(`Detected a receipt${store_name ? ` from "${store_name}"` : ''}${purchase_date ? ` dated ${purchase_date}` : ''} — ${receiptItems.length} product lines.`);
-        items = receiptItems.map(it => ({ ...it, amountUnit: it.amount_unit }));
-      } else if (scan.type === 'price_tag') {
-        const tag = scan.data;
-        appendLog(`Detected a shelf price tag: ${tag.name} @ $${tag.price}${tag.is_sale ? ' (SALE)' : ''}.`);
-        items = [{ name: tag.name, price: tag.price, category: tag.category, unit: tag.unit, barcode: tag.barcode, isSale: tag.is_sale, amount: tag.amount, amountUnit: tag.amount_unit }];
-      } else {
-        appendLog(`Image not recognized as a receipt or price tag: ${scan.data.reason}`);
-        notify('Not recognized — you can still add items manually below.', 'error');
-        setManualEntryMode(true);
-        setRawItems([]);
-        setScanStageLabel(null);
-        return;
-      }
-      if (items.length === 0) {
-        appendLog('AI could not identify any product lines in this image. You can add them manually below.');
-        notify('No products detected. Add items manually, or try a clearer image.', 'error');
-        setManualEntryMode(true);
-        setRawItems([]);
-        setScanStageLabel(null);
-        return;
-      }
-      appendLog(`AI extracted ${items.length} product line${items.length > 1 ? 's' : ''}. Review below.`);
-      setRawItems(items);
-      notify('Scan complete — review items below and save.');
-    } catch (err: any) {
-      console.error(err);
-      appendLog(`Fatal error: ${err.message || err}`);
-      notify('Receipt processing failed.', 'error');
-    } finally {
-      setScanStageLabel(null);
-      setIsScanning(false);
-    }
-  };
-
-  // Background queue path (upload → worker processes → Inbox).
-  const queueForLater = async () => {
-    if (!pendingFile) return;
     setQueuing(true);
-    const ok = await queueImages([pendingFile]);
-    if (ok) {
-      setPendingFile(null);
-      if (pendingPreview) { URL.revokeObjectURL(pendingPreview); setPendingPreview(null); }
-      setOcrProgress([]);
+    try {
+      const form = new FormData();
+      images.forEach(f => form.append('images', f));
+      form.append('store_id', targetStoreId);
+      const res = await fetch(`${API_BASE_URL}/api/scan-jobs`, { method: 'POST', body: form });
+      if (!res.ok) throw new Error();
+      setLastStaged(images.length);
+      notify(`${images.length} image${images.length > 1 ? 's' : ''} added to Staging — crop and send for processing there.`);
+      return true;
+    } catch {
+      notify('Failed to add image(s) to Staging.', 'error');
+      return false;
+    } finally {
+      setQueuing(false);
     }
-    setQueuing(false);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
-    if (files.length > 0) intakeFiles(files);
+    if (files.length > 0) stageImages(files);
     e.target.value = ''; // allow re-selecting the same file(s)
   };
 
@@ -215,18 +73,17 @@ export default function Scanner() {
     return files;
   };
 
-  // Paste works even mid-scan: the new image routes to the background queue
-  // instead of disturbing the in-flight scan.
+  // Paste (Ctrl+V) anywhere on the page stages the image(s).
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       if (queuing) return;
       const files = imagesFromClipboardItems(e.clipboardData?.items);
-      if (files.length > 0) { e.preventDefault(); intakeFiles(files); }
+      if (files.length > 0) { e.preventDefault(); stageImages(files); }
     };
     document.addEventListener('paste', onPaste);
     return () => document.removeEventListener('paste', onPaste);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [queuing, isScanning, pendingFile, targetStoreId]);
+  }, [queuing, targetStoreId]);
 
   const pasteFromClipboard = async () => {
     if (queuing) return;
@@ -244,7 +101,7 @@ export default function Scanner() {
           files.push(new File([blob], 'pasted-image', { type: imageType }));
         }
       }
-      if (files.length > 0) intakeFiles(files);
+      if (files.length > 0) stageImages(files);
       else notify('No image found on the clipboard. Copy a receipt image first.', 'error');
     } catch (err) {
       console.error('clipboard read failed:', err);
@@ -252,144 +109,84 @@ export default function Scanner() {
     }
   };
 
-  const busy = isScanning || queuing;
-
   return (
     <div data-loc="page.scanner" className="space-y-8 max-w-4xl mx-auto relative">
-      {statusMsg && (
-        <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl shadow-xl flex items-center space-x-3 transition duration-300 ${
-          statusMsg.type === 'success'
-            ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/30'
-            : 'bg-rose-950/90 text-rose-300 border border-rose-500/30'}`}>
-          <span className="text-sm font-semibold">{statusMsg.text}</span>
-        </div>
-      )}
+      <StatusToast statusMsg={statusMsg} />
 
       {/* ═══ Section: Header ═══ */}
       <div data-loc="scanner.header" className="border-b border-white/5 pb-3">
-        <h1 className="text-lg font-bold text-white">Receipt OCR Scanner</h1>
-        <p className="text-xs text-slate-500 mt-0.5">Upload, drag &amp; drop, or paste (Ctrl+V) a receipt or shelf price tag — scan now, or queue it to process in the background.</p>
+        <h1 className="text-lg font-bold text-white">Receipt &amp; Price-Tag Capture</h1>
+        <p className="text-xs text-slate-500 mt-0.5">Upload, drag &amp; drop, or paste (Ctrl+V) receipts or shelf price tags. Everything is queued for background OCR — crop and send from Staging, then review in the Inbox.</p>
       </div>
 
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
 
-          {/* ═══ Section: Uploader ═══ */}
-          <div data-loc="scanner.uploader" className="md:col-span-1 card rounded-3xl p-6 space-y-4">
-            <h2 className="text-lg font-bold text-white">Upload Receipt or Price Tag</h2>
+        {/* ═══ Section: Uploader ═══ */}
+        <div data-loc="scanner.uploader" className="md:col-span-2 card rounded-3xl p-6 space-y-4">
+          <h2 className="text-lg font-bold text-white">Add captures to Staging</h2>
 
-            <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" multiple className="hidden" />
+          <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" multiple className="hidden" />
 
-            <div
-              onClick={() => fileInputRef.current?.click()}
-              onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('border-violet-500/80'); }}
-              onDragLeave={e => { e.currentTarget.classList.remove('border-violet-500/80'); }}
-              onDrop={e => {
-                e.preventDefault();
-                e.currentTarget.classList.remove('border-violet-500/80');
-                const files = Array.from(e.dataTransfer.files ?? []);
-                if (files.length > 0) intakeFiles(files);
-              }}
-              className="w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-white/10 hover:border-violet-500/50 flex flex-col items-center justify-center p-4 cursor-pointer bg-slate-950 transition overflow-hidden"
-            >
-              {pendingPreview ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={pendingPreview} alt="preview" className="max-h-full max-w-full object-contain rounded-lg" />
-              ) : (
-                <>
-                  <svg className="w-8 h-8 text-slate-600 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <span className="text-[10px] text-slate-500 font-semibold uppercase text-center">Click, Drop, or Paste Images</span>
-                  <span className="text-[9px] text-slate-600 mt-1 block">JPG, PNG, WEBP · Ctrl+V · multiple images auto-queue to Inbox</span>
-                </>
-              )}
-            </div>
+          <div
+            onClick={() => { if (!queuing) fileInputRef.current?.click(); }}
+            onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add('border-violet-500/80'); }}
+            onDragLeave={e => { e.currentTarget.classList.remove('border-violet-500/80'); }}
+            onDrop={e => {
+              e.preventDefault();
+              e.currentTarget.classList.remove('border-violet-500/80');
+              const files = Array.from(e.dataTransfer.files ?? []);
+              if (files.length > 0) stageImages(files);
+            }}
+            className={`w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-white/10 hover:border-violet-500/50 flex flex-col items-center justify-center p-4 cursor-pointer bg-slate-950 transition overflow-hidden ${queuing ? 'opacity-60 pointer-events-none' : ''}`}
+          >
+            <svg className="w-8 h-8 text-slate-600 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <span className="text-[10px] text-slate-500 font-semibold uppercase text-center">{queuing ? 'Adding to Staging…' : 'Click, Drop, or Paste Images'}</span>
+            <span className="text-[9px] text-slate-600 mt-1 block">JPG, PNG, WEBP · Ctrl+V · multiple images supported</span>
+          </div>
 
-            {/* Store selector (applies to background queue + prefills review) */}
-            <div className="flex items-center justify-between bg-slate-950 border border-white/5 p-2 rounded-xl">
-              <span className="text-[10px] text-slate-500 font-semibold uppercase pl-1">Store</span>
-              <select value={targetStoreId} onChange={e => setTargetStoreId(e.target.value)}
-                className="bg-transparent text-xs text-white focus:outline-none">
-                {stores.length > 0
-                  ? stores.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)
-                  : <><option value="1">SuperMarket Central</option><option value="2">Organic Grocer</option><option value="3">Value Foods</option></>}
-              </select>
-            </div>
+          {/* Store selector (prefills the review; applies to all staged images) */}
+          <div className="flex items-center justify-between bg-slate-950 border border-white/5 p-2 rounded-xl">
+            <span className="text-[10px] text-slate-500 font-semibold uppercase pl-1">Store</span>
+            <select value={targetStoreId} onChange={e => setTargetStoreId(e.target.value)}
+              className="bg-transparent text-xs text-white focus:outline-none">
+              {stores.length > 0
+                ? stores.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)
+                : <><option value="1">SuperMarket Central</option><option value="2">Organic Grocer</option><option value="3">Value Foods</option></>}
+            </select>
+          </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <button onClick={scanNow} disabled={!pendingFile || busy}
-                className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl py-3 text-sm font-semibold transition hover:shadow-lg disabled:opacity-50">
-                {isScanning ? 'Scanning...' : 'Scan Now'}
-              </button>
-              <button onClick={queueForLater} disabled={!pendingFile || busy}
-                title="Process in the background — results appear in the Inbox"
-                className="flex items-center justify-center gap-1.5 bg-white/5 border border-white/10 text-white rounded-xl py-3 text-sm font-semibold transition hover:bg-white/10 disabled:opacity-50">
-                {queuing ? 'Queuing...' : 'Queue for Later'}
-              </button>
-            </div>
-            <button onClick={pasteFromClipboard} disabled={busy}
-              className="w-full flex items-center justify-center gap-1.5 text-xs text-slate-400 hover:text-white py-1 transition disabled:opacity-50">
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a1 1 0 001 1h4a1 1 0 001-1M9 5a1 1 0 011-1h4a1 1 0 011 1" />
-              </svg>
+          <div className="grid grid-cols-2 gap-3">
+            <button onClick={() => { if (!queuing) fileInputRef.current?.click(); }} disabled={queuing}
+              className="btn btn-primary rounded-xl py-3 text-sm font-semibold disabled:opacity-50">
+              {queuing ? 'Adding…' : 'Choose images'}
+            </button>
+            <button onClick={pasteFromClipboard} disabled={queuing}
+              className="btn btn-secondary rounded-xl py-3 text-sm font-semibold disabled:opacity-50">
               Paste from clipboard
             </button>
           </div>
-
-          {/* ═══ Section: Console Log ═══ */}
-          <div data-loc="scanner.console" className="md:col-span-2 card rounded-3xl p-6 space-y-4 min-h-[300px]">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold text-white">Processing Console</h2>
-              <div className="flex items-center gap-2 text-[10px] text-slate-500 font-mono">
-                <span className={`w-1.5 h-1.5 rounded-full inline-block ${isScanning ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
-                Vision AI → DB
-              </div>
-            </div>
-
-            {isScanning && (
-              <div className="space-y-2 animate-slide-up">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-violet-300 font-semibold animate-pulse">{scanStageLabel ?? 'Processing...'}</span>
-                  <span className="text-slate-500 font-mono tabular-nums">&nbsp;</span>
-                </div>
-                <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-400 rounded-full transition-all duration-1000 ease-out"
-                    style={{ width: `${Math.min(95, progressForStage(scanStageLabel))}%` }} />
-                </div>
-              </div>
-            )}
-
-            <div className="bg-slate-950 rounded-2xl p-4 h-[220px] overflow-y-auto space-y-1.5 font-mono text-xs text-slate-300">
-              {ocrProgress.length === 0 && !isScanning && (
-                <span className="text-slate-600">Console idle. Select an image, then Scan Now or Queue for Later...</span>
-              )}
-              {ocrProgress.map((line, idx) => (
-                <div key={idx} className="flex items-start space-x-2">
-                  <span className="text-violet-500 shrink-0">&gt;&gt;</span>
-                  <span className={idx === ocrProgress.length - 1 && isScanning ? 'text-violet-400 animate-pulse' : ''}>{line}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
 
-        {/* Review (shared component) */}
-        {rawItems && (
-          <ReviewItems
-            items={rawItems}
-            confidence={scanConfidence}
-            defaultStoreId={targetStoreId}
-            source="scan"
-            imageId={scanImageId}
-            imageSrc={pendingPreview}
-            gps={scanGps}
-            manualEntry={manualEntryMode}
-            notify={notify}
-            onCommitted={() => { setRawItems(null); setManualEntryMode(false); setPendingFile(null); setScanImageId(null); setScanGps(null); if (pendingPreview) { URL.revokeObjectURL(pendingPreview); setPendingPreview(null); } }}
-            onDiscard={() => { setRawItems(null); setManualEntryMode(false); }}
-          />
-        )}
+        {/* ═══ Section: Next steps ═══ */}
+        <div data-loc="scanner.next-steps" className="md:col-span-1 card rounded-3xl p-6 space-y-4">
+          <h2 className="text-sm font-bold text-white">What happens next</h2>
+          <ol className="space-y-3 text-xs text-slate-400">
+            <li className="flex gap-2"><span className="text-violet-400 font-bold">1.</span><span>Images land in <span className="text-white font-semibold">Staging</span>.</span></li>
+            <li className="flex gap-2"><span className="text-violet-400 font-bold">2.</span><span>Crop each one, then <span className="text-white font-semibold">send for processing</span> (choose free or paid models).</span></li>
+            <li className="flex gap-2"><span className="text-violet-400 font-bold">3.</span><span>Multiple free models read them in parallel; results appear in the <span className="text-white font-semibold">Inbox</span> to review &amp; commit.</span></li>
+          </ol>
+          {lastStaged > 0 && (
+            <div className="text-[11px] text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+              Added {lastStaged} image{lastStaged > 1 ? 's' : ''} to Staging.
+            </div>
+          )}
+          <div className="flex flex-col gap-2 pt-1">
+            <Link href="/staging" className="btn btn-primary rounded-xl py-2.5 text-xs font-semibold text-center">Go to Staging →</Link>
+            <Link href="/inbox" className="btn btn-secondary rounded-xl py-2.5 text-xs font-semibold text-center">Open Inbox</Link>
+          </div>
+        </div>
       </div>
     </div>
   );

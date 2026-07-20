@@ -33,23 +33,15 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024, files: 20 },
 });
 
-// In-memory upload for the synchronous OCR proxy (POST /api/scan): the image is
-// forwarded straight to the OCR service and never persisted, so it doesn't need
-// to touch the uploads volume like the background scan-jobs path does.
-const memoryUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 },
-});
-
-// The OCR service is reached over the internal Docker network. This used to be a
-// Next.js API route in the frontend, but it moved here so the frontend can be
-// built as a static bundle (Capacitor/mobile) with no server — see
-// frontend/next.config.js.
-const OCR_SERVICE_URL = process.env.OCR_SERVICE_URL || 'http://ocr-service:8000';
-
 // Registers an uploaded file as an images row, extracting EXIF GPS when present.
 // GPS failures are non-fatal — most screenshots/scans simply have no location.
-async function registerImage(file: Express.Multer.File): Promise<{ id: number; latitude: number | null; longitude: number | null }> {
+// `originalImageId` links a cropped upload back to the full-res original it was
+// derived from (the scanner's crop-before-OCR path); null for originals/non-crops.
+// (Note: a canvas crop strips EXIF, so GPS must be read from the *original* upload.)
+async function registerImage(
+  file: Express.Multer.File,
+  originalImageId: number | null = null
+): Promise<{ id: number; latitude: number | null; longitude: number | null; original_image_id: number | null }> {
   let latitude: number | null = null;
   let longitude: number | null = null;
   try {
@@ -61,10 +53,30 @@ async function registerImage(file: Express.Multer.File): Promise<{ id: number; l
   } catch { /* no EXIF or unreadable — fine */ }
 
   const result = await db.query(
-    'INSERT INTO images (path, original_filename, latitude, longitude) VALUES ($1, $2, $3, $4) RETURNING id',
-    [file.path, file.originalname, latitude, longitude]
+    'INSERT INTO images (path, original_filename, latitude, longitude, original_image_id) VALUES ($1, $2, $3, $4, $5) RETURNING id',
+    [file.path, file.originalname, latitude, longitude, originalImageId]
   );
-  return { id: result.rows[0].id, latitude, longitude };
+  return { id: result.rows[0].id, latitude, longitude, original_image_id: originalImageId };
+}
+
+// Parses the optional `original_image_id` multipart field and confirms it points
+// at an existing images row. Returns null when absent/blank; throws a 400-tagged
+// error on a malformed id or one that references no image.
+async function parseOriginalImageId(raw: unknown): Promise<number | null> {
+  if (raw === undefined || raw === null || raw === '') return null;
+  const id = parseInt(String(raw), 10);
+  if (!Number.isInteger(id) || id <= 0) {
+    const e: any = new Error('original_image_id must be a positive integer');
+    e.status = 400;
+    throw e;
+  }
+  const exists = await db.query('SELECT 1 FROM images WHERE id = $1', [id]);
+  if (exists.rows.length === 0) {
+    const e: any = new Error('original_image_id does not reference a known image');
+    e.status = 400;
+    throw e;
+  }
+  return id;
 }
 
 app.use(cors());
@@ -89,37 +101,15 @@ app.get('/api/health', async (req: Request, res: Response) => {
   }
 });
 
-// 1b. Synchronous OCR proxy — forwards an uploaded image straight to the OCR
-// service and returns the structured ScanResponse without persisting anything
-// (the /scanner page's "scan now" path). Mirrors the worker's background OCR
-// call. The background/queue path is POST /api/scan-jobs, which does persist.
-app.post('/api/scan', memoryUpload.single('image'), async (req: Request, res: Response) => {
-  if (!req.file) {
-    return res.status(400).json({ error: 'No image file provided' });
-  }
-  try {
-    const form = new FormData();
-    // Wrap the Buffer in a Uint8Array — a raw Node Buffer isn't a valid BlobPart
-    // under current @types/node (its backing store may be a SharedArrayBuffer).
-    const bytes = Uint8Array.from(req.file.buffer);
-    form.append(
-      'image',
-      new Blob([bytes], { type: req.file.mimetype || 'image/jpeg' }),
-      req.file.originalname || 'capture.jpg'
-    );
-    const ocrRes = await fetch(`${OCR_SERVICE_URL}/scan`, { method: 'POST', body: form });
-    const body = await ocrRes.json().catch(() => ({ error: 'OCR service returned a non-JSON response' }));
-    return res.status(ocrRes.status).json(body);
-  } catch (err) {
-    console.error('scan route error:', err);
-    return res.status(502).json({ error: 'OCR service unavailable' });
-  }
-});
+// (The old synchronous OCR proxy `POST /api/scan` was removed — all OCR now goes
+// through the background queue path: POST /api/scan-jobs → /staging → the worker's
+// multi-model pool → /inbox review. See CLAUDE.md "OCR ingestion".)
 
-// 2. Get All Stores
+// 2. Get All Stores (excludes soft-deleted; those still resolve by id in
+// history/receipt joins, they're just hidden from the pickers).
 app.get('/api/stores', async (req: Request, res: Response) => {
   try {
-    const result = await db.query('SELECT * FROM stores ORDER BY name ASC');
+    const result = await db.query('SELECT * FROM stores WHERE deleted_at IS NULL ORDER BY name ASC');
     res.json(result.rows);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -143,6 +133,53 @@ app.post('/api/stores', async (req: Request, res: Response) => {
   }
 });
 
+// Is this price_logs row still a price you could actually pay today?
+//
+// A sale price stops being real the day the sale ends, so every read that
+// surfaces a food's CURRENT price (the dashboard's latest_prices, the efficiency
+// comparison, a meal ingredient's cost) must apply this on top of the usual
+// `deleted_at IS NULL`. A non-sale price and a sale with no recorded end date
+// never expire. Reads that show the PAST — the history table, the audit log —
+// deliberately do NOT apply it: the sale genuinely happened and its record
+// shouldn't vanish.
+//
+// Expects the price_logs table to be aliased `pl`. Defined once here because
+// three separate queries depend on it agreeing; a drift means the dashboard
+// quotes a price the store stopped honouring.
+const ACTIVE_PRICE_SQL = `(pl.is_sale = false OR pl.sale_ends_at IS NULL OR pl.sale_ends_at >= CURRENT_DATE)`;
+
+// The app-wide default sale length, used when a scan finds a sale price with no
+// printed end date. Single row (id = 1), same bootstrap pattern as user_goals.
+const DEFAULT_SALE_DAYS_FALLBACK = 7;
+async function getDefaultSaleDays(client?: any): Promise<number> {
+  const q = client ?? db;
+  try {
+    const r = await q.query('SELECT default_sale_days FROM app_settings WHERE id = 1');
+    const days = r.rows[0]?.default_sale_days;
+    return Number.isInteger(days) && days > 0 ? days : DEFAULT_SALE_DAYS_FALLBACK;
+  } catch {
+    // Settings row missing (fresh DB mid-migration) — don't fail a price write.
+    return DEFAULT_SALE_DAYS_FALLBACK;
+  }
+}
+
+// Resolve the sale end date for a price write. An explicit date from the caller
+// always wins (the inbox lets the user override per item); a sale with no date
+// falls back to today + the configured default, which is the whole point of that
+// setting. A non-sale price never expires, so any date passed with it is dropped.
+async function resolveSaleEndsAt(isSale: boolean, saleEndsAt: unknown, client?: any): Promise<string | null> {
+  if (!isSale) return null;
+  if (saleEndsAt) {
+    const d = new Date(String(saleEndsAt));
+    if (isNaN(d.getTime())) throw Object.assign(new Error('sale_ends_at must be a valid date (YYYY-MM-DD)'), { status: 400 });
+    return String(saleEndsAt).slice(0, 10);
+  }
+  const days = await getDefaultSaleDays(client);
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 // A food's dashboard icon: the user's explicit choice, falling back to the
 // earliest non-deleted image attached to one of its linked price logs. Shared
 // by GET /api/foods and GET /api/foods/:id so the fallback rule can't drift
@@ -159,10 +196,23 @@ const DISPLAY_IMAGE_ID_SQL = `
   ) AS display_image_id
 `;
 
+// A food's tags (many-to-many via food_tags). Shared by the list read and the
+// single-food read so both expose the same `tags` shape.
+const FOOD_TAGS_SQL = `
+  (
+    SELECT json_agg(json_build_object('id', t.id, 'name', t.name) ORDER BY t.name)
+    FROM food_tags ft JOIN tags t ON t.id = ft.tag_id
+    WHERE ft.food_id = f.id
+  ) as tags
+`;
+
 // Appends the shared category/search predicates (used by both the row query
 // and the count query in the paginated GET /api/foods branch) to keep them
 // from drifting apart as filters are added.
-function appendFoodFilters(base: string, params: any[], category: unknown, search: unknown): string {
+// `deleted` selects the archive side of the catalog (the /audit page's Archived
+// tab); by default archived foods are hidden from every catalog read.
+function appendFoodFilters(base: string, params: any[], category: unknown, search: unknown, deleted?: unknown): string {
+  base += deleted ? ' AND f.deleted_at IS NOT NULL' : ' AND f.deleted_at IS NULL';
   if (category) {
     params.push(category);
     base += ` AND f.category = $${params.length}`;
@@ -176,18 +226,18 @@ function appendFoodFilters(base: string, params: any[], category: unknown, searc
 
 // 4. Get All Foods (with latest prices)
 app.get('/api/foods', async (req: Request, res: Response) => {
-  const { category, search } = req.query;
+  const { category, search, deleted } = req.query;
   try {
     let queryText = `
       SELECT f.*,
         (
           SELECT json_agg(prices)
           FROM (
-            SELECT pl.price, pl.unit_price, pl.amount, pl.amount_unit, pl.scraped_at, pl.is_sale, s.name as store_name, s.id as store_id
+            SELECT pl.price, pl.unit_price, pl.amount, pl.amount_unit, pl.scraped_at, pl.is_sale, pl.sale_ends_at, s.name as store_name, s.id as store_id
             FROM price_logs pl
             JOIN food_prices fp ON fp.price_log_id = pl.id
             JOIN stores s ON pl.store_id = s.id
-            WHERE fp.food_id = f.id AND pl.deleted_at IS NULL
+            WHERE fp.food_id = f.id AND pl.deleted_at IS NULL AND ${ACTIVE_PRICE_SQL}
             ORDER BY pl.scraped_at DESC
             LIMIT 3
           ) prices
@@ -196,6 +246,7 @@ app.get('/api/foods', async (req: Request, res: Response) => {
           SELECT json_agg(json_build_object('id', fa.id, 'alias', fa.alias) ORDER BY fa.id)
           FROM food_aliases fa WHERE fa.food_id = f.id
         ) as aliases,
+        ${FOOD_TAGS_SQL},
         (
           SELECT row_to_json(fn) FROM food_nutrition fn
           JOIN food_macros fm ON fm.nutrition_id = fn.id
@@ -207,7 +258,7 @@ app.get('/api/foods', async (req: Request, res: Response) => {
       WHERE 1=1
     `;
     const params: any[] = [];
-    queryText = appendFoodFilters(queryText, params, category, search);
+    queryText = appendFoodFilters(queryText, params, category, search, deleted);
 
     queryText += ' ORDER BY f.name ASC';
 
@@ -221,12 +272,12 @@ app.get('/api/foods', async (req: Request, res: Response) => {
       const pagedQuery = queryText + ` LIMIT $${pagedParams.length - 1} OFFSET $${pagedParams.length}`;
 
       const countParams: any[] = [];
-      const countQuery = appendFoodFilters('SELECT COUNT(*)::int AS count FROM foods f WHERE 1=1', countParams, category, search);
+      const countQuery = appendFoodFilters('SELECT COUNT(*)::int AS count FROM foods f WHERE 1=1', countParams, category, search, deleted);
 
       const [rowsResult, countResult, categoriesResult] = await Promise.all([
         db.query(pagedQuery, pagedParams),
         db.query(countQuery, countParams),
-        db.query(`SELECT DISTINCT category FROM foods WHERE category IS NOT NULL ORDER BY category`),
+        db.query(`SELECT DISTINCT category FROM foods WHERE category IS NOT NULL AND deleted_at IS NULL ORDER BY category`),
       ]);
 
       res.json({
@@ -265,25 +316,386 @@ app.post('/api/foods', async (req: Request, res: Response) => {
     );
     res.status(201).json(result.rows[0]);
   } catch (err: any) {
+    // barcode is UNIQUE — a clashing scan should link to the existing food, not
+    // create a duplicate. Return a clear 409 (not a raw 500) so the UI can say why.
+    if (err.code === '23505') {
+      return res.status(409).json({ error: `A food with barcode "${barcode}" already exists — link the price to it instead of creating a duplicate.` });
+    }
     res.status(500).json({ error: err.message });
   }
 });
 
+// 5a. Bulk catalog audit actions (the /audit page). `archive` soft-deletes foods
+// out of every catalog read (the scrapers log non-food — electronics, luggage —
+// from Costco flyer posts); `restore` brings them back; `category` recategorizes.
+// Not audited (audit_log revert only supports price_log) — archive/restore IS the
+// recovery path, which is why this never hard-deletes.
+app.post('/api/foods/bulk', async (req: Request, res: Response) => {
+  const { ids, action, category } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'ids must be a non-empty array' });
+  }
+  const parsed = ids.map((n: any) => parseInt(n)).filter((n: number) => Number.isInteger(n));
+  if (parsed.length === 0) return res.status(400).json({ error: 'ids must contain integers' });
+  try {
+    let result;
+    if (action === 'archive') {
+      result = await db.query(
+        'UPDATE foods SET deleted_at = now() WHERE id = ANY($1::int[]) AND deleted_at IS NULL RETURNING id',
+        [parsed]
+      );
+    } else if (action === 'restore') {
+      result = await db.query(
+        'UPDATE foods SET deleted_at = NULL WHERE id = ANY($1::int[]) AND deleted_at IS NOT NULL RETURNING id',
+        [parsed]
+      );
+    } else if (action === 'category') {
+      if (!category || !String(category).trim()) {
+        return res.status(400).json({ error: 'category is required for action=category' });
+      }
+      result = await db.query(
+        'UPDATE foods SET category = $2 WHERE id = ANY($1::int[]) RETURNING id',
+        [parsed, String(category).trim()]
+      );
+    } else if (action === 'tag' || action === 'untag') {
+      // Apply/remove the SAME tags across every selected food.
+      const tagIds = Array.isArray(req.body.tag_ids)
+        ? req.body.tag_ids.map((n: any) => parseInt(n)).filter((n: number) => Number.isInteger(n))
+        : [];
+      if (tagIds.length === 0) return res.status(400).json({ error: 'tag_ids must be a non-empty array' });
+      if (action === 'tag') {
+        result = await db.query(
+          `INSERT INTO food_tags (food_id, tag_id)
+           SELECT f, t FROM unnest($1::int[]) f CROSS JOIN unnest($2::int[]) t
+           ON CONFLICT DO NOTHING RETURNING food_id AS id`,
+          [parsed, tagIds]
+        );
+      } else {
+        result = await db.query(
+          'DELETE FROM food_tags WHERE food_id = ANY($1::int[]) AND tag_id = ANY($2::int[]) RETURNING food_id AS id',
+          [parsed, tagIds]
+        );
+      }
+    } else {
+      return res.status(400).json({ error: "action must be 'archive', 'restore', 'category', 'tag' or 'untag'" });
+    }
+    res.json({ action, affected: result.rows.length, ids: result.rows.map((r: any) => r.id) });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5a-2. Merge duplicate foods into one survivor (the /audit "merge 3 pork
+// tenderloins into one" case). Repoints every reference from the source foods onto
+// the target — price links, nutrition links, aliases, tags, meal ingredients and
+// diary history — then soft-deletes the sources. Not audited (like /api/foods/bulk);
+// the soft-deleted sources are the trace, though their data has moved to the survivor.
+app.post('/api/foods/merge', async (req: Request, res: Response) => {
+  const targetId = parseInt(req.body?.target_id);
+  if (!Number.isInteger(targetId)) return res.status(400).json({ error: 'target_id is required' });
+  const sourceIds = Array.isArray(req.body?.source_ids)
+    ? req.body.source_ids.map((n: any) => parseInt(n)).filter((n: number) => Number.isInteger(n) && n !== targetId)
+    : [];
+  if (sourceIds.length === 0) return res.status(400).json({ error: 'source_ids must contain at least one other food' });
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const target = await client.query('SELECT id, name FROM foods WHERE id = $1', [targetId]);
+    if (target.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'target food not found' }); }
+
+    // Keep the survivor matching scans of the merged products: add each source's
+    // primary name, then its aliases, as aliases of the target (deduped).
+    await client.query(
+      `INSERT INTO food_aliases (food_id, alias)
+       SELECT $1, f.name FROM foods f WHERE f.id = ANY($2::int[])
+       ON CONFLICT (food_id, lower(alias)) DO NOTHING`,
+      [targetId, sourceIds]
+    );
+    await client.query(
+      `INSERT INTO food_aliases (food_id, alias)
+       SELECT $1, fa.alias FROM food_aliases fa WHERE fa.food_id = ANY($2::int[])
+       ON CONFLICT (food_id, lower(alias)) DO NOTHING`,
+      [targetId, sourceIds]
+    );
+    await client.query('DELETE FROM food_aliases WHERE food_id = ANY($1::int[])', [sourceIds]);
+
+    // Price + nutrition links (M:N) and tags: union onto the target, drop source rows.
+    await client.query(
+      `INSERT INTO food_prices (food_id, price_log_id)
+       SELECT $1, fp.price_log_id FROM food_prices fp WHERE fp.food_id = ANY($2::int[])
+       ON CONFLICT DO NOTHING`,
+      [targetId, sourceIds]
+    );
+    await client.query('DELETE FROM food_prices WHERE food_id = ANY($1::int[])', [sourceIds]);
+    await client.query(
+      `INSERT INTO food_macros (food_id, nutrition_id)
+       SELECT $1, fm.nutrition_id FROM food_macros fm WHERE fm.food_id = ANY($2::int[])
+       ON CONFLICT DO NOTHING`,
+      [targetId, sourceIds]
+    );
+    await client.query('DELETE FROM food_macros WHERE food_id = ANY($1::int[])', [sourceIds]);
+    await client.query(
+      `INSERT INTO food_tags (food_id, tag_id)
+       SELECT $1, ft.tag_id FROM food_tags ft WHERE ft.food_id = ANY($2::int[])
+       ON CONFLICT DO NOTHING`,
+      [targetId, sourceIds]
+    );
+    await client.query('DELETE FROM food_tags WHERE food_id = ANY($1::int[])', [sourceIds]);
+
+    // Repoint recipe ingredients + diary history so they follow the survivor.
+    await client.query('UPDATE meal_ingredients SET food_id = $1 WHERE food_id = ANY($2::int[])', [targetId, sourceIds]);
+    await client.query('UPDATE consumption_logs SET food_id = $1 WHERE food_id = ANY($2::int[])', [targetId, sourceIds]);
+    // Repoint the price_logs origin owner (audit-log join reads pl.food_id) so
+    // history resolves to the survivor. food_nutrition.food_id is left as-is — it's
+    // UNIQUE, and the profile is already linked to the target via food_macros above.
+    await client.query('UPDATE price_logs SET food_id = $1 WHERE food_id = ANY($2::int[])', [targetId, sourceIds]);
+
+    // Soft-delete the sources (never hard-delete a food — same convention as bulk archive).
+    const archived = await client.query(
+      'UPDATE foods SET deleted_at = now() WHERE id = ANY($1::int[]) AND deleted_at IS NULL RETURNING id',
+      [sourceIds]
+    );
+    await client.query('COMMIT');
+    const full = await db.query(SINGLE_FOOD_SQL, [targetId]);
+    res.json({ target: full.rows[0], merged: archived.rows.length });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 5a-3. LLM duplicate-finder for /audit's "Find duplicates". Proposes clusters of
+// foods that are really the same product; never merges (the user reviews each group,
+// picks a survivor, and applies via POST /api/foods/merge — same human-in-the-loop
+// rule as OCR / auto-tag / meal drafting). Uses MERGE_MODEL (falls back to MEAL_MODEL).
+const MERGE_SUGGEST_MAX_FOODS = 60;
+app.post('/api/foods/merge-suggestions', async (req: Request, res: Response) => {
+  const foodIds = Array.isArray(req.body?.food_ids)
+    ? req.body.food_ids.map((n: any) => parseInt(n)).filter((n: number) => Number.isInteger(n))
+    : [];
+  if (foodIds.length === 0) return res.status(400).json({ error: 'food_ids must be a non-empty array' });
+  if (foodIds.length > MERGE_SUGGEST_MAX_FOODS) {
+    return res.status(400).json({ error: `Send at most ${MERGE_SUGGEST_MAX_FOODS} foods per duplicate-scan batch (got ${foodIds.length}).` });
+  }
+  try {
+    const foods = await db.query(
+      'SELECT id, name, category, barcode FROM foods WHERE id = ANY($1::int[]) AND deleted_at IS NULL',
+      [foodIds]
+    );
+    if (foods.rows.length < 2) return res.json({ groups: [], model: process.env.MERGE_MODEL || process.env.MEAL_MODEL || null });
+
+    const system = [
+      'You find duplicate grocery-catalog items — different rows that are really the SAME product.',
+      'You are given ITEMS (id + name + category + barcode).',
+      'Group ids that refer to the same underlying product, ignoring brand/store/size wording, packaging, or minor spelling.',
+      'Only group items you are confident are the same product. A group needs at least two ids. Most items belong to no group.',
+      'Never put an id in more than one group. Only use ids from the list, copied exactly.',
+      'Respond ONLY with JSON: {"groups":[{"food_ids":[<id>,...],"reason":"<short why>"}]}',
+    ].join(' ');
+    const user = JSON.stringify({ items: foods.rows.map((f: any) => ({ id: f.id, name: f.name, category: f.category, barcode: f.barcode })) });
+
+    const raw = await chatJson(system, user, process.env.MERGE_MODEL);
+
+    // Validate hard: keep only known ids, no id in two groups, groups of ≥2.
+    const known = new Set<number>(foods.rows.map((f: any) => f.id));
+    const nameById = new Map<number, string>(foods.rows.map((f: any) => [f.id, f.name]));
+    const seen = new Set<number>();
+    const groups: { food_ids: number[]; foods: { id: number; name: string }[]; reason: string | null }[] = [];
+    for (const g of Array.isArray(raw?.groups) ? raw.groups : []) {
+      const ids: number[] = [];
+      for (const x of Array.isArray(g?.food_ids) ? g.food_ids : []) {
+        const id = parseInt(x);
+        if (known.has(id) && !seen.has(id) && ids.indexOf(id) === -1) ids.push(id);
+      }
+      if (ids.length < 2) continue;
+      for (const id of ids) seen.add(id);
+      groups.push({
+        food_ids: ids,
+        foods: ids.map((id) => ({ id, name: nameById.get(id)! })),
+        reason: typeof g?.reason === 'string' ? g.reason : null,
+      });
+    }
+    res.json({ groups, model: process.env.MERGE_MODEL || process.env.MEAL_MODEL || null });
+  } catch (err: any) {
+    if (err instanceof LlmError) return res.status(err.status).json({ error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Tags (many-to-many labels on foods; managed from /audit) ─────────────────
+
+// 5b. List tags with how many (non-archived) foods carry each.
+app.get('/api/tags', async (req: Request, res: Response) => {
+  try {
+    const result = await db.query(
+      `SELECT t.id, t.name,
+              (SELECT COUNT(*)::int FROM food_tags ft
+               JOIN foods f ON f.id = ft.food_id
+               WHERE ft.tag_id = t.id AND f.deleted_at IS NULL) AS food_count
+       FROM tags t ORDER BY t.name`
+    );
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5c. Create a tag. Idempotent by (case-insensitive) name — re-creating an
+// existing tag returns it rather than 409-ing, so the inline "new tag" box in
+// the audit UI can't fail on a duplicate.
+app.post('/api/tags', async (req: Request, res: Response) => {
+  const name = String(req.body?.name ?? '').trim();
+  if (!name) return res.status(400).json({ error: 'name is required' });
+  if (name.length > 60) return res.status(400).json({ error: 'name must be 60 characters or fewer' });
+  try {
+    const existing = await db.query('SELECT id, name FROM tags WHERE lower(name) = lower($1)', [name]);
+    if (existing.rows.length > 0) return res.status(200).json({ ...existing.rows[0], food_count: 0, existed: true });
+    const result = await db.query('INSERT INTO tags (name) VALUES ($1) RETURNING id, name', [name]);
+    res.status(201).json({ ...result.rows[0], food_count: 0 });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5d. Delete a tag (its food_tags links cascade).
+app.delete('/api/tags/:id', async (req: Request, res: Response) => {
+  try {
+    const result = await db.query('DELETE FROM tags WHERE id = $1 RETURNING id', [parseInt(req.params.id)]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'tag not found' });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 5e. Apply per-food tag assignments (what the /audit page calls to commit a
+// reviewed auto-tag draft). Unlike bulk tag/untag, each food gets its own set.
+app.post('/api/foods/apply-tags', async (req: Request, res: Response) => {
+  const assignments = req.body?.assignments;
+  if (!Array.isArray(assignments) || assignments.length === 0) {
+    return res.status(400).json({ error: 'assignments must be a non-empty array' });
+  }
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    let linked = 0;
+    for (const a of assignments) {
+      const foodId = parseInt(a?.food_id);
+      const tagIds = Array.isArray(a?.tag_ids)
+        ? a.tag_ids.map((n: any) => parseInt(n)).filter((n: number) => Number.isInteger(n))
+        : [];
+      if (!Number.isInteger(foodId) || tagIds.length === 0) continue;
+      const r = await client.query(
+        `INSERT INTO food_tags (food_id, tag_id)
+         SELECT $1, t FROM unnest($2::int[]) t ON CONFLICT DO NOTHING RETURNING tag_id`,
+        [foodId, tagIds]
+      );
+      linked += r.rows.length;
+    }
+    await client.query('COMMIT');
+    res.json({ linked });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 5f. AI auto-tagger: ask an LLM which of the CHOSEN tags fit each of the
+// CHOSEN foods. Returns an **unsaved draft** — the user reviews it on /audit and
+// applies via POST /api/foods/apply-tags. Same human-in-the-loop rule as OCR and
+// AI meal drafting: the model never writes to the catalog.
+// Capped because free models have small contexts and get flaky on long lists.
+const AUTO_TAG_MAX_FOODS = 50;
+app.post('/api/foods/auto-tag', async (req: Request, res: Response) => {
+  const foodIds = Array.isArray(req.body?.food_ids)
+    ? req.body.food_ids.map((n: any) => parseInt(n)).filter((n: number) => Number.isInteger(n))
+    : [];
+  const tagIds = Array.isArray(req.body?.tag_ids)
+    ? req.body.tag_ids.map((n: any) => parseInt(n)).filter((n: number) => Number.isInteger(n))
+    : [];
+  if (foodIds.length === 0) return res.status(400).json({ error: 'food_ids must be a non-empty array' });
+  if (tagIds.length === 0) return res.status(400).json({ error: 'tag_ids must be a non-empty array' });
+  if (foodIds.length > AUTO_TAG_MAX_FOODS) {
+    return res.status(400).json({ error: `Select at most ${AUTO_TAG_MAX_FOODS} items per auto-tag run (got ${foodIds.length}).` });
+  }
+  try {
+    const [foods, tags] = await Promise.all([
+      db.query('SELECT id, name, category FROM foods WHERE id = ANY($1::int[])', [foodIds]),
+      db.query('SELECT id, name FROM tags WHERE id = ANY($1::int[])', [tagIds]),
+    ]);
+    if (foods.rows.length === 0) return res.status(400).json({ error: 'no matching foods' });
+    if (tags.rows.length === 0) return res.status(400).json({ error: 'no matching tags' });
+
+    const tagNames: string[] = tags.rows.map((t: any) => t.name);
+    const system = [
+      'You label grocery-catalog items with tags.',
+      'You are given a list of ITEMS (id + name + category) and a list of allowed TAGS.',
+      'For each item, choose every tag from the allowed list that applies. An item may get zero, one, or many tags.',
+      'Only ever use tags from the allowed list, copied exactly. Never invent tags.',
+      'Respond ONLY with JSON: {"assignments":[{"id":<item id>,"tags":["<tag>",...]}]}',
+      'Include an entry for every item, using an empty array when no tag applies.',
+    ].join(' ');
+    const user = JSON.stringify({
+      allowed_tags: tagNames,
+      hint: typeof req.body?.hint === 'string' ? req.body.hint.slice(0, 400) : undefined,
+      items: foods.rows.map((f: any) => ({ id: f.id, name: f.name, category: f.category })),
+    });
+
+    let usedModel: string | null = null;
+    const raw = await chatJson(system, user, process.env.TAG_MODEL, (m) => { usedModel = m; });
+
+    // Validate hard: keep only known food ids and map tag names back to ids,
+    // dropping anything the model invented.
+    const byName = new Map<string, number>();
+    for (const t of tags.rows) byName.set(String(t.name).toLowerCase(), t.id);
+    const knownFood = new Map<number, string>();
+    for (const f of foods.rows) knownFood.set(f.id, f.name);
+
+    const suggestions: { food_id: number; food_name: string; tag_ids: number[] }[] = [];
+    for (const a of Array.isArray(raw?.assignments) ? raw.assignments : []) {
+      const fid = parseInt(a?.id);
+      if (!knownFood.has(fid)) continue;
+      const ids: number[] = [];
+      for (const n of Array.isArray(a?.tags) ? a.tags : []) {
+        const tid = byName.get(String(n).trim().toLowerCase());
+        if (tid !== undefined && ids.indexOf(tid) === -1) ids.push(tid);
+      }
+      suggestions.push({ food_id: fid, food_name: knownFood.get(fid)!, tag_ids: ids });
+    }
+    res.json({ suggestions, model: usedModel });
+  } catch (err: any) {
+    if (err instanceof LlmError) return res.status(err.status).json({ error: err.message });
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Single food with its aliases + nutrition + display image — the shape every
+// food read returns. Reused by GET /api/foods/:id and POST /api/foods/from-nutrition.
+const SINGLE_FOOD_SQL = `
+  SELECT f.*,
+    (SELECT json_agg(json_build_object('id', fa.id, 'alias', fa.alias) ORDER BY fa.id)
+     FROM food_aliases fa WHERE fa.food_id = f.id) as aliases,
+    ${FOOD_TAGS_SQL},
+    (SELECT row_to_json(n) FROM (
+       SELECT fn.*,
+         (SELECT COUNT(*)::int FROM food_macros fm2 WHERE fm2.nutrition_id = fn.id) AS shared_food_count
+       FROM food_nutrition fn
+       JOIN food_macros fm ON fm.nutrition_id = fn.id
+       WHERE fm.food_id = f.id
+       ORDER BY (fn.food_id = f.id) DESC, fn.id LIMIT 1
+     ) n) as nutrition,
+    ${DISPLAY_IMAGE_ID_SQL}
+  FROM foods f WHERE f.id = $1`;
+
 // 5b. Get a single food with its aliases + nutrition (same shape as the list).
 app.get('/api/foods/:id', async (req: Request, res: Response) => {
   try {
-    const result = await db.query(
-      `SELECT f.*,
-         (SELECT json_agg(json_build_object('id', fa.id, 'alias', fa.alias) ORDER BY fa.id)
-          FROM food_aliases fa WHERE fa.food_id = f.id) as aliases,
-         (SELECT row_to_json(fn) FROM food_nutrition fn
-          JOIN food_macros fm ON fm.nutrition_id = fn.id
-          WHERE fm.food_id = f.id
-          ORDER BY (fn.food_id = f.id) DESC, fn.id LIMIT 1) as nutrition,
-         ${DISPLAY_IMAGE_ID_SQL}
-       FROM foods f WHERE f.id = $1`,
-      [parseInt(req.params.id)]
-    );
+    const result = await db.query(SINGLE_FOOD_SQL, [parseInt(req.params.id)]);
     if (result.rows.length === 0) return res.status(404).json({ error: 'Food not found' });
     res.json(result.rows[0]);
   } catch (err: any) {
@@ -364,7 +776,7 @@ app.get('/api/foods/:id/prices', async (req: Request, res: Response) => {
 // 6b. Add Food Price Log manually (e.g. from OCR scanner)
 app.post('/api/foods/:id/prices', async (req: Request, res: Response) => {
   const { id } = req.params;
-  const { store_id, price, is_sale, amount, amount_unit, source, image_id } = req.body;
+  const { store_id, price, is_sale, amount, amount_unit, source, image_id, sale_ends_at } = req.body;
   if (!store_id || price === undefined) {
     return res.status(400).json({ error: 'store_id and price are required' });
   }
@@ -374,9 +786,12 @@ app.post('/api/foods/:id/prices', async (req: Request, res: Response) => {
     // Normalize to a price per base unit (per gram / ml / each) when the caller
     // supplies an amount + recognizable unit; otherwise leave unit_price null.
     const normalized = computeUnitPrice(Number(price), amount, amount_unit);
+    // A sale with no end date gets the configured default, so it expires on its
+    // own instead of being quoted forever (see resolveSaleEndsAt).
+    const saleEndsAt = await resolveSaleEndsAt(!!is_sale, sale_ends_at, client);
     const result = await client.query(
-      `INSERT INTO price_logs (food_id, store_id, price, amount, amount_unit, unit_price, is_sale, source, image_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+      `INSERT INTO price_logs (food_id, store_id, price, amount, amount_unit, unit_price, is_sale, source, image_id, sale_ends_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
       [
         parseInt(id),
         parseInt(store_id),
@@ -387,6 +802,7 @@ app.post('/api/foods/:id/prices', async (req: Request, res: Response) => {
         is_sale || false,
         source || 'manual',
         image_id ?? null,
+        saleEndsAt,
       ]
     );
     const row = result.rows[0];
@@ -400,7 +816,7 @@ app.post('/api/foods/:id/prices', async (req: Request, res: Response) => {
     res.status(201).json(row);
   } catch (err: any) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   } finally {
     client.release();
   }
@@ -534,7 +950,7 @@ app.get('/api/prices/efficiency', async (req: Request, res: Response) => {
           s.name as store_name
         FROM price_logs pl
         JOIN stores s ON pl.store_id = s.id
-        WHERE pl.deleted_at IS NULL
+        WHERE pl.deleted_at IS NULL AND ${ACTIVE_PRICE_SQL}
         ORDER BY pl.food_id, pl.store_id, pl.scraped_at DESC
       ),
       spreads AS (
@@ -567,6 +983,7 @@ app.get('/api/prices/efficiency', async (req: Request, res: Response) => {
         ) as worst_store
       FROM spreads s
       JOIN foods f ON s.food_id = f.id
+      WHERE f.deleted_at IS NULL
       ORDER BY savings_percent DESC;
     `);
     res.json(result.rows);
@@ -578,6 +995,8 @@ app.get('/api/prices/efficiency', async (req: Request, res: Response) => {
 // ── Price-log history, edit/delete, audit & revert ─────────────────────────
 
 // Columns a client may edit on a price log.
+// `sale_ends_at` is deliberately NOT here — it's derived by resolveSaleEndsAt in
+// the update handler so it can't be left contradicting is_sale.
 const EDITABLE_PRICE_FIELDS = ['store_id', 'price', 'amount', 'amount_unit', 'is_sale', 'scraped_at'] as const;
 
 // 9. List all price logs (history), joined to food + store names.
@@ -633,14 +1052,22 @@ app.put('/api/price-logs/:id', async (req: Request, res: Response) => {
     // Recompute unit_price from the (possibly changed) price/amount.
     const normalized = computeUnitPrice(Number(next.price), next.amount, next.amount_unit);
     next.unit_price = normalized ? normalized.unitPrice : null;
+    // Keep the sale/expiry pair coherent: clearing is_sale drops the end date,
+    // and turning is_sale ON without one applies the configured default. An
+    // explicitly-sent sale_ends_at (including via the edit form) always wins.
+    next.sale_ends_at = await resolveSaleEndsAt(
+      !!next.is_sale,
+      req.body.sale_ends_at !== undefined ? req.body.sale_ends_at : before.sale_ends_at,
+      client
+    );
 
     const updated = await client.query(
       `UPDATE price_logs
        SET store_id = $1, price = $2, amount = $3, amount_unit = $4,
-           unit_price = $5, is_sale = $6, scraped_at = $7
-       WHERE id = $8 RETURNING *`,
+           unit_price = $5, is_sale = $6, scraped_at = $7, sale_ends_at = $8
+       WHERE id = $9 RETURNING *`,
       [next.store_id, next.price, next.amount ?? null, next.amount_unit ?? null,
-       next.unit_price, next.is_sale, next.scraped_at, id]
+       next.unit_price, next.is_sale, next.scraped_at, next.sale_ends_at, id]
     );
     const after = updated.rows[0];
     await recordAudit(client, { entityId: id, action: 'update', before, after });
@@ -733,13 +1160,17 @@ app.post('/api/audit-log/:id/revert', async (req: Request, res: Response) => {
     if (entry.action === 'update') {
       // Restore the pre-update snapshot.
       const b = entry.before_data;
+      // sale_ends_at is restored from the snapshot like every other field; a
+      // snapshot taken before the column existed reverts it to NULL (no expiry),
+      // which matches how those rows already behave.
       const upd = await client.query(
         `UPDATE price_logs
          SET store_id = $1, price = $2, amount = $3, amount_unit = $4,
-             unit_price = $5, is_sale = $6, scraped_at = $7, deleted_at = $8
-         WHERE id = $9 RETURNING *`,
+             unit_price = $5, is_sale = $6, scraped_at = $7, deleted_at = $8, sale_ends_at = $9
+         WHERE id = $10 RETURNING *`,
         [b.store_id, b.price, b.amount ?? null, b.amount_unit ?? null,
-         b.unit_price ?? null, b.is_sale, b.scraped_at, b.deleted_at ?? null, entry.entity_id]
+         b.unit_price ?? null, b.is_sale, b.scraped_at, b.deleted_at ?? null,
+         b.sale_ends_at ?? null, entry.entity_id]
       );
       after = upd.rows[0];
     } else if (entry.action === 'delete') {
@@ -785,21 +1216,21 @@ app.post('/api/scan-jobs', upload.array('images', 20), async (req: Request, res:
   try {
     const created: any[] = [];
     for (const file of files) {
-      // One images row per capture — links the photo to any price logs committed
-      // from it, and carries EXIF GPS for store auto-location.
+      // Stage each upload as its full-res original — cropping happens later on the
+      // /staging page (PUT /api/scan-jobs/:id/image). Staged jobs are NOT enqueued
+      // for OCR until the user sends them for processing (POST /api/scan-jobs/process).
       const image = await registerImage(file);
       const insert = await db.query(
         `INSERT INTO scan_jobs (status, image_path, original_filename, store_id, image_id)
-         VALUES ('queued', $1, $2, $3, $4) RETURNING *`,
+         VALUES ('staged', $1, $2, $3, $4) RETURNING *`,
         [file.path, file.originalname, storeId, image.id]
       );
       const row = insert.rows[0];
-      await addOcrJob(row.id);
       created.push({ id: row.id, status: row.status, original_filename: row.original_filename });
     }
     res.status(201).json({ jobs: created });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -808,19 +1239,26 @@ app.get('/api/scan-jobs', async (req: Request, res: Response) => {
   const { status } = req.query;
   try {
     const params: any[] = [];
-    let where = "WHERE status <> 'discarded'";
+    // Staged jobs live on the /staging page (crop-before-processing), not the
+    // inbox — exclude them from the default view; ?status=staged still returns them.
+    let where = "WHERE status NOT IN ('discarded', 'staged')";
     if (status) {
       params.push(status);
       where = `WHERE status = $${params.length}`;
     }
     const result = await db.query(
       `SELECT j.id, j.status, j.original_filename, j.store_id, s.name AS store_name,
-              j.error, j.created_at, j.processed_at,
+              j.image_id, j.error, j.created_at, j.processed_at,
               CASE WHEN j.result IS NULL THEN NULL ELSE j.result->>'type' END AS result_type,
               CASE
                 WHEN j.result IS NULL THEN 0
                 WHEN j.result->>'type' = 'receipt' THEN jsonb_array_length(COALESCE(j.result->'data'->'items', '[]'::jsonb))
-                WHEN j.result->>'type' = 'price_tag' THEN 1
+                -- price_tag now carries items[] (several tags per photo); rows
+                -- written before that hold ONE flat tag, which still counts as 1.
+                WHEN j.result->>'type' = 'price_tag' THEN
+                  CASE WHEN jsonb_typeof(j.result->'data'->'items') = 'array'
+                       THEN jsonb_array_length(j.result->'data'->'items')
+                       ELSE 1 END
                 ELSE 0
               END AS item_count
        FROM scan_jobs j
@@ -836,10 +1274,13 @@ app.get('/api/scan-jobs', async (req: Request, res: Response) => {
 });
 
 // 16. Full scan job detail (with the raw OCR result + image GPS for review).
+// `original_image_id` is the full-res upload this job's image was cropped from
+// (NULL when it was never cropped) — the inbox shows both side by side so a bad
+// crop is obvious. `j.*` also carries `attempts`, the per-model OCR trace.
 app.get('/api/scan-jobs/:id', async (req: Request, res: Response) => {
   try {
     const result = await db.query(
-      `SELECT j.*, i.latitude, i.longitude
+      `SELECT j.*, i.latitude, i.longitude, i.original_image_id
        FROM scan_jobs j LEFT JOIN images i ON j.image_id = i.id
        WHERE j.id = $1`,
       [parseInt(req.params.id)]
@@ -890,6 +1331,103 @@ app.delete('/api/scan-jobs/:id', async (req: Request, res: Response) => {
   }
 });
 
+// 19a. Send a processed job BACK to /staging so it can be re-cropped and re-run.
+// This is the recovery path for a bad crop: OCR read the wrong region and the
+// inbox result is unusable. Resetting the OCR state (result/attempts/error) and
+// repointing the job at the crop's ORIGINAL means the user re-crops the full
+// photo rather than tightening an already-bad crop. The superseded crop's
+// `images` row is deliberately left in place — images are shared/immutable
+// elsewhere (scrapes, scans, icons), so orphans are an accepted tradeoff.
+app.post('/api/scan-jobs/:id/restage', async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+  try {
+    const cur = await db.query(
+      `SELECT sj.status, sj.image_id, i.original_image_id, o.id AS orig_id, o.path AS orig_path
+       FROM scan_jobs sj
+       LEFT JOIN images i ON i.id = sj.image_id
+       LEFT JOIN images o ON o.id = i.original_image_id
+       WHERE sj.id = $1`,
+      [id]
+    );
+    if (cur.rows.length === 0) return res.status(404).json({ error: 'Scan job not found' });
+    const row = cur.rows[0];
+    if (row.status === 'staged') return res.status(400).json({ error: 'Job is already staged' });
+    if (row.status === 'discarded') return res.status(400).json({ error: 'Discarded jobs cannot be re-staged' });
+    if (row.status === 'queued' || row.status === 'processing') {
+      return res.status(400).json({ error: 'Job is still processing — wait for it to finish' });
+    }
+    // Revert to the uncropped original when this job's image is a crop; a job
+    // that was never cropped just goes back as-is for a first crop.
+    const revertToOriginal = row.orig_id != null && row.orig_path != null;
+    const upd = await db.query(
+      `UPDATE scan_jobs
+       SET status = 'staged', result = NULL, attempts = NULL, error = NULL, processed_at = NULL,
+           image_id = COALESCE($2, image_id), image_path = COALESCE($3, image_path)
+       WHERE id = $1
+       RETURNING id, status, image_id, original_filename, store_id`,
+      [id, revertToOriginal ? row.orig_id : null, revertToOriginal ? row.orig_path : null]
+    );
+    res.json({ ...upd.rows[0], reverted_to_original: revertToOriginal });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 19b. Re-crop a STAGED job's image (from the /staging page). Registers the crop
+// linked to the job's original, then repoints the job (image_id + image_path) at
+// it so the worker OCRs the crop once processed. Only staged jobs may be cropped.
+app.put('/api/scan-jobs/:id/image', upload.single('image'), async (req: Request, res: Response) => {
+  const file = req.file as Express.Multer.File | undefined;
+  if (!file) return res.status(400).json({ error: 'No image uploaded (field name: image)' });
+  const id = parseInt(req.params.id);
+  try {
+    const cur = await db.query(
+      `SELECT sj.status, i.id AS image_id, i.original_image_id
+       FROM scan_jobs sj LEFT JOIN images i ON i.id = sj.image_id WHERE sj.id = $1`,
+      [id]
+    );
+    if (cur.rows.length === 0) return res.status(404).json({ error: 'Scan job not found' });
+    if (cur.rows[0].status !== 'staged') return res.status(400).json({ error: 'Only staged jobs can be cropped' });
+    // Link the crop to the job's TRUE original (follow through if the current image
+    // is itself a crop, so re-cropping never chains crop→crop).
+    const origId = cur.rows[0].image_id ? (cur.rows[0].original_image_id ?? cur.rows[0].image_id) : null;
+    const crop = await registerImage(file, origId);
+    const upd = await db.query(
+      `UPDATE scan_jobs SET image_path = $1, image_id = $2 WHERE id = $3
+       RETURNING id, status, image_id, original_filename, store_id`,
+      [file.path, crop.id, id]
+    );
+    res.status(200).json(upd.rows[0]);
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+// 19c. Send staged jobs for background OCR: staged → queued + enqueue. With `ids`,
+// only those staged jobs are sent; otherwise every staged job. `use_paid` (per
+// batch) records whether the worker's model pool may use paid vision models for
+// these jobs (higher accuracy at token cost) — persisted on each row so the
+// worker reads it when it picks up the job.
+app.post('/api/scan-jobs/process', async (req: Request, res: Response) => {
+  const rawIds = Array.isArray(req.body?.ids) ? req.body.ids : null;
+  const ids = rawIds ? rawIds.map((n: any) => parseInt(n)).filter((n: number) => Number.isInteger(n)) : null;
+  const usePaid = req.body?.use_paid === true || req.body?.use_paid === 'true';
+  try {
+    const rows = ids && ids.length
+      ? (await db.query("SELECT id FROM scan_jobs WHERE status = 'staged' AND id = ANY($1)", [ids])).rows
+      : (await db.query("SELECT id FROM scan_jobs WHERE status = 'staged'")).rows;
+    const processed: number[] = [];
+    for (const r of rows) {
+      await db.query("UPDATE scan_jobs SET status = 'queued', use_paid = $2 WHERE id = $1", [r.id, usePaid]);
+      await addOcrJob(r.id);
+      processed.push(r.id);
+    }
+    res.json({ processed });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Images (scan photo attachments) ─────────────────────────────────────────
 
 // 20. Upload a single image (sync-scan path); returns id + EXIF GPS if present.
@@ -897,10 +1435,14 @@ app.post('/api/images', upload.single('image'), async (req: Request, res: Respon
   const file = req.file as Express.Multer.File | undefined;
   if (!file) return res.status(400).json({ error: 'No image uploaded (field name: image)' });
   try {
-    const image = await registerImage(file);
+    // Optional link to the full-res original: the scanner's crop-before-OCR path
+    // POSTs the original first, then the crop with original_image_id set. Absent
+    // for the icon picker and the worker's flyer images (backward compatible).
+    const originalImageId = await parseOriginalImageId(req.body.original_image_id);
+    const image = await registerImage(file, originalImageId);
     res.status(201).json(image);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   }
 });
 
@@ -1052,6 +1594,91 @@ app.put('/api/stores/:id/location', async (req: Request, res: Response) => {
   }
 });
 
+// 28. How many rows reference a store — shown in the remove-store confirm so the
+// user knows what they're reallocating before they commit to it.
+app.get('/api/stores/:id/usage', async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+  try {
+    const q = await db.query(
+      `SELECT
+         (SELECT count(*) FROM price_logs  WHERE store_id = $1 AND deleted_at IS NULL) AS price_logs,
+         (SELECT count(*) FROM receipts    WHERE store_id = $1 AND deleted_at IS NULL) AS receipts,
+         (SELECT count(*) FROM scan_jobs   WHERE store_id = $1) AS scan_jobs,
+         (SELECT count(*) FROM scrape_jobs WHERE store_id = $1) AS scrape_jobs`,
+      [id]
+    );
+    const r = q.rows[0];
+    res.json({
+      price_logs: Number(r.price_logs), receipts: Number(r.receipts),
+      scan_jobs: Number(r.scan_jobs), scrape_jobs: Number(r.scrape_jobs),
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 29. Remove a store (SOFT delete) and reallocate everything that referenced it.
+// Body `{ reassign_to }`: a store id moves all its rows to that store; null/omitted
+// leaves them unassigned (store_id NULL). Never a hard DELETE — price_logs and
+// scrape_jobs are ON DELETE CASCADE, so a real delete would wipe the store's whole
+// price history. Denormalized `store_name` (receipts/scrape_jobs) follows the new
+// store when reassigning, but is KEPT when unassigning so the record still shows
+// where the spend came from. Not audited — same precedent as /api/foods/merge,
+// which likewise repoints price_logs in bulk. Idempotent (404 once gone).
+app.delete('/api/stores/:id', async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+  const raw = req.body?.reassign_to;
+  const reassignTo = raw == null || raw === '' ? null : parseInt(raw);
+  if (reassignTo != null && !Number.isInteger(reassignTo)) {
+    return res.status(400).json({ error: 'reassign_to must be a store id or null' });
+  }
+  if (reassignTo != null && reassignTo === id) {
+    return res.status(400).json({ error: 'Cannot reassign a store to itself' });
+  }
+
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    const store = await client.query('SELECT id FROM stores WHERE id = $1 AND deleted_at IS NULL', [id]);
+    if (store.rows.length === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Store not found' }); }
+
+    let targetName: string | null = null;
+    if (reassignTo != null) {
+      const t = await client.query('SELECT id, name FROM stores WHERE id = $1 AND deleted_at IS NULL', [reassignTo]);
+      if (t.rows.length === 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'reassign_to store not found' }); }
+      targetName = t.rows[0].name;
+    }
+
+    const priceLogs = await client.query('UPDATE price_logs SET store_id = $2 WHERE store_id = $1', [id, reassignTo]);
+    const scanJobs = await client.query('UPDATE scan_jobs SET store_id = $2 WHERE store_id = $1', [id, reassignTo]);
+    const scrapeJobs = reassignTo != null
+      ? await client.query('UPDATE scrape_jobs SET store_id = $2, store_name = $3 WHERE store_id = $1', [id, reassignTo, targetName])
+      : await client.query('UPDATE scrape_jobs SET store_id = NULL WHERE store_id = $1', [id]);
+    const receipts = reassignTo != null
+      ? await client.query('UPDATE receipts SET store_id = $2, store_name = $3 WHERE store_id = $1', [id, reassignTo, targetName])
+      : await client.query('UPDATE receipts SET store_id = NULL WHERE store_id = $1', [id]);
+
+    await client.query('UPDATE stores SET deleted_at = now() WHERE id = $1', [id]);
+    await client.query('COMMIT');
+    res.json({
+      success: true,
+      id,
+      reassigned_to: reassignTo,
+      moved: {
+        price_logs: priceLogs.rowCount ?? 0,
+        scan_jobs: scanJobs.rowCount ?? 0,
+        scrape_jobs: scrapeJobs.rowCount ?? 0,
+        receipts: receipts.rowCount ?? 0,
+      },
+    });
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
 // ── Calorie tracking: nutrition facts, diary, goals ─────────────────────────
 
 const MEALS = ['breakfast', 'lunch', 'dinner', 'snack'] as const;
@@ -1115,41 +1742,199 @@ app.put('/api/foods/:id/nutrition', async (req: Request, res: Response) => {
     const food = await db.query('SELECT id FROM foods WHERE id = $1', [foodId]);
     if (food.rows.length === 0) return res.status(404).json({ error: 'Food not found' });
 
-    const cols = ['food_id', 'serving_size', 'serving_unit', ...NUTRIENT_FIELDS, 'source'];
-    const values = [foodId, serving_size, serving_unit,
-      ...NUTRIENT_FIELDS.map(f => req.body[f] ?? null), source || 'manual'];
-    const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
-    // Update every column except food_id on conflict; refresh updated_at.
-    const updates = cols.slice(1).map(c => `${c} = EXCLUDED.${c}`).concat('updated_at = now()').join(', ');
+    // Nutrition is shareable: a profile can be linked to several foods via
+    // food_macros. If this food already links one, UPDATE that profile in place
+    // so the edit propagates to every food sharing it (that's the point of
+    // sharing). Only when the food has no linked profile do we create one and
+    // link it. (Sharing happens purely through food_macros — we never insert a
+    // second owned row for the same food_id, so the UNIQUE(food_id) still holds.)
+    const linked = await db.query(
+      `SELECT fn.id FROM food_nutrition fn
+       JOIN food_macros fm ON fm.nutrition_id = fn.id
+       WHERE fm.food_id = $1
+       ORDER BY (fn.food_id = $1) DESC, fn.id LIMIT 1`,
+      [foodId]
+    );
 
-    const result = await db.query(
-      `INSERT INTO food_nutrition (${cols.join(', ')}) VALUES (${placeholders})
-       ON CONFLICT (food_id) DO UPDATE SET ${updates}
-       RETURNING *`,
-      values
-    );
-    // Link the nutrition profile to this food in the many-to-many table.
-    await db.query(
-      'INSERT INTO food_macros (food_id, nutrition_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-      [foodId, result.rows[0].id]
-    );
+    let result;
+    if (linked.rows.length > 0) {
+      const setCols = ['serving_size', 'serving_unit', ...NUTRIENT_FIELDS, 'source'];
+      const setValues = [serving_size, serving_unit,
+        ...NUTRIENT_FIELDS.map(f => req.body[f] ?? null), source || 'manual'];
+      const setClause = setCols.map((c, i) => `${c} = $${i + 1}`).concat('updated_at = now()').join(', ');
+      result = await db.query(
+        `UPDATE food_nutrition SET ${setClause} WHERE id = $${setCols.length + 1} RETURNING *`,
+        [...setValues, linked.rows[0].id]
+      );
+    } else {
+      const cols = ['food_id', 'serving_size', 'serving_unit', ...NUTRIENT_FIELDS, 'source'];
+      const values = [foodId, serving_size, serving_unit,
+        ...NUTRIENT_FIELDS.map(f => req.body[f] ?? null), source || 'manual'];
+      const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
+      // A food may own a profile it isn't linked to (legacy back-compat); keep the
+      // upsert-on-food_id so we reuse it instead of erroring on the UNIQUE.
+      const updates = cols.slice(1).map(c => `${c} = EXCLUDED.${c}`).concat('updated_at = now()').join(', ');
+      result = await db.query(
+        `INSERT INTO food_nutrition (${cols.join(', ')}) VALUES (${placeholders})
+         ON CONFLICT (food_id) DO UPDATE SET ${updates}
+         RETURNING *`,
+        values
+      );
+      await db.query(
+        'INSERT INTO food_macros (food_id, nutrition_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [foodId, result.rows[0].id]
+      );
+    }
     res.json(result.rows[0]);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// 30. Remove a food's nutrition facts. Unlinks the profile from this food; if
-// the food owns the profile, deletes it (cascading its links). Diary snapshots
-// are unaffected.
+// 29a. Share nutrition across two different products: point this food at the
+// nutrition profile another food already uses (the user's "two different items,
+// same underlying facts" case). Unlinks whatever this food currently uses and
+// links the source food's effective profile; a profile this food *owned* and now
+// nobody links is garbage-collected so we don't leave orphans. From then on,
+// editing either food's facts updates the one shared profile.
+app.post('/api/foods/:id/nutrition/copy-from/:sourceId', async (req: Request, res: Response) => {
+  const foodId = parseInt(req.params.id);
+  const sourceId = parseInt(req.params.sourceId);
+  if (!Number.isInteger(foodId) || !Number.isInteger(sourceId)) {
+    return res.status(400).json({ error: 'invalid food ids' });
+  }
+  if (foodId === sourceId) return res.status(400).json({ error: 'Pick a different food to share nutrition from' });
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    // The source food's effective profile (owned-first, same ordering as reads).
+    const src = await client.query(
+      `SELECT fn.id FROM food_nutrition fn
+       JOIN food_macros fm ON fm.nutrition_id = fn.id
+       WHERE fm.food_id = $1 ORDER BY (fn.food_id = $1) DESC, fn.id LIMIT 1`,
+      [sourceId]
+    );
+    if (src.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'That food has no nutrition facts to share' });
+    }
+    const nutritionId = src.rows[0].id;
+
+    // Unlink this food's current profile(s), remembering them for GC.
+    const current = await client.query('SELECT nutrition_id FROM food_macros WHERE food_id = $1', [foodId]);
+    await client.query('DELETE FROM food_macros WHERE food_id = $1', [foodId]);
+    await client.query(
+      'INSERT INTO food_macros (food_id, nutrition_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [foodId, nutritionId]
+    );
+    // Drop any profile this food just unlinked that nobody else links now.
+    for (const row of current.rows) {
+      if (row.nutrition_id === nutritionId) continue;
+      const still = await client.query('SELECT 1 FROM food_macros WHERE nutrition_id = $1 LIMIT 1', [row.nutrition_id]);
+      if (still.rows.length === 0) await client.query('DELETE FROM food_nutrition WHERE id = $1', [row.nutrition_id]);
+    }
+    await client.query('COMMIT');
+    const full = await db.query(SINGLE_FOOD_SQL, [foodId]);
+    res.json(full.rows[0]);
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// 30. Remove a food's nutrition facts. Unlinks the profile(s) from this food and
+// deletes any that no other food still shares (a profile linked by another food
+// is left intact — see the sharing model above). Diary snapshots are unaffected.
 app.delete('/api/foods/:id/nutrition', async (req: Request, res: Response) => {
   const foodId = parseInt(req.params.id);
   try {
+    const linked = await db.query('SELECT nutrition_id FROM food_macros WHERE food_id = $1', [foodId]);
     await db.query('DELETE FROM food_macros WHERE food_id = $1', [foodId]);
-    await db.query('DELETE FROM food_nutrition WHERE food_id = $1', [foodId]);
+    for (const row of linked.rows) {
+      const still = await db.query('SELECT 1 FROM food_macros WHERE nutrition_id = $1 LIMIT 1', [row.nutrition_id]);
+      if (still.rows.length === 0) await db.query('DELETE FROM food_nutrition WHERE id = $1', [row.nutrition_id]);
+    }
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// 30b. Create a catalog food straight from a nutrition candidate (USDA/manual) with
+// NO price required. Called by the meals builder's USDA tab in **save-on-pick** mode
+// (only the item the user actually adds to a recipe is saved — a search no longer
+// bulk-adds every result; the old `autoSave` path in NutritionSearch is retired). If
+// the barcode already matches a food, reuses it and (re)attaches the nutrition rather
+// than 409-ing on the UNIQUE barcode. Returns the food in the standard single-food shape.
+app.post('/api/foods/from-nutrition', async (req: Request, res: Response) => {
+  const { name, barcode, category, unit, serving_size, serving_unit, calories, source } = req.body;
+  if (!name || !String(name).trim()) return res.status(400).json({ error: 'name is required' });
+  if (!(Number(serving_size) > 0) || !serving_unit || calories === undefined || calories === null) {
+    return res.status(400).json({ error: 'serving_size (> 0), serving_unit and calories are required' });
+  }
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Reuse an existing food when the barcode already exists (avoids a duplicate-
+    // barcode violation); otherwise create a new one. No price is created.
+    let foodId: number | null = null;
+    if (barcode) {
+      const existing = await client.query('SELECT id FROM foods WHERE barcode = $1', [String(barcode)]);
+      if (existing.rows.length > 0) foodId = existing.rows[0].id;
+    }
+    // No barcode to dedup on (Foundation/SR foods): reuse an existing same-name
+    // food so repeated searches (esp. with auto-save) don't pile up duplicates —
+    // but only when that food has no nutrition or its nutrition is USDA-sourced,
+    // so we never clobber a hand-entered/scanned food's facts.
+    if (foodId == null && !barcode) {
+      const byName = await client.query(
+        `SELECT f.id, fn.source AS nutrition_source
+         FROM foods f LEFT JOIN food_nutrition fn ON fn.food_id = f.id
+         WHERE lower(f.name) = lower($1) ORDER BY f.id LIMIT 1`,
+        [String(name).trim()]
+      );
+      if (byName.rows.length > 0 && (byName.rows[0].nutrition_source == null || byName.rows[0].nutrition_source === 'usda')) {
+        foodId = byName.rows[0].id;
+      }
+    }
+    if (foodId == null) {
+      const created = await client.query(
+        'INSERT INTO foods (name, barcode, category, unit) VALUES ($1, $2, $3, $4) RETURNING id',
+        [String(name).trim(), barcode || null, category || 'Other', unit || serving_unit || 'each']
+      );
+      foodId = created.rows[0].id;
+    }
+    // Deliberately re-adding a food that was archived on /audit un-archives it —
+    // otherwise the save would silently land on a food hidden from every list.
+    // No-op for a freshly inserted food.
+    await client.query('UPDATE foods SET deleted_at = NULL WHERE id = $1 AND deleted_at IS NOT NULL', [foodId]);
+
+    // Upsert the per-serving nutrition and link it in the M:N table (same as
+    // PUT /api/foods/:id/nutrition).
+    const cols = ['food_id', 'serving_size', 'serving_unit', ...NUTRIENT_FIELDS, 'source'];
+    const values = [foodId, serving_size, serving_unit,
+      ...NUTRIENT_FIELDS.map(f => req.body[f] ?? null), source || 'usda'];
+    const placeholders = cols.map((_, i) => `$${i + 1}`).join(', ');
+    const updates = cols.slice(1).map(c => `${c} = EXCLUDED.${c}`).concat('updated_at = now()').join(', ');
+    const nut = await client.query(
+      `INSERT INTO food_nutrition (${cols.join(', ')}) VALUES (${placeholders})
+       ON CONFLICT (food_id) DO UPDATE SET ${updates} RETURNING id`,
+      values
+    );
+    await client.query(
+      'INSERT INTO food_macros (food_id, nutrition_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+      [foodId, nut.rows[0].id]
+    );
+    await client.query('COMMIT');
+    const full = await db.query(SINGLE_FOOD_SQL, [foodId]);
+    res.status(201).json(full.rows[0]);
+  } catch (err: any) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
@@ -1461,11 +2246,11 @@ const MEAL_INGREDIENT_SELECT = `
           WHERE fm.food_id = mi.food_id
           ORDER BY (fn.food_id = mi.food_id) DESC, fn.id LIMIT 1) AS nutrition,
          (SELECT row_to_json(lp) FROM (
-            SELECT pl.price, pl.unit_price, pl.amount, pl.amount_unit, pl.scraped_at, pl.is_sale, s.name AS store_name
+            SELECT pl.price, pl.unit_price, pl.amount, pl.amount_unit, pl.scraped_at, pl.is_sale, pl.sale_ends_at, s.name AS store_name
             FROM price_logs pl
             JOIN food_prices fp ON fp.price_log_id = pl.id
             LEFT JOIN stores s ON pl.store_id = s.id
-            WHERE fp.food_id = mi.food_id AND pl.deleted_at IS NULL AND pl.unit_price IS NOT NULL
+            WHERE fp.food_id = mi.food_id AND pl.deleted_at IS NULL AND pl.unit_price IS NOT NULL AND ${ACTIVE_PRICE_SQL}
             ORDER BY pl.scraped_at DESC LIMIT 1
           ) lp) AS latest_price
   FROM meal_ingredients mi
@@ -1796,8 +2581,247 @@ app.post('/api/meals/:id/log', async (req: Request, res: Response) => {
   }
 });
 
+// ── Budget / spending tracking ──────────────────────────────────────────────
+// Receipts are the spending record: one row per shopping trip, carrying the
+// store source and total cost. Written automatically when a receipt scan is
+// committed (ReviewItems, source='scan') and by hand from the budget page
+// (source='manual'). See CLAUDE.md "Budget / spending tracking".
+
+const MONTH_RE = /^\d{4}-\d{2}$/;
+
+// Resolve the denormalized store_name for a given store_id (kept on the receipt
+// so spend history survives the store being deleted).
+async function storeNameFor(storeId: number | null): Promise<string | null> {
+  if (storeId == null) return null;
+  const r = await db.query('SELECT name FROM stores WHERE id = $1', [storeId]);
+  return r.rows[0]?.name ?? null;
+}
+
+// 42. List receipts (spending records), newest first. Filters: ?month=YYYY-MM,
+// ?store_id=, ?from=YYYY-MM-DD&to=YYYY-MM-DD. Excludes soft-deleted.
+app.get('/api/receipts', async (req: Request, res: Response) => {
+  const { month, store_id, from, to } = req.query as Record<string, string>;
+  const where: string[] = ['r.deleted_at IS NULL'];
+  const params: any[] = [];
+  if (month) {
+    if (!MONTH_RE.test(month)) return res.status(400).json({ error: 'month must be YYYY-MM' });
+    params.push(month); where.push(`to_char(r.purchased_on, 'YYYY-MM') = $${params.length}`);
+  }
+  if (from) {
+    if (!DATE_RE.test(from)) return res.status(400).json({ error: 'from must be YYYY-MM-DD' });
+    params.push(from); where.push(`r.purchased_on >= $${params.length}`);
+  }
+  if (to) {
+    if (!DATE_RE.test(to)) return res.status(400).json({ error: 'to must be YYYY-MM-DD' });
+    params.push(to); where.push(`r.purchased_on <= $${params.length}`);
+  }
+  if (store_id) { params.push(parseInt(store_id)); where.push(`r.store_id = $${params.length}`); }
+  try {
+    const result = await db.query(
+      `SELECT r.*, COALESCE(s.name, r.store_name) AS store_name
+       FROM receipts r LEFT JOIN stores s ON r.store_id = s.id
+       WHERE ${where.join(' AND ')}
+       ORDER BY r.purchased_on DESC, r.id DESC`,
+      params
+    );
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 43. Spending summary for the budget page: this month's spend vs. the monthly
+// budget target, a by-month series (last 12 months), and a per-store breakdown
+// for the selected month (defaults to the current month).
+app.get('/api/receipts/summary', async (req: Request, res: Response) => {
+  const month = (req.query.month as string) || new Date().toISOString().slice(0, 7);
+  if (!MONTH_RE.test(month)) return res.status(400).json({ error: 'month must be YYYY-MM' });
+  try {
+    const [monthAgg, byStore, byMonth, budget] = await Promise.all([
+      db.query(
+        `SELECT COALESCE(SUM(total), 0)::float AS spent, COUNT(*)::int AS receipt_count
+         FROM receipts WHERE deleted_at IS NULL AND to_char(purchased_on, 'YYYY-MM') = $1`,
+        [month]
+      ),
+      db.query(
+        `SELECT r.store_id, COALESCE(s.name, r.store_name, 'Unknown') AS store_name,
+                COALESCE(SUM(r.total), 0)::float AS spent, COUNT(*)::int AS receipt_count
+         FROM receipts r LEFT JOIN stores s ON r.store_id = s.id
+         WHERE r.deleted_at IS NULL AND to_char(r.purchased_on, 'YYYY-MM') = $1
+         GROUP BY r.store_id, COALESCE(s.name, r.store_name, 'Unknown')
+         ORDER BY spent DESC`,
+        [month]
+      ),
+      db.query(
+        `SELECT to_char(purchased_on, 'YYYY-MM') AS month,
+                COALESCE(SUM(total), 0)::float AS spent, COUNT(*)::int AS receipt_count
+         FROM receipts
+         WHERE deleted_at IS NULL AND purchased_on >= (date_trunc('month', CURRENT_DATE) - INTERVAL '11 months')
+         GROUP BY 1 ORDER BY 1 ASC`
+      ),
+      db.query('SELECT monthly_budget FROM budget_goals WHERE id = 1'),
+    ]);
+    res.json({
+      month,
+      spent: monthAgg.rows[0].spent,
+      receipt_count: monthAgg.rows[0].receipt_count,
+      monthly_budget: budget.rows[0]?.monthly_budget != null ? Number(budget.rows[0].monthly_budget) : null,
+      by_store: byStore.rows,
+      by_month: byMonth.rows,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 44. Create a receipt (spending record). Used by ReviewItems on receipt commit
+// (source='scan') and manual add on the budget page (source='manual').
+app.post('/api/receipts', async (req: Request, res: Response) => {
+  const { store_id, total, purchased_on, item_count, source, notes, image_id, scan_job_id } = req.body;
+  const totalNum = Number(total);
+  if (!Number.isFinite(totalNum) || totalNum < 0) return res.status(400).json({ error: 'total must be a number >= 0' });
+  if (purchased_on && !DATE_RE.test(String(purchased_on))) return res.status(400).json({ error: 'purchased_on must be YYYY-MM-DD' });
+  const storeIdNum = store_id != null && store_id !== '' ? parseInt(store_id) : null;
+  try {
+    const result = await db.query(
+      `INSERT INTO receipts (store_id, store_name, total, purchased_on, item_count, source, notes, image_id, scan_job_id)
+       VALUES ($1, $2, $3, COALESCE($4::date, CURRENT_DATE), $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [
+        storeIdNum,
+        await storeNameFor(storeIdNum),
+        totalNum,
+        purchased_on ?? null,
+        item_count != null ? parseInt(item_count) : 0,
+        source === 'scan' ? 'scan' : 'manual',
+        notes ?? null,
+        image_id != null ? parseInt(image_id) : null,
+        scan_job_id != null ? parseInt(scan_job_id) : null,
+      ]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 45. Edit a receipt (partial). store_id, total, purchased_on, notes.
+app.put('/api/receipts/:id', async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+  const { store_id, total, purchased_on, notes } = req.body;
+  if (total != null && (!Number.isFinite(Number(total)) || Number(total) < 0)) {
+    return res.status(400).json({ error: 'total must be a number >= 0' });
+  }
+  if (purchased_on != null && !DATE_RE.test(String(purchased_on))) {
+    return res.status(400).json({ error: 'purchased_on must be YYYY-MM-DD' });
+  }
+  const storeIdProvided = Object.prototype.hasOwnProperty.call(req.body, 'store_id');
+  const storeIdNum = store_id != null && store_id !== '' ? parseInt(store_id) : null;
+  try {
+    const result = await db.query(
+      `UPDATE receipts SET
+         store_id = CASE WHEN $2::boolean THEN $3 ELSE store_id END,
+         store_name = CASE WHEN $2::boolean THEN $4 ELSE store_name END,
+         total = COALESCE($5, total),
+         purchased_on = COALESCE($6::date, purchased_on),
+         notes = COALESCE($7, notes)
+       WHERE id = $1 AND deleted_at IS NULL
+       RETURNING *`,
+      [
+        id,
+        storeIdProvided,
+        storeIdNum,
+        storeIdProvided ? await storeNameFor(storeIdNum) : null,
+        total != null ? Number(total) : null,
+        purchased_on ?? null,
+        notes ?? null,
+      ]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'receipt not found' });
+    res.json(result.rows[0]);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 46. Soft-delete a receipt.
+app.delete('/api/receipts/:id', async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+  try {
+    const result = await db.query(
+      `UPDATE receipts SET deleted_at = now() WHERE id = $1 AND deleted_at IS NULL RETURNING id`,
+      [id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'receipt not found' });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 47. Get / set the single-row monthly budget target.
+app.get('/api/budget', async (req: Request, res: Response) => {
+  try {
+    const result = await db.query('SELECT monthly_budget FROM budget_goals WHERE id = 1');
+    const mb = result.rows[0]?.monthly_budget;
+    res.json({ monthly_budget: mb != null ? Number(mb) : null });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/budget', async (req: Request, res: Response) => {
+  const { monthly_budget } = req.body;
+  if (monthly_budget != null && (!Number.isFinite(Number(monthly_budget)) || Number(monthly_budget) < 0)) {
+    return res.status(400).json({ error: 'monthly_budget must be a number >= 0 (or null to clear)' });
+  }
+  try {
+    const result = await db.query(
+      `INSERT INTO budget_goals (id, monthly_budget) VALUES (1, $1)
+       ON CONFLICT (id) DO UPDATE SET monthly_budget = $1, updated_at = now()
+       RETURNING monthly_budget`,
+      [monthly_budget != null ? Number(monthly_budget) : null]
+    );
+    res.json({ monthly_budget: result.rows[0].monthly_budget != null ? Number(result.rows[0].monthly_budget) : null });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 48. Get / set app-wide settings (single row, id = 1).
+// `default_sale_days` is how long a sale is assumed to last when a scan finds a
+// sale price with no printed end date — see resolveSaleEndsAt.
+app.get('/api/settings', async (req: Request, res: Response) => {
+  try {
+    const days = await getDefaultSaleDays();
+    res.json({ default_sale_days: days });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.put('/api/settings', async (req: Request, res: Response) => {
+  const { default_sale_days } = req.body;
+  const days = Number(default_sale_days);
+  if (!Number.isInteger(days) || days < 1 || days > 365) {
+    return res.status(400).json({ error: 'default_sale_days must be a whole number between 1 and 365' });
+  }
+  try {
+    const result = await db.query(
+      `INSERT INTO app_settings (id, default_sale_days) VALUES (1, $1)
+       ON CONFLICT (id) DO UPDATE SET default_sale_days = $1, updated_at = now()
+       RETURNING default_sale_days`,
+      [days]
+    );
+    res.json({ default_sale_days: result.rows[0].default_sale_days });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Start Express API server
 app.listen(PORT, async () => {
   console.log(`Backend server running on port ${PORT}`);
   await db.initializeDatabase();
 });
+

@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { formatCanonicalUnitPrice, normalizeUnit } from '../lib/units';
-import { NutritionFacts } from '../lib/nutrition';
+import { NutritionFacts, nutrientsPer100 } from '../lib/nutrition';
 import PriceEditor, { EditablePriceLog } from './PriceEditor';
 import MacroEditor from './MacroEditor';
 import Modal from './Modal';
@@ -24,7 +24,7 @@ interface Food {
   density: number | string;
   unit: string;
   aliases: Alias[] | null;
-  nutrition: (NutritionFacts & { source?: string }) | null;
+  nutrition: (NutritionFacts & { source?: string; shared_food_count?: number }) | null;
 }
 interface Store { id: number; name: string; }
 
@@ -64,6 +64,7 @@ export default function FoodDetailModal({
   // The two shared popups. pricePopup: { log } for edit, { log: null } for add.
   const [pricePopup, setPricePopup] = useState<{ log: PriceLog | null } | null>(null);
   const [showMacro, setShowMacro] = useState(false);
+  const [showShare, setShowShare] = useState(false); // "use another food's nutrition"
 
   const flashError = (msg: string) => { setError(msg); setTimeout(() => setError(null), 3500); };
 
@@ -190,23 +191,45 @@ export default function FoodDetailModal({
               </div>
             </div>
 
-            {/* Nutrition — opens the shared MacroEditor popup */}
+            {/* Nutrition — opens the shared MacroEditor popup, or shares facts
+                with another food (two products, one nutrition profile). */}
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Nutrition Facts</span>
-                <button onClick={() => setShowMacro(true)} className="text-[10px] font-semibold text-emerald-400 hover:text-emerald-300 transition">
-                  {food.nutrition ? 'Edit Facts' : '+ Add Facts'}
-                </button>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setShowShare(true)} className="text-[10px] font-semibold text-sky-400 hover:text-sky-300 transition">
+                    Use another food&rsquo;s facts
+                  </button>
+                  <button onClick={() => setShowMacro(true)} className="text-[10px] font-semibold text-emerald-400 hover:text-emerald-300 transition">
+                    {food.nutrition ? 'Edit Facts' : '+ Add Facts'}
+                  </button>
+                </div>
               </div>
               {food.nutrition ? (
-                <div className="text-xs">
+                <div className="text-xs space-y-1">
                   <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-mono font-bold">
                     {Math.round(Number(food.nutrition.calories))} kcal
                     <span className="font-normal text-emerald-400/60"> / {Number(food.nutrition.serving_size)} {food.nutrition.serving_unit}</span>
                   </span>
+                  {/* Comparable basis: per 100 g (solid) / 100 ml (liquid) */}
+                  {(() => {
+                    const per100 = nutrientsPer100(food.nutrition!, food.unit);
+                    if (!per100) return null;
+                    return (
+                      <span className="ml-2 px-2.5 py-1 rounded-lg bg-slate-500/10 border border-white/10 text-slate-300 font-mono font-bold" title="Comparable basis across foods">
+                        {Math.round(per100.calories)} kcal
+                        <span className="font-normal text-slate-500"> / {per100.label}</span>
+                      </span>
+                    );
+                  })()}
+                  {Number(food.nutrition.shared_food_count) > 1 && (
+                    <p className="text-[10px] text-sky-400/80">
+                      Shared with {Number(food.nutrition.shared_food_count) - 1} other food{Number(food.nutrition.shared_food_count) - 1 !== 1 ? 's' : ''} — editing these facts updates all of them.
+                    </p>
+                  )}
                 </div>
               ) : (
-                <p className="text-[11px] text-slate-600">No nutrition facts yet — add them so this food can be logged by amount in the diary.</p>
+                <p className="text-[11px] text-slate-600">No nutrition facts yet — add them, or reuse another food&rsquo;s, so this food can be logged by amount in the diary.</p>
               )}
             </div>
 
@@ -331,9 +354,20 @@ export default function FoodDetailModal({
         />
       )}
 
+      {/* Share-nutrition popup: point this food at another food's profile */}
+      {showShare && food && (
+        <ShareNutritionModal
+          foodId={food.id}
+          foodName={food.name}
+          onClose={() => setShowShare(false)}
+          onShared={() => { setShowShare(false); changed(); }}
+          onError={flashError}
+        />
+      )}
+
       {/* Photo lightbox */}
       {lightbox !== null && (
-        <div className="fixed inset-0 z-[70] bg-black/90 flex items-center justify-center p-6" onClick={() => setLightbox(null)}>
+        <div className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-6" onClick={() => setLightbox(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={`${API_BASE_URL}/api/images/${lightbox}`} alt="Attached source photo" className="max-h-full max-w-full rounded-2xl border border-white/10 shadow-2xl" onClick={e => e.stopPropagation()} />
           <button onClick={() => setLightbox(null)} className="absolute top-5 right-5 text-white/70 hover:text-white p-2 rounded-full bg-black/40 hover:bg-black/60 transition">
@@ -342,5 +376,89 @@ export default function FoodDetailModal({
         </div>
       )}
     </>
+  );
+}
+
+// Pick another food that already has nutrition facts and point THIS food at that
+// same profile (POST /api/foods/:id/nutrition/copy-from/:sourceId). Used for the
+// "two different products, one underlying nutrition" case. Searches the catalog
+// server-side and only offers foods that carry facts.
+function ShareNutritionModal({ foodId, foodName, onClose, onShared, onError }: {
+  foodId: number;
+  foodName: string;
+  onClose: () => void;
+  onShared: () => void;
+  onError: (msg: string) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<{ id: number; name: string; nutrition: NutritionFacts | null }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [savingId, setSavingId] = useState<number | null>(null);
+
+  // Debounced catalog search; keep only other foods that have nutrition to share.
+  useEffect(() => {
+    const q = query.trim();
+    const t = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/foods?search=${encodeURIComponent(q)}`);
+        const data = res.ok ? await res.json() : [];
+        setResults((data as any[])
+          .filter(f => f.id !== foodId && f.nutrition && f.nutrition.serving_size != null)
+          .slice(0, 30));
+      } catch { setResults([]); }
+      finally { setLoading(false); }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query, foodId]);
+
+  const share = async (sourceId: number) => {
+    setSavingId(sourceId);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/foods/${foodId}/nutrition/copy-from/${sourceId}`, { method: 'POST' });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Failed to share nutrition');
+      onShared();
+    } catch (e: any) {
+      onError(e?.message || 'Failed to share nutrition');
+      setSavingId(null);
+    }
+  };
+
+  return (
+    <Modal onClose={onClose} zClass="z-[70]" maxWidth="max-w-md" dataLoc="modal.share-nutrition"
+      panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-bold text-white">Use another food&rsquo;s nutrition
+          <span className="block text-[10px] text-slate-500 font-normal">“{foodName}” will share the picked food&rsquo;s facts — editing either updates both.</span>
+        </h3>
+        <button onClick={onClose} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+        </button>
+      </div>
+      <input type="text" value={query} onChange={e => setQuery(e.target.value)} autoFocus
+        placeholder="Search foods with nutrition…"
+        className="field-input w-full text-xs rounded-lg" />
+      <div className="panel rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
+        {loading ? (
+          <p className="text-[11px] text-slate-500 px-3 py-2">Searching…</p>
+        ) : results.length === 0 ? (
+          <p className="text-[11px] text-slate-500 px-3 py-2">{query.trim() ? 'No foods with nutrition match.' : 'Type to search foods that have nutrition facts.'}</p>
+        ) : results.map(f => (
+          <div key={f.id} className="flex items-center gap-2 px-3 py-2">
+            <div className="min-w-0 flex-1 text-xs">
+              <span className="text-slate-200 truncate block">{f.name}</span>
+              <span className="text-[10px] font-mono text-emerald-400">
+                {Math.round(Number(f.nutrition!.calories))} kcal / {Number(f.nutrition!.serving_size)} {f.nutrition!.serving_unit}
+              </span>
+            </div>
+            <button type="button" onClick={() => share(f.id)} disabled={savingId !== null}
+              className="shrink-0 text-[11px] font-semibold rounded-lg px-2.5 py-1 border transition text-sky-300 bg-sky-500/10 border-sky-500/20 hover:bg-sky-500/20 disabled:opacity-50">
+              {savingId === f.id ? 'Sharing…' : 'Use these'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </Modal>
   );
 }

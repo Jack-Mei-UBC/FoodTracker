@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { NutritionFacts } from '../lib/nutrition';
-import { formatCanonicalUnitPrice, normalizeUnit } from '../lib/units';
+import { NutritionFacts, nutrientsPer100 } from '../lib/nutrition';
+import { canonicalUnitPrice, normalizeUnit } from '../lib/units';
 import PriceEditor from '../components/PriceEditor';
 import MacroEditor from '../components/MacroEditor';
 import Modal from '../components/Modal';
@@ -75,7 +75,47 @@ interface PriceEfficiency {
 }
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
-const PAGE_SIZE = 24;
+
+// The catalog is loaded ONCE per page load (GET /api/foods with no `limit` →
+// the full array) and then sorted/filtered/paged entirely client-side. Measured
+// at ~575 B/food, so a few thousand foods is a few hundred KB — cheap next to
+// the round-trip-per-keystroke alternative, and it's the only way column sorting
+// can be honest: server-side paging would sort just the rows already on screen.
+const PAGE_SIZES = [25, 50, 100, 0] as const; // 0 = show all
+
+// Sortable columns. `get` returns a comparable primitive (or null to sort last).
+type SortKey = 'name' | 'category' | 'price' | 'stores' | 'kcal' | 'updated';
+
+// A clickable, sort-indicating column header. The arrow shows only on the active
+// column; inactive ones show a dimmed one on hover so the affordance is findable.
+function SortHeader({ label, col, sortKey, sortDir, onSort, className = '', numeric = false }: {
+  label: string;
+  col: SortKey;
+  sortKey: SortKey;
+  sortDir: 'asc' | 'desc';
+  onSort: (key: SortKey) => void;
+  className?: string;
+  numeric?: boolean;
+}) {
+  const active = sortKey === col;
+  return (
+    <th className={`py-2.5 font-semibold ${className}`}>
+      <button
+        type="button"
+        onClick={() => onSort(col)}
+        title={`Sort by ${label.toLowerCase()}`}
+        className={`group inline-flex items-center gap-1 uppercase tracking-wider text-[10px] transition ${
+          active ? 'text-violet-300' : 'text-slate-500 hover:text-slate-300'
+        } ${numeric ? 'justify-end' : ''}`}
+      >
+        {label}
+        <span className={active ? 'opacity-100' : 'opacity-0 group-hover:opacity-40'}>
+          {active && sortDir === 'asc' ? '▲' : '▼'}
+        </span>
+      </button>
+    </th>
+  );
+}
 
 export default function Dashboard() {
   const router = useRouter();
@@ -84,13 +124,17 @@ export default function Dashboard() {
   const [stores, setStores] = useState<Store[]>([]);
   const [efficiencies, setEfficiencies] = useState<PriceEfficiency[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [isLoading, setIsLoading] = useState(true);
-  const [page, setPage] = useState(0);
-  const [total, setTotal] = useState(0);
-  const [serverCategories, setServerCategories] = useState<string[]>([]);
   const [iconPickerFood, setIconPickerFood] = useState<FoodItem | null>(null);
+  // Client-side table controls (see the PAGE_SIZES note above).
+  const [sortKey, setSortKey] = useState<SortKey>('name');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [page, setPage] = useState(0);
+  // Extra filters the old card grid couldn't express.
+  const [onlyPriced, setOnlyPriced] = useState(false);
+  const [onlySale, setOnlySale] = useState(false);
 
   // Forms State
   const [newFood, setNewFood] = useState({ name: '', barcode: '', description: '', category: 'Grocery', unit: 'each' });
@@ -136,24 +180,14 @@ export default function Dashboard() {
     }
   };
 
-  // Server-paginated + filtered food list for the current page.
+  // Load the WHOLE catalog once; searching/sorting/paging all happen locally.
+  // Called again after any mutation (add food, price edit, icon change) to
+  // refresh the cache.
   const fetchFoods = async () => {
     setIsLoading(true);
     try {
-      const params = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(page * PAGE_SIZE) });
-      if (debouncedSearch) params.set('search', debouncedSearch);
-      if (selectedCategory !== 'All') params.set('category', selectedCategory);
-      const res = await fetch(`${API_BASE_URL}/api/foods?${params.toString()}`);
-      if (res.ok) {
-        const data = await res.json();
-        setFoods(data.foods);
-        setTotal(data.total);
-        setServerCategories(data.categories);
-        // Filters/deletions can shrink total foods; clamp back onto a real page.
-        if (data.total > 0 && page * PAGE_SIZE >= data.total) {
-          setPage(Math.max(0, Math.ceil(data.total / PAGE_SIZE) - 1));
-        }
-      }
+      const res = await fetch(`${API_BASE_URL}/api/foods`);
+      if (res.ok) setFoods(await res.json());
     } catch (err) {
       console.error("Backend API not reachable:", err);
       showToast("Backend API not reachable. Failed to load dashboard data.", "error");
@@ -166,21 +200,129 @@ export default function Dashboard() {
     fetchStoresAndEfficiency();
   }, []);
 
-  // Debounce search input.
-  useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchQuery), 300);
-    return () => clearTimeout(t);
-  }, [searchQuery]);
-
-  // Reset to page 1 whenever the filter changes.
-  useEffect(() => {
-    setPage(0);
-  }, [debouncedSearch, selectedCategory]);
-
+  // Catalog is fetched once on mount (and after mutations) — no refetch on
+  // filter/sort/page changes; those are all local now. No search debounce needed
+  // either, since nothing hits the network as you type.
   useEffect(() => {
     fetchFoods();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, debouncedSearch, selectedCategory]);
+  }, []);
+
+  // Reset to the first page whenever the result set changes shape.
+  useEffect(() => {
+    setPage(0);
+  }, [searchQuery, selectedCategory, onlyPriced, onlySale, pageSize, sortKey, sortDir]);
+
+  // ── Derived table data (cache → filter → sort → page) ─────────────────────
+
+  // Precompute the sortable/searchable fields once per catalog load so the
+  // filter+sort passes stay cheap even at a few thousand rows.
+  interface Row {
+    food: FoodItem;
+    best: { value: number; label: string } | null; // cheapest canonical unit price
+    storeCount: number;
+    hasSale: boolean;
+    kcal: number | null;      // per 100 g/ml when convertible, else per serving
+    kcalLabel: string;        // the basis that kcal is expressed in
+    updated: number | null; // most recent price timestamp
+    haystack: string;       // lowercased name + barcode + description + aliases
+  }
+
+  const rows = useMemo<Row[]>(() => foods.map(food => {
+    const prices = food.latest_prices ?? [];
+    let best: { value: number; label: string } | null = null;
+    let updated: number | null = null;
+    for (const p of prices) {
+      const c = canonicalUnitPrice(
+        Number(p.price),
+        p.amount != null ? Number(p.amount) : null,
+        p.amount_unit,
+        food.density,
+      );
+      if (c && (best == null || c.value < best.value)) best = c;
+      const t = new Date(p.scraped_at).getTime();
+      if (!isNaN(t) && (updated == null || t > updated)) updated = t;
+    }
+    // The column reads per 100 g / 100 ml so rows are comparable regardless of
+    // each label's serving; a serving that can't be converted (counted in
+    // `each`) falls back to per-serving and says so in its title.
+    const per100 = food.nutrition ? nutrientsPer100(food.nutrition, food.unit) : null;
+    return {
+      food,
+      best,
+      storeCount: new Set(prices.map(p => p.store_id)).size,
+      hasSale: prices.some(p => p.is_sale),
+      kcal: per100 ? per100.calories : food.nutrition ? Number(food.nutrition.calories) : null,
+      kcalLabel: per100
+        ? per100.label
+        : food.nutrition
+          ? `${Number(food.nutrition.serving_size)} ${food.nutrition.serving_unit}`
+          : '',
+      updated,
+      haystack: [
+        food.name, food.barcode ?? '', food.description ?? '',
+        ...(food.aliases ?? []).map(a => a.alias),
+      ].join(' ').toLowerCase(),
+    };
+  }), [foods]);
+
+  // Category chips reflect what's actually in the loaded catalog.
+  const categoryChips = useMemo(
+    () => ['All'].concat(Array.from(new Set(foods.map(f => f.category).filter(Boolean))).sort()),
+    [foods]
+  );
+
+  const filteredRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return rows.filter(r => {
+      if (selectedCategory !== 'All' && r.food.category !== selectedCategory) return false;
+      if (onlyPriced && r.storeCount === 0) return false;
+      if (onlySale && !r.hasSale) return false;
+      if (q && !r.haystack.includes(q)) return false;
+      return true;
+    });
+  }, [rows, searchQuery, selectedCategory, onlyPriced, onlySale]);
+
+  const sortedRows = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    const value = (r: Row): string | number | null => {
+      switch (sortKey) {
+        case 'name': return r.food.name.toLowerCase();
+        case 'category': return (r.food.category ?? '').toLowerCase();
+        case 'price': return r.best ? r.best.value : null;
+        case 'stores': return r.storeCount;
+        case 'kcal': return r.kcal;
+        case 'updated': return r.updated;
+      }
+    };
+    // Copy before sorting — never mutate the memoized filter output.
+    return [...filteredRows].sort((a, b) => {
+      const av = value(a), bv = value(b);
+      // Missing values always sort last, regardless of direction, so flipping a
+      // column never fills the top of the table with blanks.
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      if (av < bv) return -1 * dir;
+      if (av > bv) return 1 * dir;
+      return 0;
+    });
+  }, [filteredRows, sortKey, sortDir]);
+
+  const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(sortedRows.length / pageSize));
+  const safePage = Math.min(page, totalPages - 1);
+  const pagedRows = pageSize === 0
+    ? sortedRows
+    : sortedRows.slice(safePage * pageSize, safePage * pageSize + pageSize);
+
+  // Clicking a header sorts by it; clicking the active one flips direction.
+  // Text columns start ascending (A→Z); numeric ones start descending
+  // (most expensive / most stores / newest first), which is what you usually want.
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) { setSortDir(d => (d === 'asc' ? 'desc' : 'asc')); return; }
+    setSortKey(key);
+    setSortDir(key === 'name' || key === 'category' ? 'asc' : 'desc');
+  };
 
   // Fetch price details when food is selected
   const fetchPriceHistory = async (food: FoodItem) => {
@@ -426,9 +568,6 @@ export default function Dashboard() {
 
   // Static category list for the quick-add form (works even on an empty/fresh DB).
   const categories = ['All', 'Fruits', 'Vegetables', 'Dairy', 'Bakery', 'Pantry', 'Meat', 'Beverages', 'Other'];
-  // Category chips reflect what's actually in the database (search/filter is server-side now).
-  const categoryChips = ['All'].concat(serverCategories);
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <div data-loc="page.dashboard" className="space-y-8 animate-slide-up relative">
@@ -463,7 +602,7 @@ export default function Dashboard() {
         <div className="card p-6 glass-panel-hover flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">Tracked Foods</span>
-            <h3 className="text-3xl font-extrabold text-white mt-1">{total}</h3>
+            <h3 className="text-3xl font-extrabold text-white mt-1">{foods.length}</h3>
             <p className="text-xs text-slate-400 mt-2">Active database items</p>
           </div>
           <div className="p-3 bg-violet-500/10 text-violet-400 rounded-xl">
@@ -696,13 +835,34 @@ export default function Dashboard() {
               <svg className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-              <input 
+              <input
                 type="text"
-                placeholder="Search food items, barcode..."
+                placeholder="Search name, barcode, alias..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-900 border border-white/5 rounded-2xl pl-10 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500 transition"
+                className="w-full bg-slate-900 border border-white/5 rounded-2xl pl-10 pr-8 py-2.5 text-sm text-white focus:outline-none focus:border-violet-500 transition"
               />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  title="Clear search"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white text-sm"
+                >
+                  ×
+                </button>
+              )}
+            </div>
+
+            {/* Quick filters the card grid couldn't express */}
+            <div className="flex items-center gap-3 shrink-0">
+              <label className="flex items-center gap-1.5 text-[11px] text-slate-400 cursor-pointer select-none whitespace-nowrap">
+                <input type="checkbox" checked={onlyPriced} onChange={e => setOnlyPriced(e.target.checked)} className="accent-violet-500" />
+                Has price
+              </label>
+              <label className="flex items-center gap-1.5 text-[11px] text-slate-400 cursor-pointer select-none whitespace-nowrap">
+                <input type="checkbox" checked={onlySale} onChange={e => setOnlySale(e.target.checked)} className="accent-amber-500" />
+                On sale
+              </label>
             </div>
 
             {/* Category Filter */}
@@ -760,118 +920,159 @@ export default function Dashboard() {
             </button>
           </form>
 
-          {/* Foods list cards */}
-          {isLoading ? (
-            <div className="text-center text-slate-500 py-12">Querying database...</div>
-          ) : foods.length === 0 ? (
-            <div className="text-center text-slate-500 py-12">No foods match search criteria.</div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {foods.map(food => (
-                <div
-                  key={food.id}
-                  onClick={() => fetchPriceHistory(food)}
-                  className="card p-5 glass-panel-hover space-y-4 cursor-pointer text-left relative"
-                >
-                  <div className="flex justify-between items-start gap-3">
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); setIconPickerFood(food); }}
-                      title="Change icon"
-                      className="w-12 h-12 rounded-xl overflow-hidden border border-white/10 shrink-0 bg-slate-800/50 flex items-center justify-center hover:border-violet-500/50 transition"
-                    >
-                      {food.display_image_id ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={`${API_BASE_URL}/api/images/${food.display_image_id}`}
-                          alt=""
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M14 8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                      )}
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <span className="badge text-[10px] tracking-wider text-violet-400 bg-violet-500/10 border-violet-500/20">
-                        {food.category}
-                      </span>
-                      {Number(food.usable_pct) !== 100 && (
-                        <span className="badge ml-1.5 text-[10px] tracking-wider text-amber-400 bg-amber-500/10 border-amber-500/20" title="Usable portion of what you buy">
-                          {Number(food.usable_pct)}% usable
-                        </span>
-                      )}
-                      <h3 className="text-lg font-bold text-white mt-1.5">{food.name}</h3>
-                      <p className="text-xs text-slate-400 mt-1 line-clamp-1">{food.description || `Fresh tracked items per ${food.unit}`}</p>
-                    </div>
-                  </div>
+          {/* ═══ Section: Inventory table ═══ */}
+          <div data-loc="dashboard.inventory-table" className="card rounded-2xl overflow-hidden">
+            {isLoading ? (
+              <div className="text-center text-slate-500 py-12">Loading catalog…</div>
+            ) : sortedRows.length === 0 ? (
+              <div className="text-center text-slate-500 py-12">
+                {foods.length === 0 ? 'No foods in the catalog yet.' : 'No foods match these filters.'}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="sticky top-0 bg-slate-950/95 backdrop-blur z-10">
+                    <tr className="text-slate-500 border-b border-white/10">
+                      <th className="py-2.5 pl-4 pr-2 w-12" />
+                      <SortHeader label="Product" col="name" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="pr-3" />
+                      <SortHeader label="Category" col="category" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 hidden sm:table-cell" />
+                      <SortHeader label="Best price" col="price" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3" numeric />
+                      <SortHeader label="Stores" col="stores" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 hidden md:table-cell" numeric />
+                      <SortHeader label="kcal /100" col="kcal" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 hidden lg:table-cell" numeric />
+                      <SortHeader label="Last price" col="updated" sortKey={sortKey} sortDir={sortDir} onSort={toggleSort} className="px-3 hidden lg:table-cell" numeric />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pagedRows.map(({ food, best, storeCount, hasSale, kcal, kcalLabel, updated }) => {
+                      const cheapest = (food.latest_prices ?? []).find(p => {
+                        const c = canonicalUnitPrice(Number(p.price), p.amount != null ? Number(p.amount) : null, p.amount_unit, food.density);
+                        return best != null && c != null && c.value === best.value;
+                      });
+                      return (
+                        <tr
+                          key={food.id}
+                          onClick={() => fetchPriceHistory(food)}
+                          className="border-b border-white/5 hover:bg-white/5 cursor-pointer transition"
+                        >
+                          {/* Icon — click opens the picker, not the row detail */}
+                          <td className="py-2 pl-4 pr-2">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setIconPickerFood(food); }}
+                              title="Change icon"
+                              className="w-9 h-9 rounded-lg overflow-hidden border border-white/10 bg-slate-800/50 flex items-center justify-center hover:border-violet-500/50 transition"
+                            >
+                              {food.display_image_id ? (
+                                // eslint-disable-next-line @next/next/no-img-element
+                                <img src={`${API_BASE_URL}/api/images/${food.display_image_id}`} alt="" loading="lazy" className="w-full h-full object-cover" />
+                              ) : (
+                                <svg className="w-4 h-4 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M14 8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                </svg>
+                              )}
+                            </button>
+                          </td>
 
-                  {/* Prices comparison widget */}
-                  <div className="space-y-2 border-t border-white/5 pt-3">
-                    <span className="text-[10px] text-slate-500 uppercase tracking-wider block font-semibold">Current price readings</span>
-                    
-                    <div className="space-y-1.5">
-                      {food.latest_prices && food.latest_prices.length > 0 ? (
-                        food.latest_prices.map((p, idx) => {
-                          // Normalize to the dimension's standard unit (kg / kg-via-density / each),
-                          // with the as-entered unit in brackets when it differs.
-                          const norm = formatCanonicalUnitPrice(
-                            Number(p.price),
-                            p.amount != null ? Number(p.amount) : null,
-                            p.amount_unit,
-                            food.density,
-                          );
-                          return (
-                            <div key={idx} className="flex justify-between items-center gap-2 text-xs">
-                              <span className="text-slate-400 truncate max-w-[90px] shrink-0">{p.store_name}</span>
-                              <div className="flex items-center space-x-1.5 min-w-0 justify-end">
-                                {p.is_sale && (
-                                  <span className="text-[9px] px-1 rounded bg-amber-500/15 text-amber-400 font-bold border border-amber-500/20 font-mono shrink-0">
-                                    SALE
-                                  </span>
-                                )}
-                                {norm ? (
-                                  <span className="font-bold text-white font-mono truncate" title={norm}>{norm}</span>
-                                ) : (
-                                  <>
-                                    <span className="font-bold text-white font-mono">${parseFloat(p.price as any).toFixed(2)}</span>
-                                    <span className="text-[10px] text-slate-500">/{food.unit}</span>
-                                  </>
-                                )}
-                              </div>
+                          {/* Product */}
+                          <td className="py-2 pr-3 min-w-[180px]">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-white truncate max-w-[240px]">{food.name}</span>
+                              {hasSale && (
+                                <span className="badge text-[9px] text-amber-400 bg-amber-500/10 border-amber-500/20 shrink-0">sale</span>
+                              )}
+                              {Number(food.usable_pct) !== 100 && (
+                                <span className="badge text-[9px] text-amber-400 bg-amber-500/10 border-amber-500/20 shrink-0" title="Usable portion of what you buy">
+                                  {Number(food.usable_pct)}%
+                                </span>
+                              )}
                             </div>
-                          );
-                        })
-                      ) : (
-                        <div className="text-[11px] text-slate-600">No prices logged. Dispatch a crawler to log prices.</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+                            <div className="text-[10px] text-slate-500 truncate max-w-[240px] sm:hidden">{food.category}</div>
+                          </td>
 
-          {!isLoading && total > PAGE_SIZE && (
-            <div className="flex items-center justify-between pt-1">
-              <button
-                onClick={() => setPage(p => Math.max(0, p - 1))}
-                disabled={page === 0}
-                className="px-3 py-1.5 rounded-xl text-xs font-medium border border-white/5 bg-slate-900/50 text-slate-300 hover:bg-white/5 transition disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Prev
-              </button>
+                          {/* Category */}
+                          <td className="px-3 hidden sm:table-cell">
+                            <span className="badge text-[9px] text-violet-400 bg-violet-500/10 border-violet-500/20">{food.category}</span>
+                          </td>
+
+                          {/* Best (cheapest canonical) price */}
+                          <td className="px-3 whitespace-nowrap">
+                            {best ? (
+                              <>
+                                <span className="font-mono font-bold text-white">${best.value.toFixed(2)}</span>
+                                <span className="text-slate-500">/{best.label}</span>
+                                {cheapest && <div className="text-[10px] text-slate-500 truncate max-w-[130px]">{cheapest.store_name}</div>}
+                              </>
+                            ) : (food.latest_prices?.length ? (
+                              <span className="font-mono text-slate-400">${Number(food.latest_prices[0].price).toFixed(2)}<span className="text-slate-600">/{food.unit}</span></span>
+                            ) : (
+                              <span className="text-slate-600">—</span>
+                            ))}
+                          </td>
+
+                          {/* Stores */}
+                          <td className="px-3 hidden md:table-cell font-mono text-slate-300">{storeCount || <span className="text-slate-600">—</span>}</td>
+
+                          {/* kcal — per 100 g/ml where convertible (see rows memo) */}
+                          <td className="px-3 hidden lg:table-cell font-mono text-slate-300">
+                            {kcal != null ? (
+                              <span title={`${Math.round(kcal)} kcal per ${kcalLabel}`}>
+                                {Math.round(kcal)}
+                                <span className="text-[9px] text-slate-600"> /{kcalLabel.replace(/^100 /, '')}</span>
+                              </span>
+                            ) : <span className="text-slate-600">—</span>}
+                          </td>
+
+                          {/* Last price date */}
+                          <td className="px-3 hidden lg:table-cell text-[10px] text-slate-500 whitespace-nowrap">
+                            {updated != null ? new Date(updated).toLocaleDateString() : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* ═══ Section: Table footer — result count, page size, paging ═══ */}
+          {!isLoading && sortedRows.length > 0 && (
+            <div data-loc="dashboard.table-footer" className="flex flex-wrap items-center justify-between gap-3 pt-1">
               <span className="text-xs text-slate-500">
-                Page {page + 1} of {totalPages} · {total} foods
+                {sortedRows.length === foods.length
+                  ? `${foods.length} foods`
+                  : `${sortedRows.length} of ${foods.length} foods`}
+                {pageSize !== 0 && totalPages > 1 && ` · page ${safePage + 1} of ${totalPages}`}
               </span>
-              <button
-                onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
-                className="px-3 py-1.5 rounded-xl text-xs font-medium border border-white/5 bg-slate-900/50 text-slate-300 hover:bg-white/5 transition disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
+              <div className="flex items-center gap-2">
+                <select
+                  value={pageSize}
+                  onChange={e => setPageSize(Number(e.target.value))}
+                  className="bg-slate-900 border border-white/5 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-violet-500"
+                >
+                  {PAGE_SIZES.map(s => (
+                    <option key={s} value={s}>{s === 0 ? 'Show all' : `${s} / page`}</option>
+                  ))}
+                </select>
+                {pageSize !== 0 && totalPages > 1 && (
+                  <>
+                    <button
+                      onClick={() => setPage(p => Math.max(0, p - 1))}
+                      disabled={safePage === 0}
+                      className="px-3 py-1 rounded-lg text-xs font-medium border border-white/5 bg-slate-900/50 text-slate-300 hover:bg-white/5 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Prev
+                    </button>
+                    <button
+                      onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                      disabled={safePage >= totalPages - 1}
+                      className="px-3 py-1 rounded-lg text-xs font-medium border border-white/5 bg-slate-900/50 text-slate-300 hover:bg-white/5 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           )}
 
@@ -897,12 +1098,31 @@ export default function Dashboard() {
               </svg>
             </button>
 
-            <div>
-              <span className="badge text-[10px] text-violet-400 bg-violet-500/10 border-violet-500/20">
-                {selectedFoodDetails.category}
-              </span>
-              <h2 className="text-2xl font-extrabold text-white mt-1.5">{selectedFoodDetails.name}</h2>
-              <p className="text-xs text-slate-400 mt-1">Barcode: {selectedFoodDetails.barcode || 'N/A'}</p>
+            <div className="flex items-start gap-4">
+              {/* Food photo — same display_image_id the dashboard row shows;
+                  click opens the shared icon picker, as it does in the table. */}
+              <button
+                type="button"
+                onClick={() => setIconPickerFood(selectedFoodDetails)}
+                title="Change icon"
+                className="w-20 h-20 shrink-0 rounded-2xl overflow-hidden border border-white/10 bg-slate-800/50 flex items-center justify-center hover:border-violet-500/50 transition"
+              >
+                {selectedFoodDetails.display_image_id ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={`${API_BASE_URL}/api/images/${selectedFoodDetails.display_image_id}`} alt="" loading="lazy" className="w-full h-full object-cover" />
+                ) : (
+                  <svg className="w-7 h-7 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M14 8h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                )}
+              </button>
+              <div className="min-w-0">
+                <span className="badge text-[10px] text-violet-400 bg-violet-500/10 border-violet-500/20">
+                  {selectedFoodDetails.category}
+                </span>
+                <h2 className="text-2xl font-extrabold text-white mt-1.5">{selectedFoodDetails.name}</h2>
+                <p className="text-xs text-slate-400 mt-1">Barcode: {selectedFoodDetails.barcode || 'N/A'}</p>
+              </div>
             </div>
 
             {/* Known Names: primary + learned aliases. Drag an alias onto the
@@ -1006,11 +1226,22 @@ export default function Dashboard() {
                 </button>
               </div>
               {selectedFoodDetails.nutrition ? (
-                <div className="flex items-center gap-2 text-xs">
+                <div className="flex items-center gap-2 text-xs flex-wrap">
                   <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 font-mono font-bold">
                     {Math.round(Number(selectedFoodDetails.nutrition.calories))} kcal
                     <span className="font-normal text-emerald-400/60"> / {Number(selectedFoodDetails.nutrition.serving_size)} {selectedFoodDetails.nutrition.serving_unit}</span>
                   </span>
+                  {/* Comparable basis: per 100 g (solid) / 100 ml (liquid) */}
+                  {(() => {
+                    const per100 = nutrientsPer100(selectedFoodDetails.nutrition, selectedFoodDetails.unit);
+                    if (!per100) return null;
+                    return (
+                      <span className="px-2.5 py-1 rounded-lg bg-slate-500/10 border border-white/10 text-slate-300 font-mono font-bold" title="Comparable basis across foods">
+                        {Math.round(per100.calories)} kcal
+                        <span className="font-normal text-slate-500"> / {per100.label}</span>
+                      </span>
+                    );
+                  })()}
                   {selectedFoodDetails.nutrition.source === 'usda' && (
                     <span className="px-2.5 py-1 rounded-lg bg-sky-500/10 border border-sky-500/20 text-sky-400 text-[10px] font-bold uppercase tracking-wider" title="Fetched from USDA FoodData Central">
                       USDA
@@ -1212,7 +1443,12 @@ export default function Dashboard() {
           foodName={iconPickerFood.name}
           ownImageId={iconPickerFood.image_id}
           onClose={() => setIconPickerFood(null)}
-          onSaved={() => { setIconPickerFood(null); fetchFoods(); }}
+          onSaved={() => {
+            const id = iconPickerFood.id;
+            setIconPickerFood(null);
+            // Refresh the open detail modal too, so its photo updates in place.
+            if (selectedFoodDetails?.id === id) refreshSelectedFood(id); else fetchFoods();
+          }}
         />
       )}
 
