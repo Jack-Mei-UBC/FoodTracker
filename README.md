@@ -153,7 +153,9 @@ powershell -File scripts/smoke-test.ps1
 
 It gates on backend health, then asserts the foods/diary/goals/efficiency endpoints, the join-table reads, micronutrient aggregation, the scraper contract (unknown-store 404 + the `scrape-jobs` progress feed), the budget/receipts contract (summary shape + negative-total 400), the USDA lookup, and every page. Exit `0` = green, `2` = regression, and it no-ops when the stack isn't running.
 
-The same checks run in **CI** (`.github/workflows/smoke.yml`) via a portable bash twin, `scripts/smoke-test.sh`, so the "every change is verified" guarantee holds for outside contributors too — not just on my machine. CI boots only the services the checks need (`db`, `redis`, `backend`, `frontend`) and runs in strict mode, so a stack that fails to boot is a failing build.
+The same checks run in **CI** (`.github/workflows/smoke.yml`) via a portable bash twin, `scripts/smoke-test.sh`, so the "every change is verified" guarantee holds for outside contributors too — not just on my machine. CI boots only the services the checks need (`db`, `redis`, `backend`, `frontend`) and runs in strict mode (`STRICT=1` — a stack that fails to boot is a failing build, never a silent skip).
+
+On top of the smoke net sits a **Playwright UI test net** (`frontend/e2e/` — [its README](frontend/e2e/README.md)): route smoke for every page plus style-agnostic *interaction contracts* (modal viewport-centering and stacked-Escape ordering, dashboard search/sort/filter, the per-100 kcal basis, the expired-sale rule), seeded from a deterministic fixture set inserted through the REST API. It's deliberately **not** wired to the per-turn Stop hook (too slow) — run it with the stack up: `docker compose up -d --wait`, then `npm run seed && npm run test:e2e` from `frontend/`.
 
 ---
 
@@ -179,8 +181,9 @@ frontend/      Next.js PWA (dashboard, meals, diary, scanner, staging, inbox, sc
 worker/        BullMQ consumer: Flipp + cocowest.ca flyer scrapers + OCR job runner
 ocr-service/   FastAPI vision-LLM extraction
 db/schema.sql  Idempotent schema + seed data
-scripts/       smoke-test.ps1 (the verification loop)
+scripts/       smoke-test.ps1 + .sh twins (the verification loop), manual-ai-tests.ps1
 .claude/       settings.json — the Stop hook wiring the loop
 CLAUDE.md      The living spec: invariants, gotchas, architecture
 ROADMAP.md     Candidate future features (shopping lists, weekly planner, …)
+SHADCN-MIGRATION.md  Living plan for the shadcn/ui restyle (phased, test-gated)
 ```

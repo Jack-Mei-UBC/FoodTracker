@@ -229,7 +229,7 @@ else warn "USDA search unavailable (code $usda_code — external API / FDC_API_K
 
 # --- Frontend pages (soft-gated on the web server being up) -------------------
 if [ "$(http_code "$WEB/")" = "200" ]; then
-  for path in "/" "/diary" "/history" "/inbox" "/scrapes" "/meals" "/staging" "/budget" "/audit" "/settings"; do
+  for path in "/" "/diary" "/history" "/inbox" "/scanner" "/scrapes" "/meals" "/staging" "/budget" "/audit" "/settings"; do
     check_code "GET $WEB$path -> 200" 200 "$(http_code "$WEB$path")"
   done
 else

@@ -39,12 +39,20 @@ Set-Content -Path $marker -Value (Get-Date).Ticks -ErrorAction SilentlyContinue
 
 function Get-Json($url) { return Invoke-RestMethod -Uri $url -TimeoutSec 20 }
 
-# Gate on backend health; if it's not up, skip quietly.
+# Gate on backend health. Default: skip (exit 0) when the stack is down — but
+# LOUDLY, so a green turn where nothing was verified is at least visible.
+# STRICT=1 (the CI mode, same contract as smoke-test.sh) fails instead of skips.
+$strict = $env:STRICT -eq '1'
 try {
     $health = Get-Json "$API/api/health"
-    if ($health.status -ne 'healthy') { Write-Host "smoke: backend unhealthy - skipping"; exit 0 }
+    if ($health.status -ne 'healthy') {
+        if ($strict) { Write-Host "smoke: backend unhealthy - FAIL (STRICT)"; exit 2 }
+        Write-Host "smoke: !! backend unhealthy - NOTHING WAS VERIFIED (skipping) !!"
+        exit 0
+    }
 } catch {
-    Write-Host "smoke: backend not reachable at $API - skipping"
+    if ($strict) { Write-Host "smoke: backend not reachable at $API - FAIL (STRICT)"; exit 2 }
+    Write-Host "smoke: !! backend not reachable at $API - NOTHING WAS VERIFIED (skipping) !!"
     exit 0
 }
 
@@ -355,7 +363,7 @@ try {
 $webUp = $true
 try { Invoke-WebRequest -UseBasicParsing -Uri $WEB -TimeoutSec 8 | Out-Null } catch { $webUp = $false }
 if ($webUp) {
-    foreach ($path in @('/', '/diary', '/history', '/inbox', '/scrapes', '/meals', '/staging', '/budget', '/audit', '/settings')) {
+    foreach ($path in @('/', '/diary', '/history', '/inbox', '/scanner', '/scrapes', '/meals', '/staging', '/budget', '/audit', '/settings')) {
         $ok = $false
         try { $ok = (Invoke-WebRequest -UseBasicParsing -Uri "$WEB$path" -TimeoutSec 12).StatusCode -eq 200 } catch { }
         Check "GET $WEB$path -> 200" $ok

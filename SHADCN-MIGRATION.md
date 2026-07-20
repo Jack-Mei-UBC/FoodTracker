@@ -15,7 +15,7 @@ regression. Do not start Phase 3 until Phase 1's Layer 2 contracts are green.
 | Phase | State | Notes |
 |---|---|---|
 | **0 — smoke repair + compose split** | ✅ **shipped** | All of F1–F7 landed. Smoke suite is 50/50 green and the two twins are back in sync. |
-| **1 — UI test net** | 🟡 **partly shipped** | Layers 1 & 2 exist (22 Playwright tests). Layer 3 (visual) and the Vitest secondary are **not started**. 4 open items, incl. a **false-green smoke exit** — see that phase. |
+| **1 — UI test net** | 🟡 **partly shipped** | Layers 1 & 2 exist (22 Playwright tests). Layer 3 (visual) and the Vitest secondary are **not started**. 2 open items (Vitest, Layer-3 flake controls) — the smoke-twin gaps (`/scanner`, false-green exit) are fixed. |
 | **2 — shadcn prerequisites** | 🟡 **decided, not built** | P5/P6/P7 decided; **P2 blocked** on the Next 14 → Tailwind 4 cascade. Nothing installed. **The Path A/B decision here blocks Phase 3.** |
 | **3 — the migration** | ⬜ not started | Gated on Phase 1 Layer 2, which is now green. |
 | **4 — docs & guardrails** | ⬜ not started | Folded into each Phase 3 step. |
@@ -160,24 +160,16 @@ referenced further down but does not exist yet** — add it with Vitest.
 
 ### Open items
 
-- [ ] **`/scanner` is missing from both smoke-test twins.** Playwright's
-      `routes.spec.ts` covers it, but `scripts/smoke-test.ps1` and
-      `scripts/smoke-test.sh` sweep 10 frontend routes and omit `/scanner` — so
-      the **Stop hook** (which runs only the smoke test, not Playwright) has a
-      blind spot on that page. It matters more than the usual missing route:
-      `/scanner` was rewritten into a pure uploader in this changeset, and it is
-      also on the Phase 3 page-sweep list. Add the route to **both** scripts —
-      per CLAUDE.md, an assertion goes into both or neither.
-- [ ] **The smoke scripts exit 0 when the stack is down.** Observed for real:
-      with no containers running, `smoke-test.ps1` printed `backend not
-      reachable - skipping` and returned **exit 0** — a green result that
-      asserted nothing. That's the same degrade-don't-fail idiom used for an
-      empty catalog (`[SKIP]`), but unreachable-backend is a different case: an
-      unseeded stack genuinely isn't a regression, whereas *no stack at all*
-      means the net didn't run. As-is, the Stop hook reports success on a turn
-      where nothing was verified. Options: exit non-zero on unreachable, or keep
-      exit 0 but print an unmissable banner and make CI treat it as failure.
-      Fix in **both** twins.
+- [x] **`/scanner` is missing from both smoke-test twins.** ~~Playwright's
+      `routes.spec.ts` covers it, but the twins sweep 10 frontend routes and
+      omit `/scanner`.~~ **Fixed** — both scripts now sweep all 11 routes
+      including `/scanner`.
+- [x] **The smoke scripts exit 0 when the stack is down.** **Fixed** — both
+      twins now support `STRICT=1` (fail with exit 2 on an unreachable/unhealthy
+      backend; CI sets it in `smoke.yml`), and the non-strict local skip prints
+      an unmissable `NOTHING WAS VERIFIED` banner instead of a quiet
+      `skipping`, so a Stop-hook "green" on a down stack is at least visibly
+      unverified rather than mistaken for a pass.
 - [ ] Add the Vitest secondary (`test:unit`) for the three pure-logic libs.
 - [ ] Put the Layer 3 flake controls in place *before* the first snapshot:
       fixed viewport, `reducedMotion: 'reduce'`, the `.animate-slide-up`
