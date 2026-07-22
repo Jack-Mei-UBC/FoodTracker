@@ -13,6 +13,7 @@ import { Card } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Checkbox } from './ui/checkbox';
+import { Command, CommandInput, CommandList, CommandEmpty, CommandItem } from './ui/command';
 import ScanImages from './ScanImages';
 import RawModelOutput, { ScanAttempt } from './RawModelOutput';
 
@@ -1177,32 +1178,35 @@ export default function ReviewItems({
             </h3>
           </div>
 
-          <input type="text" value={matchQuery} onChange={e => setMatchQuery(e.target.value)}
-            placeholder="Search the catalog by name or barcode…" autoFocus
-            className="field-input w-full text-xs rounded-lg" />
-
-          <div className="bg-muted/50 border rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
-            {matchQuery.trim() === '' ? (
-              <p className="text-[11px] text-slate-500 px-3 py-2">Type to search your catalog.</p>
-            ) : matchResults.length === 0 ? (
-              <p className="text-[11px] text-slate-500 px-3 py-2">No catalog match — create it as a new item instead.</p>
-            ) : matchResults.map(f => {
-              const latest = f.latest_prices?.[0]?.price;
-              return (
-                <button key={f.id} type="button" onClick={() => matchItemTo(matchFor, f)}
-                  className="w-full text-left px-3 py-2 hover:bg-white/5 transition flex items-center justify-between gap-2">
-                  <span className="min-w-0">
-                    <span className="block text-xs text-white truncate">{f.name}</span>
-                    {f.barcode && <span className="block text-[10px] font-mono text-slate-600">{f.barcode}</span>}
-                  </span>
-                  <span className="shrink-0 text-right">
-                    <span className="block text-[10px] text-slate-500">{f.category}</span>
-                    {latest != null && <span className="block text-[10px] font-mono text-emerald-400">${Number(latest).toFixed(2)}</span>}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <Command shouldFilter={false} className="border rounded-lg">
+            <CommandInput value={matchQuery} onValueChange={setMatchQuery}
+              placeholder="Search the catalog by name or barcode…" autoFocus />
+            <CommandList>
+              {matchQuery.trim() === '' ? (
+                <p className="text-[11px] text-slate-500 px-3 py-2">Type to search your catalog.</p>
+              ) : (
+                <CommandEmpty className="text-[11px] text-slate-500 px-3 py-2 text-left">
+                  No catalog match — create it as a new item instead.
+                </CommandEmpty>
+              )}
+              {matchQuery.trim() !== '' && matchResults.map(f => {
+                const latest = f.latest_prices?.[0]?.price;
+                return (
+                  <CommandItem key={f.id} value={String(f.id)} onSelect={() => matchItemTo(matchFor, f)}
+                    className="justify-between">
+                    <span className="min-w-0">
+                      <span className="block text-xs text-white truncate">{f.name}</span>
+                      {f.barcode && <span className="block text-[10px] font-mono text-slate-600">{f.barcode}</span>}
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block text-[10px] text-slate-500">{f.category}</span>
+                      {latest != null && <span className="block text-[10px] font-mono text-emerald-400">${Number(latest).toFixed(2)}</span>}
+                    </span>
+                  </CommandItem>
+                );
+              })}
+            </CommandList>
+          </Command>
 
           <div className="flex justify-between gap-2 pt-1">
             <Button onClick={() => unmatchItem(matchFor)} variant="secondary" size="sm"

@@ -25,3 +25,22 @@ test('the meals builder Catalog/USDA tabs swap the ingredient search panel', asy
   await catalogTab.click();
   await expect(catalogInput).toBeVisible();
 });
+
+test('the Catalog ingredient combobox lists a fixture food and adding it creates a row', async ({ page }) => {
+  // Phase 3 M6 replaced the hand-rolled suggestion <div>/<button> list with
+  // cmdk's Command/CommandList/CommandItem (kept inline, not portaled via
+  // Popover, since this dropdown isn't inside a clipping ancestor) — this
+  // proves the CommandItem's onSelect still wires through to addRow().
+  await page.goto('/meals');
+  await page.getByRole('button', { name: '+ New Meal' }).click();
+
+  const catalogInput = page.getByPlaceholder('Add an ingredient from the catalog…');
+  await catalogInput.fill('Fixture Rolled Oats');
+
+  const option = page.getByText('Fixture Rolled Oats', { exact: false }).first();
+  await expect(option).toBeVisible();
+  await option.click();
+
+  await expect(catalogInput).toHaveValue('');
+  await expect(page.locator('span.font-semibold', { hasText: 'Fixture Rolled Oats' })).toBeVisible();
+});

@@ -17,6 +17,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { MACRO_META, MICRO_META } from '../lib/nutrition';
+import { Command, CommandList, CommandEmpty, CommandItem } from './ui/command';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -175,45 +176,54 @@ export default function NutritionSearch({
       {error && <div className="text-xs font-semibold text-rose-300 bg-rose-950/70 border border-rose-500/30 rounded-lg px-3 py-2">{error}</div>}
 
       {results !== null && (
-        <div className="bg-muted/50 border rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
-          {results.length === 0 ? (
-            <p className="text-[11px] text-slate-500 px-2 py-1.5">No USDA matches with calorie data.</p>
-          ) : results.map((c: any) => {
-            const saved = savedById[c.fdc_id];
-            return (
-              <div key={c.fdc_id} className="flex items-center gap-2 px-2 py-1.5">
-                <div className="min-w-0 flex-1 text-xs">
-                  <span className="text-slate-200">{c.description}</span>
-                  {c.brand && <span className="text-slate-500"> · {c.brand}</span>}
-                  <span className="block text-[10px] font-mono text-emerald-400">
-                    {Math.round(c.calories)} kcal / {c.serving_size} {c.serving_unit}{c.serving_text ? ` (${c.serving_text})` : ''}
-                    <span className="text-slate-600"> · {c.data_type}</span>
-                  </span>
-                </div>
-                {/* Right-hand action depends on mode:
-                    - onPick set      → one-click "Add to meal": saves this result (once)
-                      then hands it to onPick (save-on-pick — the meals builder path)
-                    - saved, no pick  → a "✓ saved" indicator (legacy dashboard auto-save)
-                    - not saved yet   → auto: "Saving…"; manual: the save button */}
-                {onPick ? (
-                  <button type="button" onClick={() => pickCandidate(c)} disabled={savingId === c.fdc_id}
-                    className="shrink-0 text-[11px] font-semibold rounded-lg px-2.5 py-1 border transition text-violet-300 bg-violet-500/10 border-violet-500/20 hover:bg-violet-500/20 disabled:opacity-50">
-                    {savingId === c.fdc_id ? 'Adding…' : (pickLabel || 'Add')}
-                  </button>
-                ) : saved ? (
-                  <span className="shrink-0 text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1">✓ saved</span>
-                ) : autoSave ? (
-                  <span className="shrink-0 text-[11px] text-slate-500 px-2.5 py-1">Saving…</span>
-                ) : (
-                  <button type="button" onClick={() => saveOne(c)} disabled={savingId === c.fdc_id}
-                    className="shrink-0 text-[11px] font-semibold rounded-lg px-2.5 py-1 border transition text-violet-300 bg-violet-500/10 border-violet-500/20 hover:bg-violet-500/20 disabled:opacity-50">
-                    {savingId === c.fdc_id ? 'Saving…' : saveLabel}
-                  </button>
-                )}
-              </div>
-            );
-          })}
-        </div>
+        <Command shouldFilter={false} className="border rounded-lg">
+          <CommandList>
+            {results.length === 0 && (
+              <CommandEmpty className="text-[11px] text-slate-500 px-2 py-1.5 text-left">
+                No USDA matches with calorie data.
+              </CommandEmpty>
+            )}
+            {results.map((c: any) => {
+              const saved = savedById[c.fdc_id];
+              // Only the save-on-pick mode (onPick set) is a genuine "pick one"
+              // action cmdk's onSelect maps onto; the other states (already
+              // saved, auto-saving, manual save) have nothing to select into,
+              // so onSelect is a no-op there and stays mouse/click-driven.
+              return (
+                <CommandItem key={c.fdc_id} value={String(c.fdc_id)} disabled={savingId === c.fdc_id}
+                  onSelect={() => { if (onPick) pickCandidate(c); }} className="justify-between">
+                  <div className="min-w-0 flex-1 text-xs">
+                    <span className="text-slate-200">{c.description}</span>
+                    {c.brand && <span className="text-slate-500"> · {c.brand}</span>}
+                    <span className="block text-[10px] font-mono text-emerald-400">
+                      {Math.round(c.calories)} kcal / {c.serving_size} {c.serving_unit}{c.serving_text ? ` (${c.serving_text})` : ''}
+                      <span className="text-slate-600"> · {c.data_type}</span>
+                    </span>
+                  </div>
+                  {/* Right-hand action depends on mode:
+                      - onPick set      → one-click "Add to meal": saves this result (once)
+                        then hands it to onPick (save-on-pick — the meals builder path)
+                      - saved, no pick  → a "✓ saved" indicator (legacy dashboard auto-save)
+                      - not saved yet   → auto: "Saving…"; manual: the save button */}
+                  {onPick ? (
+                    <span className="shrink-0 text-[11px] font-semibold rounded-lg px-2.5 py-1 border text-violet-300 bg-violet-500/10 border-violet-500/20">
+                      {savingId === c.fdc_id ? 'Adding…' : (pickLabel || 'Add')}
+                    </span>
+                  ) : saved ? (
+                    <span className="shrink-0 text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1">✓ saved</span>
+                  ) : autoSave ? (
+                    <span className="shrink-0 text-[11px] text-slate-500 px-2.5 py-1">Saving…</span>
+                  ) : (
+                    <button type="button" onClick={e => { e.stopPropagation(); saveOne(c); }} disabled={savingId === c.fdc_id}
+                      className="shrink-0 text-[11px] font-semibold rounded-lg px-2.5 py-1 border transition text-violet-300 bg-violet-500/10 border-violet-500/20 hover:bg-violet-500/20 disabled:opacity-50">
+                      {savingId === c.fdc_id ? 'Saving…' : saveLabel}
+                    </button>
+                  )}
+                </CommandItem>
+              );
+            })}
+          </CommandList>
+        </Command>
       )}
     </div>
   );

@@ -13,6 +13,7 @@ import { Card } from '../../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
 import { useToast } from '../../components/StatusToast';
+import { Command, CommandList, CommandItem } from '../../components/ui/command';
 import NutritionSearch, { SavedFood } from '../../components/NutritionSearch';
 import { UNIT_OPTIONS, parseAmountInput, normalizeUnit } from '../../lib/units';
 import { scaleNutrients, isServingUnit, NutritionFacts } from '../../lib/nutrition';
@@ -630,14 +631,10 @@ export default function MealsPage() {
                   className={`w-full ${inputCls}`}
                 />
                 {showSuggestions && query.trim() && (
-                  <div className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto overflow-x-hidden scrolling-touch bg-[#0b101f] border border-white/10 rounded-xl shadow-2xl">
-                    {suggestions.map(f => (
-                      <div key={f.id} className="flex items-center hover:bg-white/5 transition">
-                        <button
-                          type="button"
-                          onClick={() => addRow(f)}
-                          className="flex-1 min-w-0 text-left px-3 py-2 text-xs text-slate-200 flex justify-between items-center gap-2"
-                        >
+                  <Command shouldFilter={false} className="absolute z-20 mt-1 w-full rounded-xl border border-white/10 shadow-2xl">
+                    <CommandList className="max-h-64">
+                      {suggestions.map(f => (
+                        <CommandItem key={f.id} value={String(f.id)} onSelect={() => addRow(f)} className="justify-between">
                           <span className="truncate">{f.name} <span className="text-slate-500">· {f.category}</span></span>
                           <span className="flex items-center gap-2 shrink-0">
                             {f.nutrition ? (
@@ -646,23 +643,23 @@ export default function MealsPage() {
                               <span className="text-[10px] text-amber-500">no facts</span>
                             )}
                             {!(f.latest_prices ?? []).length && <span className="text-[10px] text-slate-600">no price</span>}
+                            {/* Add facts/price to this food before adding it as an ingredient */}
+                            <button
+                              type="button"
+                              onClick={e => { e.stopPropagation(); setDetailFoodId(f.id); }}
+                              title="Edit this food's prices, names & nutrition facts"
+                              className="text-slate-500 hover:text-violet-300 transition"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                            </button>
                           </span>
-                        </button>
-                        {/* Add facts/price to this food before adding it as an ingredient */}
-                        <button
-                          type="button"
-                          onClick={() => setDetailFoodId(f.id)}
-                          title="Edit this food's prices, names & nutrition facts"
-                          className="shrink-0 px-2.5 py-2 text-slate-500 hover:text-violet-300 transition"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                        </button>
-                      </div>
-                    ))}
-                    {suggestions.length === 0 && (
-                      <p className="px-3 py-2 text-xs text-slate-500">No catalog match — try the USDA database tab, or add the food from the Dashboard.</p>
-                    )}
-                  </div>
+                        </CommandItem>
+                      ))}
+                      {suggestions.length === 0 && (
+                        <p className="px-3 py-2 text-xs text-slate-500">No catalog match — try the USDA database tab, or add the food from the Dashboard.</p>
+                      )}
+                    </CommandList>
+                  </Command>
                 )}
               </div>
             </TabsContent>

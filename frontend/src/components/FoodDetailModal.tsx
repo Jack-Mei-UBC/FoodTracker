@@ -12,6 +12,7 @@ import PriceEditor, { EditablePriceLog } from './PriceEditor';
 import MacroEditor from './MacroEditor';
 import Modal from './Modal';
 import { Badge } from './ui/badge';
+import { Command, CommandInput, CommandList, CommandEmpty, CommandItem } from './ui/command';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -429,29 +430,33 @@ function ShareNutritionModal({ foodId, foodName, onClose, onShared, onError }: {
           <span className="block text-[10px] text-slate-500 font-normal">“{foodName}” will share the picked food&rsquo;s facts — editing either updates both.</span>
         </h3>
       </div>
-      <input type="text" value={query} onChange={e => setQuery(e.target.value)} autoFocus
-        placeholder="Search foods with nutrition…"
-        className="field-input w-full text-xs rounded-lg" />
-      <div className="bg-muted/50 border rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
-        {loading ? (
-          <p className="text-[11px] text-slate-500 px-3 py-2">Searching…</p>
-        ) : results.length === 0 ? (
-          <p className="text-[11px] text-slate-500 px-3 py-2">{query.trim() ? 'No foods with nutrition match.' : 'Type to search foods that have nutrition facts.'}</p>
-        ) : results.map(f => (
-          <div key={f.id} className="flex items-center gap-2 px-3 py-2">
-            <div className="min-w-0 flex-1 text-xs">
-              <span className="text-slate-200 truncate block">{f.name}</span>
-              <span className="text-[10px] font-mono text-emerald-400">
-                {Math.round(Number(f.nutrition!.calories))} kcal / {Number(f.nutrition!.serving_size)} {f.nutrition!.serving_unit}
+      <Command shouldFilter={false} className="border rounded-lg">
+        <CommandInput value={query} onValueChange={setQuery} autoFocus
+          placeholder="Search foods with nutrition…" />
+        <CommandList>
+          {loading ? (
+            <p className="text-[11px] text-slate-500 px-3 py-2">Searching…</p>
+          ) : (
+            <CommandEmpty className="text-[11px] text-slate-500 px-3 py-2 text-left">
+              {query.trim() ? 'No foods with nutrition match.' : 'Type to search foods that have nutrition facts.'}
+            </CommandEmpty>
+          )}
+          {results.map(f => (
+            <CommandItem key={f.id} value={String(f.id)} disabled={savingId !== null}
+              onSelect={() => share(f.id)} className="justify-between">
+              <div className="min-w-0 flex-1 text-xs">
+                <span className="text-slate-200 truncate block">{f.name}</span>
+                <span className="text-[10px] font-mono text-emerald-400">
+                  {Math.round(Number(f.nutrition!.calories))} kcal / {Number(f.nutrition!.serving_size)} {f.nutrition!.serving_unit}
+                </span>
+              </div>
+              <span className="shrink-0 text-[11px] font-semibold rounded-lg px-2.5 py-1 border text-sky-300 bg-sky-500/10 border-sky-500/20">
+                {savingId === f.id ? 'Sharing…' : 'Use these'}
               </span>
-            </div>
-            <button type="button" onClick={() => share(f.id)} disabled={savingId !== null}
-              className="shrink-0 text-[11px] font-semibold rounded-lg px-2.5 py-1 border transition text-sky-300 bg-sky-500/10 border-sky-500/20 hover:bg-sky-500/20 disabled:opacity-50">
-              {savingId === f.id ? 'Sharing…' : 'Use these'}
-            </button>
-          </div>
-        ))}
-      </div>
+            </CommandItem>
+          ))}
+        </CommandList>
+      </Command>
     </Modal>
   );
 }
