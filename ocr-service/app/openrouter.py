@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from .config import settings
 from .models import (
+    BarcodeData,
     PriceTagData,
     ReceiptData,
     ScanResponse,
@@ -23,6 +24,7 @@ _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```\s*$", re.IGNORECASE)
 _DATA_MODELS = {
     "receipt": ReceiptData,
     "price_tag": PriceTagData,
+    "barcode": BarcodeData,
     "unknown": UnknownData,
 }
 
