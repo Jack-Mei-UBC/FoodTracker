@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Modal from '../../components/Modal';
 import { Label } from '../../components/ui/label';
 import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
 import StatusToast, { useToast } from '../../components/StatusToast';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -130,7 +131,7 @@ export default function Budget() {
       </div>
 
       {/* ═══ Section: Spend vs. budget ═══ */}
-      <div data-loc="budget.summary" className="card rounded-3xl p-6 space-y-5">
+      <Card data-loc="budget.summary" className="rounded-3xl p-6 space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="field-label">Spent this month</div>
@@ -166,12 +167,12 @@ export default function Budget() {
           </div>
           <Button onClick={saveBudget}>Save budget</Button>
         </div>
-      </div>
+      </Card>
 
       {/* ═══ Section: Breakdowns ═══ */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* By store (this month) */}
-        <div data-loc="budget.by-store" className="card rounded-3xl p-6 space-y-3">
+        <Card data-loc="budget.by-store" className="rounded-3xl p-6 space-y-3">
           <h2 className="text-sm font-bold text-white">By store · {monthLabel(month)}</h2>
           {(summary?.by_store.length ?? 0) === 0 && <p className="text-xs text-slate-600 py-4 text-center">No spending recorded this month.</p>}
           {summary?.by_store.map(s => (
@@ -185,10 +186,10 @@ export default function Budget() {
               </div>
             </div>
           ))}
-        </div>
+        </Card>
 
         {/* By month (last 12) */}
-        <div data-loc="budget.by-month" className="card rounded-3xl p-6 space-y-3">
+        <Card data-loc="budget.by-month" className="rounded-3xl p-6 space-y-3">
           <h2 className="text-sm font-bold text-white">Last 12 months</h2>
           {(summary?.by_month.length ?? 0) === 0 && <p className="text-xs text-slate-600 py-4 text-center">No spending recorded yet.</p>}
           <div className="flex items-end justify-between gap-1 h-32">
@@ -203,11 +204,11 @@ export default function Budget() {
               </button>
             ))}
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* ═══ Section: Receipts list ═══ */}
-      <div data-loc="budget.receipts" className="card rounded-3xl p-6 space-y-3">
+      <Card data-loc="budget.receipts" className="rounded-3xl p-6 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-white">Receipts · {monthLabel(month)}</h2>
           <Button onClick={() => setAdding(true)} size="sm">+ Add receipt</Button>
@@ -238,7 +239,7 @@ export default function Budget() {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
 
       {/* Manual add / edit popup */}
       {(adding || editing) && (

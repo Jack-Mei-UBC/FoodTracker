@@ -9,6 +9,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Modal from '../../components/Modal';
 import FoodDetailModal from '../../components/FoodDetailModal';
 import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
 import NutritionSearch, { SavedFood } from '../../components/NutritionSearch';
 import { UNIT_OPTIONS, parseAmountInput, normalizeUnit } from '../../lib/units';
 import { scaleNutrients, isServingUnit, NutritionFacts } from '../../lib/nutrition';
@@ -513,7 +514,7 @@ export default function MealsPage() {
 
       {/* ═══ Section: AI generation panel ═══ */}
       {aiOpen && (
-        <div data-loc="meals.ai-panel" className="card p-5 space-y-4">
+        <Card data-loc="meals.ai-panel" className="p-5 space-y-4">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
             <h2 className="text-sm font-bold text-white">Draft a meal from your fridge</h2>
@@ -581,12 +582,12 @@ export default function MealsPage() {
             </button>
           </div>
           <p className="text-[10px] text-slate-500">Targets are per serving of the meal, prefilled as ⅓ of your daily goals.</p>
-        </div>
+        </Card>
       )}
 
       {/* ═══ Section: Builder ═══ */}
       {builderOpen && (
-        <div data-loc="meals.builder" className="card p-5 space-y-4">
+        <Card data-loc="meals.builder" className="p-5 space-y-4">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <h2 className="text-sm font-bold text-white">{editMealId ? 'Edit Meal' : 'New Meal'}</h2>
@@ -789,24 +790,24 @@ export default function MealsPage() {
               Cancel
             </Button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* ═══ Section: Meal list ═══ */}
       {isLoading ? (
         <div className="text-center text-slate-500 py-12">Loading meals…</div>
       ) : meals.length === 0 ? (
-        <div className="text-center py-16 card">
+        <Card className="text-center py-16">
           <p className="text-slate-400 font-semibold">No meals yet.</p>
           <p className="text-xs text-slate-600 mt-1">Build one from your catalog foods, or let the AI draft one from your fridge.</p>
-        </div>
+        </Card>
       ) : (
         <div data-loc="meals.list" className="space-y-3">
           {meals.map(meal => {
             const ps = meal.per_serving;
             const expanded = expandedId === meal.id;
             return (
-              <div key={meal.id} className="card overflow-hidden">
+              <Card key={meal.id} className="overflow-hidden">
                 <div className="p-4 flex flex-wrap items-center gap-3">
                   <button onClick={() => toggleExpand(meal)} className="flex-1 min-w-48 text-left group">
                     <span className="font-bold text-white group-hover:text-emerald-300 transition flex items-center gap-2">
@@ -923,7 +924,7 @@ export default function MealsPage() {
                     )}
                   </div>
                 )}
-              </div>
+              </Card>
             );
           })}
         </div>

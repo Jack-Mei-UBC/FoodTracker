@@ -3,6 +3,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { formatUnitPrice } from '../../lib/units';
 import PriceEditor from '../../components/PriceEditor';
+import { Card } from '../../components/ui/card';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -137,7 +138,7 @@ export default function History() {
       </div>
 
       {/* ═══ Section: Price log table ═══ */}
-      <div data-loc="history.price-table" className="card rounded-3xl p-6 overflow-x-auto">
+      <Card data-loc="history.price-table" className="rounded-3xl p-6 overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
             <tr className="border-b border-white/5 text-slate-500">
@@ -207,10 +208,10 @@ export default function History() {
             })}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {/* ═══ Section: Change history / revert feed ═══ */}
-      <div data-loc="history.audit-log" className="card rounded-3xl p-6 space-y-4">
+      <Card data-loc="history.audit-log" className="rounded-3xl p-6 space-y-4">
         <h2 className="text-lg font-bold text-white">Change History</h2>
         <p className="text-xs text-slate-400">Every edit, delete, and revert. Revert any change to undo it.</p>
         <div className="space-y-2 max-h-[420px] overflow-y-auto">
@@ -241,7 +242,7 @@ export default function History() {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
 
       {/* Shared price editor popup */}
       {editingLog && (

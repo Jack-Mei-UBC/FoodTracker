@@ -11,6 +11,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Modal from '../../components/Modal';
 import ImageCropper from '../../components/ImageCropper';
 import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -161,7 +162,7 @@ export default function Staging() {
       </div>
 
       {/* ═══ Section: Staged grid ═══ */}
-      <div data-loc="staging.grid" className="card rounded-3xl p-6">
+      <Card data-loc="staging.grid" className="rounded-3xl p-6">
         {loading ? (
           <p className="text-slate-600 text-sm py-6 text-center">Loading…</p>
         ) : jobs.length === 0 ? (
@@ -192,7 +193,7 @@ export default function Staging() {
             ))}
           </div>
         )}
-      </div>
+      </Card>
 
       {/* ═══ Section: Crop modal ═══ */}
       {cropJob && cropSrc && (

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { Card } from '../../components/ui/card';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -132,9 +133,9 @@ function ScrapesInner() {
       {/* ═══ Section: Job list ═══ */}
       <div data-loc="scrapes.job-list" className="space-y-3">
         {jobs.length === 0 && (
-          <div className="card rounded-3xl p-8 text-center text-slate-600 text-sm">
+          <Card className="rounded-3xl p-8 text-center text-slate-600 text-sm">
             No scrapes yet. Dispatch one from the <span className="text-violet-400 font-semibold">Dashboard</span>.
-          </div>
+          </Card>
         )}
 
         {jobs.map(job => {
@@ -142,7 +143,7 @@ function ScrapesInner() {
           const items = details[job.id] || [];
           const open = expanded.has(job.id);
           return (
-            <div key={job.id} className="card overflow-hidden">
+            <Card key={job.id} className="overflow-hidden">
               {/* Header row */}
               <button onClick={() => toggle(job.id)} className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-white/2 transition">
                 <div className="flex items-center gap-3 min-w-0">
@@ -237,7 +238,7 @@ function ScrapesInner() {
                   )}
                 </div>
               )}
-            </div>
+            </Card>
           );
         })}
       </div>

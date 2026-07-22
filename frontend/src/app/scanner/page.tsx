@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import StatusToast, { useToast } from '../../components/StatusToast';
 import { Button, buttonVariants } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
 
 // Scanner is now a pure INTAKE surface: every capture is staged for the
 // background queue (there is no synchronous "scan now" path anymore — see
@@ -123,7 +124,7 @@ export default function Scanner() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
 
         {/* ═══ Section: Uploader ═══ */}
-        <div data-loc="scanner.uploader" className="md:col-span-2 card rounded-3xl p-6 space-y-4">
+        <Card data-loc="scanner.uploader" className="md:col-span-2 rounded-3xl p-6 space-y-4">
           <h2 className="text-lg font-bold text-white">Add captures to Staging</h2>
 
           <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" multiple className="hidden" />
@@ -168,10 +169,10 @@ export default function Scanner() {
               Paste from clipboard
             </Button>
           </div>
-        </div>
+        </Card>
 
         {/* ═══ Section: Next steps ═══ */}
-        <div data-loc="scanner.next-steps" className="md:col-span-1 card rounded-3xl p-6 space-y-4">
+        <Card data-loc="scanner.next-steps" className="md:col-span-1 rounded-3xl p-6 space-y-4">
           <h2 className="text-sm font-bold text-white">What happens next</h2>
           <ol className="space-y-3 text-xs text-slate-400">
             <li className="flex gap-2"><span className="text-violet-400 font-bold">1.</span><span>Images land in <span className="text-white font-semibold">Staging</span>.</span></li>
@@ -187,7 +188,7 @@ export default function Scanner() {
             <Link href="/staging" className={buttonVariants({ className: 'w-full' })}>Go to Staging →</Link>
             <Link href="/inbox" className={buttonVariants({ variant: 'secondary', className: 'w-full' })}>Open Inbox</Link>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

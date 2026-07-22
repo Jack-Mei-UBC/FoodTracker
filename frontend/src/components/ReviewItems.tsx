@@ -9,6 +9,7 @@ import Modal from './Modal';
 import { Badge } from './ui/badge';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
+import { Card } from './ui/card';
 import ScanImages from './ScanImages';
 import RawModelOutput, { ScanAttempt } from './RawModelOutput';
 
@@ -752,7 +753,7 @@ export default function ReviewItems({
   if (parsedItems.length === 0 && !manualEntry && !hasRawText && !hasAttempts) return null;
 
   return (
-    <div data-loc="component.review-items" className="card rounded-3xl p-6 space-y-6">
+    <Card data-loc="component.review-items" className="rounded-3xl p-6 space-y-6">
       {label && <div className="text-xs font-semibold text-slate-400 truncate">{label}</div>}
 
       {/* Source photo(s) alongside the extracted items — the crop that was read
@@ -1284,6 +1285,6 @@ export default function ReviewItems({
           </div>
         </Modal>
       )}
-    </div>
+    </Card>
   );
 }

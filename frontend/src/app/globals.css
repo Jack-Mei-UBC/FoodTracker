@@ -23,15 +23,18 @@
    ---------------------------------------------------------------------------
    These exist only because ~270 call sites still reference them. Each one is a
    placeholder for a shadcn component that replaces it during Phase 3:
-     .card                 -> <Card>
-     .panel                -> <Card> (nested) / plain bg-muted
+     .card                 -> <Card> (1 call site left — diary/page.tsx's
+                                data-loc="diary.add-entry" <form>; Card only renders
+                                a <div>, so a form element can't become one)
+     .panel                -> <Card> (nested) / plain bg-muted — not converted yet
      .field-label          -> <Label>
      .field-input          -> <Input>
      .badge                -> <Badge> (3 call sites left — interactive tag-remove
                                 chips in ReviewItems.tsx, deferred pending a verified
                                 click-test through Base UI's render prop)
    .btn/.btn-primary/.btn-secondary were retired in the M2 Button pass — every call
-   site now uses <Button variant="default|secondary">.
+   site now uses <Button variant="default|secondary">. .card was retired in the M2
+   Card pass down to that one non-<div> exception above.
    Do NOT add new ones, and do not reach for these in new code — use the shadcn
    component. Every definition below is now written in shadcn TOKENS rather than
    hard-coded palette values, so they inherit the theme instead of pinning a

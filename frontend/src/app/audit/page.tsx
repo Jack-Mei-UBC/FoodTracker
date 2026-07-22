@@ -19,6 +19,7 @@ import FoodDetailModal from '../../components/FoodDetailModal';
 import Modal from '../../components/Modal';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
 import { NutritionFacts, formatCaloriesPer100 } from '../../lib/nutrition';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -195,7 +196,7 @@ export default function Audit() {
       </div>
 
       {/* ═══ Section: Filters ═══ */}
-      <div data-loc="audit.filters" className="card rounded-3xl p-5 space-y-4">
+      <Card data-loc="audit.filters" className="rounded-3xl p-5 space-y-4">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex gap-1 text-[11px] font-semibold">
             {(['active', 'archived'] as const).map(t => (
@@ -233,11 +234,11 @@ export default function Audit() {
             ))}
           </div>
         )}
-      </div>
+      </Card>
 
       {/* ═══ Section: Bulk action bar ═══ */}
       {selected.length > 0 && (
-        <div data-loc="audit.bulk-bar" className="card rounded-2xl p-4 space-y-3 sticky top-20 z-30 border-violet-500/30">
+        <Card data-loc="audit.bulk-bar" className="rounded-2xl p-4 space-y-3 sticky top-20 z-30 border-violet-500/30">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm font-bold text-white">{selected.length} selected</span>
             <button onClick={() => setSelected([])} className="text-[11px] text-slate-400 hover:text-white">Clear</button>
@@ -287,11 +288,11 @@ export default function Audit() {
               </Badge>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* ═══ Section: Item table ═══ */}
-      <div data-loc="audit.table" className="card rounded-3xl p-5">
+      <Card data-loc="audit.table" className="rounded-3xl p-5">
         {loading ? (
           <p className="text-slate-500 text-sm py-10 text-center">Loading catalog…</p>
         ) : filtered.length === 0 ? (
@@ -383,7 +384,7 @@ export default function Audit() {
             </table>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* ═══ Section: Manage-tags popup ═══ */}
       {tagPanelOpen && (

@@ -8,6 +8,7 @@ import ScanImages from '../../components/ScanImages';
 import StatusToast, { useToast } from '../../components/StatusToast';
 import { scanResultToRawItems, receiptCaptureData } from '../../lib/scanResult';
 import type { GeoPoint } from '../../lib/geo';
+import { Card } from '../../components/ui/card';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -234,7 +235,7 @@ export default function Inbox() {
       </div>
 
       {/* ═══ Section: Job list ═══ */}
-      <div data-loc="inbox.job-list" className="card rounded-3xl p-6 space-y-2">
+      <Card data-loc="inbox.job-list" className="rounded-3xl p-6 space-y-2">
         {jobs.length === 0 && <p className="text-slate-600 text-sm py-6 text-center">Inbox empty. Queue an image from the Scanner.</p>}
         {jobs.map(job => {
           const isOpen = openReviews.some(r => r.jobId === job.id);
@@ -293,14 +294,14 @@ export default function Inbox() {
             </div>
           );
         })}
-      </div>
+      </Card>
 
       {/* ═══ Section: Review panels — one per opened job, each with its source photo ═══ */}
       <div data-loc="inbox.review-panels" className="space-y-8">
       {openReviews.map(review => (
         <div key={review.jobId} className="relative">
           {review.result.type === 'unknown' && !manualOverrideIds.has(review.jobId) ? (
-            <div className="card rounded-3xl p-6 text-sm text-slate-400 space-y-4">
+            <Card className="rounded-3xl p-6 text-sm text-slate-400 space-y-4">
               <div className="text-xs font-semibold text-slate-400">{review.filename}</div>
               <ScanImages imageId={review.imageId} originalImageId={review.originalImageId} />
               <p>Not recognized as a receipt or price tag: <span className="text-slate-300">{review.result.data.reason}</span></p>
@@ -321,7 +322,7 @@ export default function Inbox() {
                 <button onClick={() => discard(review.jobId)} className="text-[11px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-1">Discard</button>
                 <button onClick={() => closeReview(review.jobId)} className="text-[11px] text-slate-400 hover:text-white px-3 py-1">Close</button>
               </div>
-            </div>
+            </Card>
           ) : (
             <ReviewItems
               items={review.rawItems}

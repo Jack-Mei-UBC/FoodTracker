@@ -13,6 +13,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import StatusToast, { useToast } from '../../components/StatusToast';
 import { Label } from '../../components/ui/label';
 import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -87,7 +88,7 @@ export default function Settings() {
       </div>
 
       {/* ═══ Section: Default sale duration ═══ */}
-      <div data-loc="settings.sale-duration" className="card rounded-3xl p-6 space-y-5">
+      <Card data-loc="settings.sale-duration" className="rounded-3xl p-6 space-y-5">
         <div>
           <h2 className="text-lg font-bold text-white">Default sale duration</h2>
           <p className="text-xs text-slate-400 mt-1 leading-relaxed">
@@ -135,7 +136,7 @@ export default function Settings() {
             </div>
           </>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

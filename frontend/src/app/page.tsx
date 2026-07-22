@@ -10,6 +10,7 @@ import Modal from '../components/Modal';
 import { Badge } from '../components/ui/badge';
 import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
 import FoodIconPicker from '../components/FoodIconPicker';
 
 // Interfaces based on database schema
@@ -586,7 +587,7 @@ export default function Dashboard() {
       )}
 
       {/* ═══ Section: Hero banner ═══ */}
-      <div data-loc="dashboard.hero" className="card rounded-3xl p-6 lg:p-10 relative overflow-hidden">
+      <Card data-loc="dashboard.hero" className="rounded-3xl p-6 lg:p-10 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-80 h-80 bg-violet-600/10 rounded-full blur-3xl -z-10" />
         <div className="absolute bottom-0 left-0 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl -z-10" />
         
@@ -598,11 +599,11 @@ export default function Dashboard() {
             Monitor real-time grocery prices across multiple physical stores, audit historical changes, calculate unit efficiency spreads, and pull Flipp flyer deals to find maximum savings.
           </p>
         </div>
-      </div>
+      </Card>
 
       {/* ═══ Section: Summary Cards ═══ */}
       <div data-loc="dashboard.summary-cards" className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="card p-6 flex items-center justify-between">
+        <Card className="p-6 flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">Tracked Foods</span>
             <h3 className="text-3xl font-extrabold text-white mt-1">{foods.length}</h3>
@@ -613,9 +614,9 @@ export default function Dashboard() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
             </svg>
           </div>
-        </div>
+        </Card>
 
-        <div className="card p-6 flex items-center justify-between">
+        <Card className="p-6 flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">Stores Tracked</span>
             <h3 className="text-3xl font-extrabold text-white mt-1">{stores.length}</h3>
@@ -626,9 +627,9 @@ export default function Dashboard() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
             </svg>
           </div>
-        </div>
+        </Card>
 
-        <div className="card p-6 flex items-center justify-between">
+        <Card className="p-6 flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">Average Spread Savings</span>
             <h3 className="text-3xl font-extrabold text-emerald-400 mt-1">
@@ -643,7 +644,7 @@ export default function Dashboard() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* ═══ Section: Main grid — left = scrapers · efficiency · admin, right = inventory ═══ */}
@@ -653,7 +654,7 @@ export default function Dashboard() {
         <div className="lg:col-span-1 space-y-8">
 
           {/* Dispatch Web Scraper Pipeline */}
-          <div data-loc="dashboard.scraper-flipp" className="card p-6 space-y-4">
+          <Card data-loc="dashboard.scraper-flipp" className="p-6 space-y-4">
             <div className="flex items-center space-x-2">
               <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
               <h2 className="text-lg font-bold text-white">Scrape Flyer Deals</h2>
@@ -709,10 +710,10 @@ export default function Dashboard() {
             <a href="/scrapes" className="block text-center text-[11px] font-semibold text-violet-400 hover:text-violet-300 transition pt-1">
               View scraper activity →
             </a>
-          </div>
+          </Card>
 
           {/* Import a cocowest.ca Costco Sale Post */}
-          <div data-loc="dashboard.scraper-cocowest" className="card p-6 space-y-4">
+          <Card data-loc="dashboard.scraper-cocowest" className="p-6 space-y-4">
             <div className="flex items-center space-x-2">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <h2 className="text-lg font-bold text-white">Import Costco Sale Post</h2>
@@ -754,10 +755,10 @@ export default function Dashboard() {
                 Import Sale Post
               </button>
             </form>
-          </div>
+          </Card>
 
           {/* Price Efficiency Index Widget */}
-          <div data-loc="dashboard.efficiency" className="card p-6 space-y-4">
+          <Card data-loc="dashboard.efficiency" className="p-6 space-y-4">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <svg className="w-5 h-5 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
@@ -796,10 +797,10 @@ export default function Dashboard() {
                 ))
               )}
             </div>
-          </div>
-          
+          </Card>
+
           {/* Quick Add Forms panels */}
-          <div data-loc="dashboard.admin" className="card p-6 space-y-4">
+          <Card data-loc="dashboard.admin" className="p-6 space-y-4">
             <h2 className="text-lg font-bold text-white">Administration</h2>
             
             <div className="border-t border-white/5 pt-3">
@@ -824,7 +825,7 @@ export default function Dashboard() {
                 </button>
               </form>
             </div>
-          </div>
+          </Card>
 
         </div>
 
@@ -924,7 +925,7 @@ export default function Dashboard() {
           </form>
 
           {/* ═══ Section: Inventory table ═══ */}
-          <div data-loc="dashboard.inventory-table" className="card rounded-2xl overflow-hidden">
+          <Card data-loc="dashboard.inventory-table" className="rounded-2xl overflow-hidden">
             {isLoading ? (
               <div className="text-center text-slate-500 py-12">Loading catalog…</div>
             ) : sortedRows.length === 0 ? (
@@ -1036,7 +1037,7 @@ export default function Dashboard() {
                 </table>
               </div>
             )}
-          </div>
+          </Card>
 
           {/* ═══ Section: Table footer — result count, page size, paging ═══ */}
           {!isLoading && sortedRows.length > 0 && (
