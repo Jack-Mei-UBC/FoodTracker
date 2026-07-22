@@ -1,7 +1,7 @@
 // Map an OCR ScanResponse to the RawItem[] the review UI consumes. Shared by the
 // scanner (synchronous scan) and the inbox (background scan) so both paths turn a
 // result into review rows the exact same way.
-import type { Capture, CaptureData, ScanResponse } from '../types/scan';
+import type { Capture, CaptureData, ReceiptData, ScanResponse } from '../types/scan';
 import type { RawItem } from '../components/ReviewItems';
 
 // Items from ONE capture's data, tagged with which capture they came from so
@@ -57,4 +57,19 @@ export function scanResultToRawItems(scan: ScanResponse | null | undefined): Raw
   }
   // Rows written before `captures` existed: fall back to the single-type shape.
   return captureDataToRawItems(scan.type, scan.data as CaptureData);
+}
+
+// The receipt capture's data, if this scan produced one — a mixed scan (e.g.
+// receipt + shelf tags in one photo) still has a receipt to record spending
+// for even though its top-level `type` is 'mixed', not 'receipt'. Used to gate
+// the inbox's budget-tracking receipt context; falls back to the single-type
+// shape for rows written before `captures` existed.
+export function receiptCaptureData(scan: ScanResponse | null | undefined): ReceiptData | null {
+  if (!scan) return null;
+  const captures = (scan as any).captures as Capture[] | undefined;
+  if (Array.isArray(captures) && captures.length > 0) {
+    const receipt = captures.find(c => c.type === 'receipt');
+    return receipt ? (receipt.data as ReceiptData) : null;
+  }
+  return scan.type === 'receipt' ? (scan.data as ReceiptData) : null;
 }

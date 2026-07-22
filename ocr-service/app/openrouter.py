@@ -174,7 +174,22 @@ def _extract_json_object(content: str) -> dict:
         return repaired
 
 
-def _validate_capture(raw: dict) -> dict:
+def _sanitize_tags(data: object, allowed: set[str] | None) -> None:
+    """Drop any tag name the model invented outside the vocabulary offered (or
+    ALL tags, if none was offered). The prompt tells the model to only use the
+    supplied list, but free models don't reliably comply — same human-in-the-
+    loop rule as the rest of extraction: only what was actually asked for
+    survives. Mutates the validated pydantic item objects in place."""
+    items = getattr(data, "items", None)
+    if not isinstance(items, list):
+        return
+    for item in items:
+        if not hasattr(item, "tags"):
+            continue
+        item.tags = [t for t in item.tags if allowed and t in allowed] if item.tags else []
+
+
+def _validate_capture(raw: dict, allowed_tags: set[str] | None) -> dict:
     """Validate one capture's data against the model matching its declared
     type, so a receipt with a malformed item fails here rather than silently
     coercing to the wrong union member. Raises ValueError on an unrecognized
@@ -183,15 +198,18 @@ def _validate_capture(raw: dict) -> dict:
     data_model = _DATA_MODELS.get(capture_type)
     if data_model is None:
         raise ValueError(f"unknown capture type: {capture_type!r}")
+    data = data_model.model_validate(raw.get("data", {}))
+    _sanitize_tags(data, allowed_tags)
     return {
         "type": capture_type,
         "confidence": float(raw.get("confidence", 0)),
-        "data": data_model.model_validate(raw.get("data", {})),
+        "data": data,
     }
 
 
-def _parse_scan_response(content: str, model: str) -> ScanResponse:
+def _parse_scan_response(content: str, model: str, tags: list[str] | None) -> ScanResponse:
     payload = _extract_json_object(content)
+    allowed_tags = set(tags) if tags else None
 
     raw_captures = payload.get("captures")
     if isinstance(raw_captures, list) and raw_captures:
@@ -204,7 +222,7 @@ def _parse_scan_response(content: str, model: str) -> ScanResponse:
             if not isinstance(raw, dict):
                 continue
             try:
-                captures.append(_validate_capture(raw))
+                captures.append(_validate_capture(raw, allowed_tags))
             except (ValidationError, ValueError, TypeError) as err:
                 logger.warning("Dropping unparseable capture (%s): %r", err, raw.get("type"))
         if not captures:
@@ -214,7 +232,7 @@ def _parse_scan_response(content: str, model: str) -> ScanResponse:
     # Legacy/fallback shape: a flat { type, confidence, data } body. Some free
     # models ignore the captures instruction and answer the old way — the
     # ScanResponse validator synthesizes captures[] from this automatically.
-    capture = _validate_capture(payload)
+    capture = _validate_capture(payload, allowed_tags)
     return ScanResponse(
         type=capture["type"],
         confidence=capture["confidence"],
@@ -276,7 +294,7 @@ async def scan_image(image_jpeg: bytes, model: str | None = None, tags: list[str
                 )
 
             try:
-                return _parse_scan_response(content, model)
+                return _parse_scan_response(content, model, tags)
             except (json.JSONDecodeError, ValidationError, ValueError, TypeError) as first_err:
                 logger.warning("First parse failed (%s), retrying once", first_err)
                 retry_messages = messages + [
@@ -285,7 +303,7 @@ async def scan_image(image_jpeg: bytes, model: str | None = None, tags: list[str
                 ]
                 retry_content = await _chat(client, retry_messages, model)
                 try:
-                    return _parse_scan_response(retry_content, model)
+                    return _parse_scan_response(retry_content, model, tags)
                 except (json.JSONDecodeError, ValidationError, ValueError, TypeError):
                     # Don't hard-fail: return the raw text as an 'unknown' result so
                     # the UI can show it for copy-paste / manual entry instead of a 502.

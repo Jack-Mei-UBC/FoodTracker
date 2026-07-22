@@ -6,7 +6,7 @@ import ReviewItems, { RawItem } from '../../components/ReviewItems';
 import RawModelOutput, { ScanAttempt } from '../../components/RawModelOutput';
 import ScanImages from '../../components/ScanImages';
 import StatusToast, { useToast } from '../../components/StatusToast';
-import { scanResultToRawItems } from '../../lib/scanResult';
+import { scanResultToRawItems, receiptCaptureData } from '../../lib/scanResult';
 import type { GeoPoint } from '../../lib/geo';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -103,9 +103,13 @@ export default function Inbox() {
         originalImageId: d.original_image_id ?? null,
         attempts: Array.isArray(d.attempts) ? d.attempts as ScanAttempt[] : null,
         gps: d.latitude != null && d.longitude != null ? { lat: Number(d.latitude), lng: Number(d.longitude) } : null,
-        receipt: result?.type === 'receipt'
-          ? { total: result.data.total ?? null, purchasedOn: result.data.purchase_date ?? null, scanJobId: job.id }
-          : null,
+        // Sourced from the receipt CAPTURE, not the top-level type — a mixed
+        // scan (receipt + shelf tags in one photo) reports `type: 'mixed'` but
+        // still has a receipt to record spending for.
+        receipt: (() => {
+          const rd = receiptCaptureData(result);
+          return rd ? { total: rd.total ?? null, purchasedOn: rd.purchase_date ?? null, scanJobId: job.id } : null;
+        })(),
       };
     } catch { return null; }
   };
@@ -280,7 +284,7 @@ export default function Inbox() {
               {failedDetail && (
                 <div className="border-t border-white/5 pt-3 space-y-3">
                   <ScanImages imageId={failedDetail.imageId} originalImageId={failedDetail.originalImageId} />
-                  <RawModelOutput attempts={failedDetail.attempts} defaultOpen notify={notify} />
+                  <RawModelOutput attempts={failedDetail.attempts} scanJobId={job.id} defaultOpen notify={notify} />
                   {!failedDetail.attempts?.length && (
                     <p className="text-xs text-slate-500">No per-model trace recorded for this job (it predates attempt logging).</p>
                   )}
@@ -303,7 +307,7 @@ export default function Inbox() {
               {/* The text is surfaced HERE, not hidden behind "enter manually" —
                   a failed scan is exactly when the models' output matters most. */}
               <RawModelOutput rawText={review.result.raw_text ?? null} attempts={review.attempts}
-                defaultOpen notify={notify} />
+                scanJobId={review.jobId} defaultOpen notify={notify} />
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => setManualOverrideIds(prev => new Set(prev).add(review.jobId))}
                   className="text-[11px] font-bold text-violet-300 bg-violet-500/10 border border-violet-500/20 rounded-lg px-3 py-1 hover:bg-violet-500/20 transition">
@@ -334,6 +338,7 @@ export default function Inbox() {
               manualEntry={review.result.type === 'unknown'}
               rawText={review.result.raw_text ?? null}
               attempts={review.attempts}
+              scanJobId={review.jobId}
               onRestage={() => restage(review.jobId)}
               receipt={review.receipt}
               notify={notify}

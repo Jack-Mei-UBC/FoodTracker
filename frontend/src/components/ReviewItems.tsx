@@ -61,7 +61,15 @@ interface ScannedProduct {
   // The user picked this catalog food by hand (auto-match missed or was wrong),
   // so show the link without a fuzzy score.
   manualMatch?: boolean;
+  // See RawItem.tags/origin.
+  tags?: string[];
+  origin?: 'receipt' | 'price_tag' | 'barcode';
 }
+
+const ORIGIN_ORDER: Array<'receipt' | 'price_tag' | 'barcode'> = ['receipt', 'price_tag', 'barcode'];
+const ORIGIN_LABEL: Record<'receipt' | 'price_tag' | 'barcode', string> = {
+  receipt: 'Receipt', price_tag: 'Price Tags', barcode: 'Barcode',
+};
 
 // `foods.unit` for a food this review has to create. It is the food's own
 // measuring unit (what a "1" of it means — drives the density input, the per-100
@@ -102,6 +110,9 @@ interface ReviewItemsProps {
   manualEntry?: boolean; // render the shell even with no items, so items can be added by hand
   rawText?: string | null; // the winning model's raw text extract (see RawModelOutput)
   attempts?: ScanAttempt[] | null; // per-model OCR trace from scan_jobs.attempts
+  // The scan_jobs id, so RawModelOutput can load its full scan_runs history
+  // (every attempt ever made — survives restage/reprocess unlike `attempts`).
+  scanJobId?: number | null;
   // Send this job back to /staging to be re-cropped and re-run — the recovery
   // path when OCR read the wrong region. Omitted where there's no job to restage.
   onRestage?: () => void;
@@ -173,7 +184,7 @@ function computeMatch(name: string, price: number, foods: any[], barcode?: strin
 export default function ReviewItems({
   items, confidence = 1, defaultStoreId = '1', storeId, onStoreChange, openReviewCount = 1,
   source = 'scan', imageId = null, originalImageId = null, gps = null,
-  label, manualEntry = false, rawText = null, attempts = null, onRestage,
+  label, manualEntry = false, rawText = null, attempts = null, scanJobId = null, onRestage,
   receipt = null, onCommitted, onDiscard, notify,
 }: ReviewItemsProps) {
   const [parsedItems, setParsedItems] = useState<ScannedProduct[]>([]);
@@ -212,8 +223,32 @@ export default function ReviewItems({
   // Fallback sale length from /api/settings (mirrors app_settings.default_sale_days).
   const [defaultSaleDays, setDefaultSaleDays] = useState(7);
   const [bulkSaleEnd, setBulkSaleEnd] = useState('');
+  // Catalog tags, for the per-row "+ tag" picker. Scanned tags are already
+  // constrained to this vocabulary server-side (ocr-service drops anything the
+  // model invented) — fetched here too so the user can add one the scan missed.
+  const [catalogTags, setCatalogTags] = useState<{ id: number; name: string }[]>([]);
+  // Which row's tag picker is open (null = none).
+  const [tagPickerFor, setTagPickerFor] = useState<number | null>(null);
 
   const toast = (text: string, type: 'success' | 'error' = 'success') => notify?.(text, type);
+
+  useEffect(() => {
+    fetch(`${API_BASE_URL}/api/tags`)
+      .then(r => r.ok ? r.json() : [])
+      .then(setCatalogTags)
+      .catch(() => {});
+  }, []);
+
+  // Add/remove one tag on a row. Not gated to catalogTags — a scan's own tags[]
+  // is already sanitized server-side, and the picker itself only offers real ones.
+  const toggleItemTag = (index: number, tagName: string) => {
+    setParsedItems(prev => prev.map((it, i) => {
+      if (i !== index) return it;
+      const current = it.tags ?? [];
+      const next = current.includes(tagName) ? current.filter(t => t !== tagName) : [...current, tagName];
+      return { ...it, tags: next };
+    }));
+  };
 
   // The configured fallback sale length, used to show what a sale row will get
   // when the scan found no printed end date. The backend applies the same default
@@ -418,6 +453,8 @@ export default function ReviewItems({
           amount: item.amount ?? null,
           // No unit extracted from the scan → default to count ('each').
           amountUnit: item.amountUnit ?? 'each',
+          tags: item.tags ?? [],
+          origin: item.origin,
           matchedName: m.matchedName,
           matchScore: m.matchScore,
           needsReview,
@@ -531,6 +568,19 @@ export default function ReviewItems({
 
   const pendingReviewCount = parsedItems.filter(i => i.needsReview && !i.approved).length;
 
+  // Group the main grid by which capture a row came from (a mixed scan's
+  // receipt AND price_tag regions render as separate sections) — but only when
+  // more than one origin is actually present, so an ordinary single-region scan
+  // stays exactly as before with no extra header noise. Rows with no origin
+  // (manually added, or from a pre-composite-scan row) sort last, ungrouped.
+  const distinctOrigins = new Set(parsedItems.map(it => it.origin).filter(Boolean));
+  const showOriginGroups = distinctOrigins.size > 1;
+  const gridOrder: number[] = showOriginGroups
+    ? [...ORIGIN_ORDER.filter(o => distinctOrigins.has(o)), undefined as any].flatMap(o =>
+        parsedItems.map((_, i) => i).filter(i => parsedItems[i].origin === o)
+      )
+    : parsedItems.map((_, i) => i);
+
   // Filter the cached catalog by name or barcode — shared by the "search existing
   // items to add" box and the manual match picker.
   const searchCatalog = (q: string, limit: number) => {
@@ -551,6 +601,10 @@ export default function ReviewItems({
     let successCount = 0;
     const errors: string[] = [];
     const saved: ScannedProduct[] = [];
+    // Tag names → catalog ids for the batched apply-tags call after the save
+    // loop below (see tagAssignments).
+    const tagIdByName = new Map(catalogTags.map(t => [t.name, t.id]));
+    const tagAssignments: { food_id: number; tag_ids: number[] }[] = [];
     try {
       const foodsRes = await fetch(`${API_BASE_URL}/api/foods`);
       const catalog: any[] = foodsRes.ok ? await foodsRes.json() : [];
@@ -606,6 +660,13 @@ export default function ReviewItems({
             if (priceRes.ok) {
               successCount++;
               saved.push(item);
+              // Queue this food's tags for the batched apply-tags call below —
+              // one row per food, since the same food can appear more than once
+              // in a batch (e.g. two receipt lines for the same product).
+              if (item.tags && item.tags.length > 0) {
+                const tagIds = item.tags.map(t => tagIdByName.get(t)).filter((id): id is number => id != null);
+                if (tagIds.length > 0) tagAssignments.push({ food_id: foodId, tag_ids: tagIds });
+              }
             } else {
               const e = await priceRes.json().catch(() => ({}));
               errors.push(`${labelName}: ${e.error || `couldn't save price (HTTP ${priceRes.status})`}`);
@@ -615,6 +676,16 @@ export default function ReviewItems({
           console.error('Error committing item:', labelName, err);
           errors.push(`${labelName}: ${err?.message || 'network error'}`);
         }
+      }
+
+      // Apply every queued tag assignment in one call. Best-effort: a tag
+      // failing to apply shouldn't undo the price that already saved — same
+      // human-in-the-loop rule as the rest of extraction, just not blocking.
+      if (tagAssignments.length > 0) {
+        fetch(`${API_BASE_URL}/api/foods/apply-tags`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assignments: tagAssignments }),
+        }).catch(() => {});
       }
 
       // Teach the selected store its location from the photo's GPS (first time only).
@@ -702,7 +773,7 @@ export default function ReviewItems({
 
       {/* What every model actually returned. Collapsed on a good scan; opened
           automatically when nothing parsed, which is when it's the main event. */}
-      <RawModelOutput rawText={rawText} attempts={attempts}
+      <RawModelOutput rawText={rawText} attempts={attempts} scanJobId={scanJobId}
         defaultOpen={parsedItems.length === 0} notify={toast} />
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -885,8 +956,20 @@ export default function ReviewItems({
             </tr>
           </thead>
           <tbody>
-            {parsedItems.map((item, idx) => (
-              <tr key={idx} className={`border-b border-white/5 hover:bg-white/5 ${item.needsReview && !item.approved ? 'opacity-50' : ''}`}>
+            {gridOrder.map((idx, pos) => {
+              const item = parsedItems[idx];
+              const prevIdx = pos > 0 ? gridOrder[pos - 1] : undefined;
+              const showHeader = showOriginGroups && (pos === 0 || parsedItems[prevIdx as number].origin !== item.origin);
+              return (
+              <React.Fragment key={idx}>
+                {showHeader && (
+                  <tr>
+                    <td colSpan={8} className="pt-4 pb-1.5 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                      {item.origin ? ORIGIN_LABEL[item.origin] : 'Other'}
+                    </td>
+                  </tr>
+                )}
+                <tr className={`border-b border-white/5 hover:bg-white/5 ${item.needsReview && !item.approved ? 'opacity-50' : ''}`}>
                 <td className="py-2.5 pr-4">
                   <input type="text" value={item.name} onChange={e => updateParsedItem(idx, 'name', e.target.value)}
                     onBlur={() => matchNameForItem(idx)}
@@ -920,6 +1003,34 @@ export default function ReviewItems({
                         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                         prices &amp; names
                       </button>
+                    )}
+                  </div>
+                  {/* Catalog tag chips — scanned tags are already constrained to
+                      the vocabulary server-side; the picker only offers real ones. */}
+                  <div className="flex flex-wrap items-center gap-1 mt-1">
+                    {(item.tags ?? []).map(t => (
+                      <button key={t} type="button" onClick={() => toggleItemTag(idx, t)}
+                        title="Remove this tag"
+                        className="badge text-[9px] normal-case text-teal-300 bg-teal-500/10 border-teal-500/20 hover:bg-rose-500/10 hover:text-rose-300 hover:border-rose-500/20 transition">
+                        {t} ×
+                      </button>
+                    ))}
+                    <button type="button" onClick={() => setTagPickerFor(tagPickerFor === idx ? null : idx)}
+                      className="text-[10px] text-slate-500 hover:text-slate-300">
+                      + tag
+                    </button>
+                    {tagPickerFor === idx && (
+                      <div className="flex flex-wrap items-center gap-1 w-full mt-1">
+                        {catalogTags.filter(t => !(item.tags ?? []).includes(t.name)).map(t => (
+                          <button key={t.id} type="button" onClick={() => { toggleItemTag(idx, t.name); setTagPickerFor(null); }}
+                            className="badge text-[9px] normal-case text-slate-400 bg-white/5 border-white/10 hover:text-white hover:bg-white/10">
+                            {t.name}
+                          </button>
+                        ))}
+                        {catalogTags.length === 0 && (
+                          <span className="text-[10px] text-slate-600">No tags in the catalog yet.</span>
+                        )}
+                      </div>
                     )}
                   </div>
                 </td>
@@ -992,8 +1103,10 @@ export default function ReviewItems({
                     </svg>
                   </button>
                 </td>
-              </tr>
-            ))}
+                </tr>
+              </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
