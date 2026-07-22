@@ -473,7 +473,7 @@ export default function MealsPage() {
     }
   };
 
-  const inputCls = "bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition";
+  const inputCls = "bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-hidden focus:border-emerald-500 transition";
 
   return (
     <div data-loc="page.meals" className="space-y-8 animate-slide-up relative">
@@ -489,7 +489,7 @@ export default function MealsPage() {
       {/* ═══ Section: Header ═══ */}
       <div data-loc="meals.header" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-emerald-300 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-extrabold tracking-tight bg-linear-to-r from-white via-slate-100 to-emerald-300 bg-clip-text text-transparent">
             Meal Plans
           </h1>
           <p className="text-sm text-slate-400 mt-1">Recipes with live macros and cost from your latest tracked prices.</p>
@@ -503,7 +503,7 @@ export default function MealsPage() {
           </button>
           <button
             onClick={openCreate}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold hover:shadow-lg hover:shadow-emerald-500/20 active:scale-[0.98] transition"
+            className="px-4 py-2 rounded-xl bg-linear-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold hover:shadow-lg hover:shadow-emerald-500/20 active:scale-[0.98] transition"
           >
             + New Meal
           </button>
@@ -705,7 +705,7 @@ export default function MealsPage() {
                         setRows(next);
                       }}
                       title="Type a number with a unit (e.g. 600g, 2lb) to auto-fill both fields"
-                      className="w-16 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white text-right font-mono focus:outline-none focus:border-emerald-500"
+                      className="w-16 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white text-right font-mono focus:outline-hidden focus:border-emerald-500"
                     />
                     <select
                       value={row.unit}
@@ -714,7 +714,7 @@ export default function MealsPage() {
                         next[i] = { ...row, unit: e.target.value };
                         setRows(next);
                       }}
-                      className="bg-slate-950 border border-white/10 rounded-lg px-1.5 py-1 text-white focus:outline-none"
+                      className="bg-slate-950 border border-white/10 rounded-lg px-1.5 py-1 text-white focus:outline-hidden"
                     >
                       {INGREDIENT_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                     </select>

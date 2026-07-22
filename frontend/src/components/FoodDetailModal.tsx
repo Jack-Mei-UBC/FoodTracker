@@ -146,7 +146,7 @@ export default function FoodDetailModal({
 
   return (
     <>
-      <Modal onClose={onClose} zClass="z-[60]" maxWidth="max-w-2xl" panelClassName="bg-[#090d1a] border border-white/10 rounded-3xl p-6 lg:p-7 space-y-5" dataLoc="modal.food-detail">
+      <Modal onClose={onClose} zClass="z-60" maxWidth="max-w-2xl" panelClassName="bg-[#090d1a] border border-white/10 rounded-3xl p-6 lg:p-7 space-y-5" dataLoc="modal.food-detail">
         <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-white p-2 rounded-full hover:bg-white/5 transition">
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
         </button>
@@ -183,7 +183,7 @@ export default function FoodDetailModal({
                   onChange={e => setNewName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') addName(); }}
                   placeholder="Add another name for this food…"
-                  className="flex-1 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500"
+                  className="flex-1 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-hidden focus:border-sky-500"
                 />
                 <button onClick={addName} className="px-3 py-1.5 rounded-lg bg-sky-600/20 border border-sky-500/30 text-sky-300 text-xs font-semibold hover:bg-sky-600/30 transition">
                   Add Name
@@ -245,7 +245,7 @@ export default function FoodDetailModal({
                   onChange={e => setUsableDraft(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') saveUsable(); }}
                   onBlur={saveUsable}
-                  className="w-24 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white font-mono focus:outline-none focus:border-violet-500"
+                  className="w-24 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white font-mono focus:outline-hidden focus:border-violet-500"
                 />
                 <span className="text-xs text-slate-500">% usable</span>
                 <span className="text-[10px] text-slate-600">e.g. 70 = 30% bone/waste · &gt;100 for dry goods that expand</span>
@@ -265,7 +265,7 @@ export default function FoodDetailModal({
                     onChange={e => setDensityDraft(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') saveDensity(); }}
                     onBlur={saveDensity}
-                    className="w-24 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white font-mono focus:outline-none focus:border-violet-500"
+                    className="w-24 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white font-mono focus:outline-hidden focus:border-violet-500"
                   />
                   <span className="text-xs text-slate-500">kg/L</span>
                   <span className="text-[10px] text-slate-600">water ≈ 1 · oil ≈ 0.92 · honey ≈ 1.42</span>
@@ -304,7 +304,7 @@ export default function FoodDetailModal({
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5">
                               <span className="font-mono font-bold text-white">${Number(log.price).toFixed(2)}</span>
-                              {log.is_sale && <span className="text-[9px] px-1 rounded bg-amber-500/15 text-amber-400 font-bold border border-amber-500/20">SALE</span>}
+                              {log.is_sale && <span className="text-[9px] px-1 rounded-sm bg-amber-500/15 text-amber-400 font-bold border border-amber-500/20">SALE</span>}
                               <span className="text-slate-400 truncate">{log.store_name ?? '—'}</span>
                             </div>
                             <div className="text-[10px] text-slate-500 font-mono">
@@ -367,7 +367,7 @@ export default function FoodDetailModal({
 
       {/* Photo lightbox */}
       {lightbox !== null && (
-        <div className="fixed inset-0 z-[9999] bg-black/90 flex items-center justify-center p-6" onClick={() => setLightbox(null)}>
+        <div className="fixed inset-0 z-9999 bg-black/90 flex items-center justify-center p-6" onClick={() => setLightbox(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={`${API_BASE_URL}/api/images/${lightbox}`} alt="Attached source photo" className="max-h-full max-w-full rounded-2xl border border-white/10 shadow-2xl" onClick={e => e.stopPropagation()} />
           <button onClick={() => setLightbox(null)} className="absolute top-5 right-5 text-white/70 hover:text-white p-2 rounded-full bg-black/40 hover:bg-black/60 transition">
@@ -426,7 +426,7 @@ function ShareNutritionModal({ foodId, foodName, onClose, onShared, onError }: {
   };
 
   return (
-    <Modal onClose={onClose} zClass="z-[70]" maxWidth="max-w-md" dataLoc="modal.share-nutrition"
+    <Modal onClose={onClose} zClass="z-70" maxWidth="max-w-md" dataLoc="modal.share-nutrition"
       panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-white">Use another food&rsquo;s nutrition

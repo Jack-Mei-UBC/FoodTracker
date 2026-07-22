@@ -15,8 +15,8 @@ regression. Do not start Phase 3 until Phase 1's Layer 2 contracts are green.
 | Phase | State | Notes |
 |---|---|---|
 | **0 — smoke repair + compose split** | ✅ **shipped** | All of F1–F7 landed. Smoke suite is 50/50 green and the two twins are back in sync. |
-| **1 — UI test net** | 🟡 **partly shipped** | Layers 1 & 2 exist (22 Playwright tests). Layer 3 (visual) and the Vitest secondary are **not started**. 2 open items (Vitest, Layer-3 flake controls) — the smoke-twin gaps (`/scanner`, false-green exit) are fixed. |
-| **2 — shadcn prerequisites** | 🟡 **decided, not built** | P5/P6/P7 decided; **P2 blocked** on the Next 14 → Tailwind 4 cascade. Nothing installed. **The Path A/B decision here blocks Phase 3.** |
+| **1 — UI test net** | 🟡 **partly shipped** | Layers 1 & 2 exist (29 Playwright tests, green ×3 consecutive runs). Layer 3 (visual) and the Vitest secondary are **not started**. A real **flake source was found and fixed** — Playwright artifacts were being written into the container's bind mount, triggering mid-run recompiles. |
+| **2 — shadcn prerequisites** | 🟡 **half built** | **P2 UNBLOCKED and shipped: Next 15 + Tailwind 4 are in, verified.** The Path B cascade turned out to be cheap — React 18 stays, zero source changes. Remaining: P1 (tsconfig es5→ES2020), P3/P4 (deps + `cn()`), P5 (`components.json`, `shadcn init -b base`). |
 | **3 — the migration** | ⬜ not started | Gated on Phase 1 Layer 2, which is now green. |
 | **4 — docs & guardrails** | ⬜ not started | Folded into each Phase 3 step. |
 
@@ -270,7 +270,7 @@ per-turn hook, so it runs manually and in CI. Document that split.
 | # | Item | Notes |
 |---|---|---|
 | P1 | **tsconfig `target: es5` → `ES2020`** | Removes the documented `[...set]` spread ban. Radix/cmdk ship modern syntax; es5 without `downlevelIteration` is real friction. Next transpiles for browsers via SWC/browserslist regardless, so this is a type-check-level change. **Update the CLAUDE.md gotcha when done.** |
-| P2 | **Tailwind version — BLOCKED, see below** ⛔ | Attempted 3.3 → 4 and rolled it back. Tailwind 4 cannot run on Next 14. See "The dependency cascade" below. |
+| P2 | **Next 15 + Tailwind 4 — SHIPPED** ✅ | Path B taken and it was cheap. See "The dependency cascade — resolved" below. |
 | P3 | **Dependencies** | `class-variance-authority`, `clsx`, `tailwind-merge`, `tailwindcss-animate`, `@radix-ui/react-*` (per component), `cmdk` (combobox), and finally *using* `lucide-react` (installed, currently zero imports). |
 | P4 | **`cn()` helper** at `src/lib/utils.ts` (clsx + tailwind-merge). shadcn assumes it exists. |
 | P5 | **`components.json`** | `aliases.components: "@/components/ui"`, `aliases.utils: "@/lib/utils"`, `tailwind.css: "src/app/globals.css"`, `tsx: true`, and **`rsc: false`** — mandatory, the static export has no server. The `@/*` path alias already exists in tsconfig. ✅ |
@@ -279,7 +279,50 @@ per-turn hook, so it runs manually and in CI. Document that split.
 | P8 | **`data-loc` forwarding** | Verify every adopted component spreads `...props` so `data-loc` reaches the DOM. Radix and shadcn's generated components do. Layer 1 tests assert the key slugs still exist, which turns this from a documented hope into an enforced contract. |
 | P9 | **Static-export gate** | Run `npm run build:mobile` (`BUILD_TARGET=static`) after prereqs **and after every migration phase**, to prove nothing pulled in a server-only dependency. This is the constraint most likely to break silently. |
 
-### The dependency cascade (attempted 2026-07-19, rolled back)
+### The dependency cascade — RESOLVED (Path B shipped 2026-07-22)
+
+**Outcome: Next 15 + Tailwind 4 are in, on React 18, with zero source changes.**
+The cascade the first attempt predicted (`Tailwind 4 → Node 20+ → Next 15+ →
+likely React 19`) stopped one step short of React 19 — which is what made Path B
+cheap.
+
+What was actually required:
+
+1. **`npm install next@15`** — that's the whole framework upgrade. Every Next
+   15.x release accepts `react ^18.2.0` as a peer, so **React 19 was never
+   needed**, and the React-19-compat risk for `react-easy-crop` /
+   `lucide-react` (the main worry in the Path A/B table below) evaporated.
+   Verified before installing: both libs declare React 18 support.
+2. **`@tailwindcss/upgrade` in a `node:22-alpine` container** (Tailwind 4 needs
+   Node ≥ 20; the host is on 18). It rewrote 16 source files, deleted
+   `tailwind.config.js` in favour of a CSS-first `@theme` block, moved the
+   shared vocabulary from `@layer components` to `@utility`, swapped PostCSS to
+   `@tailwindcss/postcss`, and dropped `autoprefixer`.
+3. **Nothing else.** No hand-fixes to components, no API migrations.
+
+Verified on the isolated worktree stack: dev server healthy, **93 KB of CSS
+compiled with `.card`/`.btn`/`.badge`/`.field-input` and the glassmorphism
+`backdrop-filter` intact**, production `--target prod` image builds, the
+Capacitor `BUILD_TARGET=static` export emits all 12 pages, typecheck clean,
+**50/50 smoke assertions and 29/29 Playwright tests green across 3 consecutive
+runs**.
+
+**A caution for anyone re-reading the failure below:** Next 15 *still* vendors
+`postcss@8.4.31` in its dependency list, exactly like Next 14. So the nested
+version is **not** the diagnostic — only the runtime behaviour is. Don't
+conclude from `cat node_modules/next/package.json` that it's still broken.
+
+**A process note.** The retry initially failed with
+`Cannot apply unknown utility class 'rounded-2xl'` — caused by *manually*
+`npm install`-ing Tailwind 4 first and then running the upgrade tool, which left
+a half-migrated state (v4 packages, v3 stylesheet). The tool must run against a
+**clean v3 baseline** and do the dependency bump itself. Reverting to Tailwind 3
+and re-running it in one shot worked.
+
+---
+
+<details>
+<summary>Historical: the original blocked attempt (2026-07-19, rolled back)</summary>
 
 Ran `@tailwindcss/upgrade` for real and backed it out. What it surfaced, in order:
 
@@ -317,7 +360,7 @@ docker compose up -d --build -V frontend   # -V = --renew-anon-volumes
 Without `-V` you get a confusing `Cannot find module` for a package that is
 demonstrably in `package.json`.
 
-### Two ways forward
+### Two ways forward — decided: **B**
 
 | | Path | Cost | Ceiling |
 |---|---|---|---|
@@ -331,13 +374,23 @@ none of them: the Capacitor static-export constraint already forces every page
 to be a client component fetching `${API_BASE_URL}` at runtime. The unknown is
 React 19 compatibility for `react-easy-crop` and `lucide-react`.
 
+**That prediction held.** B was chosen and shipped; the React 19 unknown never
+materialised because Next 15 runs fine on React 18. Components therefore come
+from **Base UI** (current shadcn's default), not the frozen `shadcn@2.3.0` +
+Radix of Path A.
+
+</details>
+
 ### Open items
 
-- [ ] **Decide Path A vs Path B — this is the blocker for the whole migration.**
-      It determines whether components come from **Radix** (A, frozen
-      `shadcn@2.3.0`) or **Base UI** (B, current shadcn), which changes every
-      import in Phase 3's M1–M8. Phase 3 cannot start until it's settled, so
-      this is the single highest-leverage open item in the document.
+- [x] ~~Decide Path A vs Path B.~~ **Decided: B.** Next 15 + Tailwind 4 shipped;
+      Phase 3 targets **Base UI**.
+- [ ] **P1 — `tsconfig.json` `target: es5` → `ES2020`.** Still outstanding; the
+      `[...set]` spread gotcha in CLAUDE.md remains true until it's done.
+- [ ] **P3/P4 — install `class-variance-authority`, `clsx`, `tailwind-merge`,
+      `cmdk`; add `cn()` at `src/lib/utils.ts`.**
+- [ ] **P5 — `shadcn init -b base`** with `rsc: false` (mandatory: the static
+      export has no server) and `aliases.components: "@/components/ui"`.
 - [ ] Before committing to B, spike **React 19 compatibility for
       `react-easy-crop` and `lucide-react`** — the one genuine unknown in that
       path, and cheap to test ahead of the framework major. `ImageCropper` is on

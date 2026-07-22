@@ -46,3 +46,7 @@ frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/
 frontend/.playwright/
+
+# Playwright artifacts live OUTSIDE frontend/ so the dev container's file
+# watcher (bind mount + polling) can't see them and recompile mid-test.
+.playwright-artifacts/

@@ -77,7 +77,7 @@ function CopyButton({ text, notify }: { text: string; notify?: RawModelOutputPro
 function TextBlock({ text, className = 'h-48' }: { text: string; className?: string }) {
   return (
     <textarea readOnly value={text}
-      className={`w-full ${className} bg-slate-950 border border-white/10 rounded-lg p-3 text-xs font-mono text-slate-300 resize-y focus:outline-none`} />
+      className={`w-full ${className} bg-slate-950 border border-white/10 rounded-lg p-3 text-xs font-mono text-slate-300 resize-y focus:outline-hidden`} />
   );
 }
 

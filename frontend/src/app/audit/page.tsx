@@ -615,7 +615,7 @@ function AutoTagModal({ foodIds, tags, onClose, onCreateTag, onApplied, notify }
                   <span className="text-slate-500 font-mono tabular-nums">{Math.round((progress.done / progress.total) * 100)}%</span>
                 </div>
                 <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-400 rounded-full transition-all duration-300"
+                  <div className="h-full bg-linear-to-r from-violet-500 to-indigo-400 rounded-full transition-all duration-300"
                     style={{ width: `${(progress.done / progress.total) * 100}%` }} />
                 </div>
               </div>
@@ -860,7 +860,7 @@ function FindDuplicatesModal({ foods, onClose, onMerged, notify }: {
                   <span className="text-slate-500 font-mono tabular-nums">{Math.round((progress.done / progress.total) * 100)}%</span>
                 </div>
                 <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-400 rounded-full transition-all duration-300"
+                  <div className="h-full bg-linear-to-r from-violet-500 to-indigo-400 rounded-full transition-all duration-300"
                     style={{ width: `${(progress.done / progress.total) * 100}%` }} />
                 </div>
               </div>

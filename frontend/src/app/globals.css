@@ -1,37 +1,119 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap')
+layer(base);
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
 
-:root {
-  --background: 224 71% 4%;
-  --foreground: 213 31% 91%;
-  --card: 222 47% 7%;
-  --border: 223 27% 15%;
-  --primary: 263 70% 50%;
-  --primary-glow: rgba(139, 92, 246, 0.15);
-  --success: 142 70% 45%;
-  --warning: 37 90% 50%;
-  --danger: 346 80% 55%;
+@theme {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-border: hsl(var(--border));
 }
 
-body {
-  background-color: #05070f;
-  color: hsl(var(--foreground));
-  font-family: 'Inter', sans-serif;
-  background-image: 
-    radial-gradient(at 0% 0%, rgba(30, 27, 75, 0.3) 0, transparent 50%),
-    radial-gradient(at 100% 100%, rgba(15, 23, 42, 0.5) 0, transparent 50%);
-  background-attachment: fixed;
-  min-height: 100vh;
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
 }
 
-h1, h2, h3, h4, h5, h6 {
-  font-family: 'Outfit', sans-serif;
+@utility card {
+  /* Glass card surface: the `glass-panel border border-white/5 rounded-2xl`
+     combo. Padding (p-5/p-6) and accent-border variants (border-violet-500/20…)
+     stay inline since they vary. For the hover-lift cards keep `glass-panel-hover`
+     alongside — .card doesn't include the lift. */
+  @apply rounded-2xl;
+  background: rgba(8, 12, 28, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
+@utility panel {
+  /* Inner/nested panel: the semi-solid `bg-slate-950/60 border border-white/5`
+     surface used *inside* cards (efficiency rows, diary macro tiles, meal
+     ingredient rows, the dashboard modal's sub-sections). Distinct from .card
+     (which is the translucent glass outer surface). Bakes in the dominant
+     rounded-xl; the few rounded-2xl uses override it inline. Padding stays inline. */
+  @apply bg-slate-950/60 border border-white/5 rounded-xl;
+}
+
+@utility field-label {
+  /* Form field label. */
+  @apply block text-xs font-semibold text-slate-400 mb-1;
+}
+
+@utility field-input {
+  /* Text input / <select>. Emerald-focus sites add `focus:border-emerald-500`. */
+  @apply w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 transition focus:outline-hidden focus:border-violet-500;
+}
+
+@utility btn {
+  /* Buttons: `.btn` base + a color modifier. Sizing (w-full/py-2/px-5) stays
+     inline because it varies from button to button. */
+  @apply inline-flex items-center justify-center rounded-xl text-sm font-semibold transition active:scale-[0.98] disabled:opacity-50;
+}
+
+@utility btn-primary {
+  @apply bg-linear-to-r from-violet-600 to-indigo-600 text-white hover:shadow-lg hover:shadow-indigo-500/20;
+}
+
+@utility btn-secondary {
+  @apply bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10;
+}
+
+@utility badge {
+  /* Small pill/tag badge: category chips, status/source tags, approval states.
+     Text size (text-[9px], text-[10px]), tracking, and color (text-, bg-, border-)
+     stay inline since they vary per badge. */
+  @apply font-bold uppercase px-2 py-0.5 rounded-full border;
+}
+
+@layer utilities {
+  :root {
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+    --card: 222 47% 7%;
+    --border: 223 27% 15%;
+    --primary: 263 70% 50%;
+    --primary-glow: rgba(139, 92, 246, 0.15);
+    --success: 142 70% 45%;
+    --warning: 37 90% 50%;
+    --danger: 346 80% 55%;
+  }
+
+  body {
+    background-color: #05070f;
+    color: hsl(var(--foreground));
+    font-family: 'Inter', sans-serif;
+    background-image:
+      radial-gradient(at 0% 0%, rgba(30, 27, 75, 0.3) 0, transparent 50%),
+      radial-gradient(at 100% 100%, rgba(15, 23, 42, 0.5) 0, transparent 50%);
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: 'Outfit', sans-serif;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
    Shared class vocabulary
    ---------------------------------------------------------------------------
    These are the named, grouped forms of the Tailwind strings that were being
@@ -45,56 +127,6 @@ h1, h2, h3, h4, h5, h6 {
    rounded-lg"` correctly rounds `lg` even though `.btn` @applies `rounded-xl`,
    and why the emerald-focus inputs can just add `focus:border-emerald-500`.
    ═══════════════════════════════════════════════════════════════════════════ */
-@layer components {
-  /* Glass card surface: the `glass-panel border border-white/5 rounded-2xl`
-     combo. Padding (p-5/p-6) and accent-border variants (border-violet-500/20…)
-     stay inline since they vary. For the hover-lift cards keep `glass-panel-hover`
-     alongside — .card doesn't include the lift. */
-  .card {
-    @apply rounded-2xl;
-    background: rgba(8, 12, 28, 0.65);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-  }
-
-  /* Inner/nested panel: the semi-solid `bg-slate-950/60 border border-white/5`
-     surface used *inside* cards (efficiency rows, diary macro tiles, meal
-     ingredient rows, the dashboard modal's sub-sections). Distinct from .card
-     (which is the translucent glass outer surface). Bakes in the dominant
-     rounded-xl; the few rounded-2xl uses override it inline. Padding stays inline. */
-  .panel {
-    @apply bg-slate-950/60 border border-white/5 rounded-xl;
-  }
-
-  /* Form field label. */
-  .field-label {
-    @apply block text-xs font-semibold text-slate-400 mb-1;
-  }
-
-  /* Text input / <select>. Emerald-focus sites add `focus:border-emerald-500`. */
-  .field-input {
-    @apply w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 transition focus:outline-none focus:border-violet-500;
-  }
-
-  /* Buttons: `.btn` base + a color modifier. Sizing (w-full/py-2/px-5) stays
-     inline because it varies from button to button. */
-  .btn {
-    @apply inline-flex items-center justify-center rounded-xl text-sm font-semibold transition active:scale-[0.98] disabled:opacity-50;
-  }
-  .btn-primary {
-    @apply bg-gradient-to-r from-violet-600 to-indigo-600 text-white hover:shadow-lg hover:shadow-indigo-500/20;
-  }
-  .btn-secondary {
-    @apply bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10;
-  }
-
-  /* Small pill/tag badge: category chips, status/source tags, approval states.
-     Text size (text-[9px], text-[10px]), tracking, and color (text-, bg-, border-)
-     stay inline since they vary per badge. */
-  .badge {
-    @apply font-bold uppercase px-2 py-0.5 rounded-full border;
-  }
 }
 
 /* Glassmorphism utility */

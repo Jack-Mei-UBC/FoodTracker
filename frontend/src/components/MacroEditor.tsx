@@ -116,7 +116,7 @@ export default function MacroEditor({
     }
   };
 
-  const num = 'bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white text-right font-mono focus:outline-none focus:border-emerald-500';
+  const num = 'bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white text-right font-mono focus:outline-hidden focus:border-emerald-500';
 
   return (
     <Modal onClose={onClose} maxWidth="max-w-lg" panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4" dataLoc="modal.macro-editor">
@@ -139,7 +139,7 @@ export default function MacroEditor({
             onChange={e => setFdcQuery(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); searchUsda(); } }}
             placeholder="Search USDA (name or barcode)…"
-            className="flex-1 bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500"
+            className="flex-1 bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-hidden focus:border-sky-500"
           />
           <button type="button" onClick={searchUsda} disabled={fdcSearching}
             className="px-3 py-1.5 rounded-lg bg-sky-600/20 border border-sky-500/30 text-sky-300 text-xs font-semibold hover:bg-sky-600/30 transition disabled:opacity-50">
@@ -168,7 +168,7 @@ export default function MacroEditor({
         <div className="flex flex-wrap gap-2 items-center text-xs">
           <label className="text-slate-400">Serving</label>
           <input type="text" inputMode="text" placeholder="e.g. 170g" value={draft.serving_size} onChange={e => onServing(e.target.value)} title="Type a number with a unit (e.g. 170g, 1cup) to auto-fill both fields" className={`${num} w-20`} />
-          <select value={draft.serving_unit} onChange={e => setDraft({ ...draft, serving_unit: e.target.value })} className="bg-slate-950 border border-white/10 rounded-lg px-1.5 py-1 text-white focus:outline-none">
+          <select value={draft.serving_unit} onChange={e => setDraft({ ...draft, serving_unit: e.target.value })} className="bg-slate-950 border border-white/10 rounded-lg px-1.5 py-1 text-white focus:outline-hidden">
             {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
           </select>
           <label className="text-slate-400 ml-2">Calories</label>
@@ -206,7 +206,7 @@ export default function MacroEditor({
         )}
 
         <div className="flex gap-2 pt-1">
-          <button onClick={save} disabled={busy} className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg py-2 text-sm font-semibold hover:shadow-lg transition disabled:opacity-50">
+          <button onClick={save} disabled={busy} className="flex-1 bg-linear-to-r from-emerald-600 to-teal-600 text-white rounded-lg py-2 text-sm font-semibold hover:shadow-lg transition disabled:opacity-50">
             {busy ? 'Saving…' : 'Save Facts'}
           </button>
           <button onClick={onClose} disabled={busy} className="btn btn-secondary rounded-lg px-4 py-2">Cancel</button>

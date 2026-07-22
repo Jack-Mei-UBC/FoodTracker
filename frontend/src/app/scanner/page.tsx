@@ -137,7 +137,7 @@ export default function Scanner() {
               const files = Array.from(e.dataTransfer.files ?? []);
               if (files.length > 0) stageImages(files);
             }}
-            className={`w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-white/10 hover:border-violet-500/50 flex flex-col items-center justify-center p-4 cursor-pointer bg-slate-950 transition overflow-hidden ${queuing ? 'opacity-60 pointer-events-none' : ''}`}
+            className={`w-full aspect-4/3 rounded-2xl border-2 border-dashed border-white/10 hover:border-violet-500/50 flex flex-col items-center justify-center p-4 cursor-pointer bg-slate-950 transition overflow-hidden ${queuing ? 'opacity-60 pointer-events-none' : ''}`}
           >
             <svg className="w-8 h-8 text-slate-600 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -150,7 +150,7 @@ export default function Scanner() {
           <div className="flex items-center justify-between bg-slate-950 border border-white/5 p-2 rounded-xl">
             <span className="text-[10px] text-slate-500 font-semibold uppercase pl-1">Store</span>
             <select value={targetStoreId} onChange={e => setTargetStoreId(e.target.value)}
-              className="bg-transparent text-xs text-white focus:outline-none">
+              className="bg-transparent text-xs text-white focus:outline-hidden">
               {stores.length > 0
                 ? stores.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)
                 : <><option value="1">SuperMarket Central</option><option value="2">Organic Grocer</option><option value="3">Value Foods</option></>}

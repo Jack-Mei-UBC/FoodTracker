@@ -159,7 +159,7 @@ export default function NutritionSearch({
           onChange={e => setQuery(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); search(); } }}
           placeholder="Search USDA (name or barcode)…"
-          className="flex-1 bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500"
+          className="flex-1 bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-hidden focus:border-sky-500"
         />
         <button type="button" onClick={search} disabled={searching}
           className="px-3 py-1.5 rounded-lg bg-sky-600/20 border border-sky-500/30 text-sky-300 text-xs font-semibold hover:bg-sky-600/30 transition disabled:opacity-50">

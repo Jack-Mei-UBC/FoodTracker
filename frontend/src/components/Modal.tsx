@@ -23,7 +23,7 @@ interface ModalProps {
   children: ReactNode;
   /** Full Tailwind literal (JIT), e.g. "max-w-md". Default max-w-2xl. */
   maxWidth?: string;
-  /** Full Tailwind literal (JIT), e.g. "z-50" / "z-[60]". Default z-[80]. */
+  /** Full Tailwind literal (JIT), e.g. "z-50" / "z-60". Default z-[80]. */
   zClass?: string;
   backdropClass?: string;
   /** Panel cosmetics (bg, border, radius, padding, spacing). */
@@ -32,7 +32,7 @@ interface ModalProps {
   dataLoc?: string;
 }
 
-// Modals can stack (e.g. FoodDetailModal z-[60] under PriceEditor z-[80]);
+// Modals can stack (e.g. FoodDetailModal z-60 under PriceEditor z-[80]);
 // Escape must close only the topmost one, so each instance registers here.
 const modalStack: Array<() => void> = [];
 
@@ -40,8 +40,8 @@ export default function Modal({
   onClose,
   children,
   maxWidth = 'max-w-2xl',
-  zClass = 'z-[80]',
-  backdropClass = 'bg-black/75 backdrop-blur-sm',
+  zClass = 'z-80',
+  backdropClass = 'bg-black/75 backdrop-blur-xs',
   panelClassName = 'bg-[#0b0f1e] border border-white/10 rounded-2xl p-5',
   dataLoc,
 }: ModalProps) {

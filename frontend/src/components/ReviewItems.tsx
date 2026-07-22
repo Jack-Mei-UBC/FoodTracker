@@ -791,7 +791,7 @@ export default function ReviewItems({
           <div className="flex items-center space-x-3 bg-slate-950 border border-white/5 p-2 rounded-xl">
             <span className="text-xs text-slate-500 font-semibold uppercase pl-1">Store Bought:</span>
             <select value={targetStoreId} onChange={e => requestStoreChange(e.target.value)}
-              className="bg-transparent text-xs text-white focus:outline-none">
+              className="bg-transparent text-xs text-white focus:outline-hidden">
               {stores.length > 0
                 ? stores.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)
                 : <><option value="1">SuperMarket Central</option><option value="2">Organic Grocer</option><option value="3">Value Foods</option></>}
@@ -814,7 +814,7 @@ export default function ReviewItems({
               <input autoFocus value={newStoreName} onChange={e => setNewStoreName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); createStore(); } }}
                 placeholder="New store name" disabled={savingStore}
-                className="flex-1 bg-transparent text-xs text-white placeholder:text-slate-600 focus:outline-none" />
+                className="flex-1 bg-transparent text-xs text-white placeholder:text-slate-600 focus:outline-hidden" />
               <button type="button" onClick={createStore} disabled={savingStore || !newStoreName.trim()}
                 className="btn btn-primary rounded-lg px-3 py-1 text-[11px] disabled:opacity-50">
                 {savingStore ? 'Adding…' : 'Add'}
@@ -841,7 +841,7 @@ export default function ReviewItems({
             <input type="date" value={receiptDate}
               onChange={e => setReceiptDate(e.target.value)} className="field-input w-40" />
           </div>
-          <p className="text-[11px] text-slate-500 flex-1 min-w-[12rem]">
+          <p className="text-[11px] text-slate-500 flex-1 min-w-48">
             Recorded as a spending row for <span className="text-slate-300">budget tracking</span> when you save. A blank total falls back to the sum of saved item prices.
           </p>
           {receiptSaved && <span className="badge text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ recorded</span>}
@@ -875,13 +875,13 @@ export default function ReviewItems({
                     <div className="flex-1 space-y-1.5">
                       <input type="text" value={item.name} onChange={e => updateParsedItem(idx, 'name', e.target.value)}
                         onBlur={() => matchNameForItem(idx)}
-                        className="bg-transparent text-white font-semibold text-sm focus:outline-none border-b border-transparent focus:border-violet-500 w-full" />
+                        className="bg-transparent text-white font-semibold text-sm focus:outline-hidden border-b border-transparent focus:border-violet-500 w-full" />
                       <div className="flex items-center gap-3 text-xs">
                         <div className="flex items-center gap-1">
                           <span className="text-slate-500">$</span>
                           <input type="number" step="0.01" value={item.price}
                             onChange={e => updateParsedItem(idx, 'price', parseFloat(e.target.value) || 0)}
-                            className="bg-transparent text-white font-mono focus:outline-none border-b border-transparent focus:border-violet-500 w-16" />
+                            className="bg-transparent text-white font-mono focus:outline-hidden border-b border-transparent focus:border-violet-500 w-16" />
                         </div>
                         {item.reviewReason === 'price_anomaly' && item.existingPrice != null && (
                           <span className="text-slate-500">
@@ -929,7 +929,7 @@ export default function ReviewItems({
             <label className="field-label mb-0">Set all sale end dates</label>
             <input type="date" value={bulkSaleEnd || defaultSaleEnd}
               onChange={e => applySaleEndToAll(e.target.value)}
-              className="field-input text-xs rounded-lg py-1 w-[9rem]" />
+              className="field-input text-xs rounded-lg py-1 w-36" />
           </div>
           {parsedItems.some(it => it.isSale && !it.saleEndsAt) && (
             <span className="text-[10px] text-slate-500 w-full">
@@ -973,7 +973,7 @@ export default function ReviewItems({
                 <td className="py-2.5 pr-4">
                   <input type="text" value={item.name} onChange={e => updateParsedItem(idx, 'name', e.target.value)}
                     onBlur={() => matchNameForItem(idx)}
-                    className="bg-transparent text-white font-semibold focus:outline-none border-b border-transparent focus:border-violet-500 w-full" />
+                    className="bg-transparent text-white font-semibold focus:outline-hidden border-b border-transparent focus:border-violet-500 w-full" />
                   {item.matchedName && (
                     <span className="text-[10px] text-sky-400 flex items-center gap-1 mt-0.5">
                       <span className="text-slate-500">matched:</span>{item.matchedName}
@@ -1039,12 +1039,12 @@ export default function ReviewItems({
                     <span className="text-slate-500">$</span>
                     <input type="number" step="0.01" value={item.price}
                       onChange={e => updateParsedItem(idx, 'price', parseFloat(e.target.value) || 0)}
-                      className="bg-transparent text-white font-bold font-mono focus:outline-none border-b border-transparent focus:border-violet-500 w-16" />
+                      className="bg-transparent text-white font-bold font-mono focus:outline-hidden border-b border-transparent focus:border-violet-500 w-16" />
                   </div>
                 </td>
                 <td className="py-2.5 pr-4">
                   <select value={item.category} onChange={e => updateParsedItem(idx, 'category', e.target.value)}
-                    className="bg-transparent text-violet-400 font-semibold focus:outline-none w-full">
+                    className="bg-transparent text-violet-400 font-semibold focus:outline-hidden w-full">
                     {['Fruits','Vegetables','Dairy','Bakery','Meat','Beverages','Pantry','Grocery'].map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                 </td>
@@ -1055,9 +1055,9 @@ export default function ReviewItems({
                       onChange={e => setAmountFromInput(idx, e.target.value)}
                       onBlur={() => commitAmountInput(idx)}
                       title="Type a number with a unit (e.g. 600g, 2lb) to auto-fill both fields"
-                      className="bg-transparent text-white font-mono focus:outline-none border-b border-transparent focus:border-violet-500 w-16" />
+                      className="bg-transparent text-white font-mono focus:outline-hidden border-b border-transparent focus:border-violet-500 w-16" />
                     <select value={item.amountUnit ?? 'each'} onChange={e => updateParsedItem(idx, 'amountUnit', e.target.value)}
-                      className="bg-transparent text-slate-400 focus:outline-none">
+                      className="bg-transparent text-slate-400 focus:outline-hidden">
                       {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
                     </select>
                   </div>
@@ -1083,7 +1083,7 @@ export default function ReviewItems({
                       <input type="date" value={effectiveSaleEnd(item)}
                         onChange={e => updateParsedItem(idx, 'saleEndsAt', e.target.value || null)}
                         title={item.saleEndsAt ? 'Sale end date read from the scan (editable)' : `Not printed on the scan — defaulting to ${defaultSaleDays} days`}
-                        className={`bg-transparent font-mono focus:outline-none border-b border-transparent focus:border-violet-500 w-[7.5rem] ${
+                        className={`bg-transparent font-mono focus:outline-hidden border-b border-transparent focus:border-violet-500 w-30 ${
                           item.saleEndsAt ? 'text-white' : 'text-slate-400 italic'}`} />
                     )}
                   </div>
@@ -1146,7 +1146,7 @@ export default function ReviewItems({
           Discard All
         </button>
         <button onClick={commit} disabled={pendingReviewCount > 0 || committing || parsedItems.length === 0}
-          className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl px-6 py-2.5 text-xs font-semibold hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+          className="bg-linear-to-r from-violet-600 to-indigo-600 text-white rounded-xl px-6 py-2.5 text-xs font-semibold hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
           title={pendingReviewCount > 0 ? 'Approve all flagged items first' : ''}>
           {committing ? 'Saving...' : pendingReviewCount > 0
             ? `Approve ${pendingReviewCount} Item${pendingReviewCount > 1 ? 's' : ''} First`

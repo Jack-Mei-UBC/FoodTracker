@@ -145,14 +145,14 @@ export default function Budget() {
                 <div className="text-xs text-slate-500 mt-1">of {money(budget)} budget</div>
               </>
             ) : (
-              <div className="text-xs text-slate-500 max-w-[12rem]">No monthly budget set — set one to track remaining spend.</div>
+              <div className="text-xs text-slate-500 max-w-48">No monthly budget set — set one to track remaining spend.</div>
             )}
           </div>
         </div>
 
         {budget != null && (
           <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden">
-            <div className={`h-full bg-gradient-to-r ${barColor} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+            <div className={`h-full bg-linear-to-r ${barColor} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
           </div>
         )}
 
@@ -179,7 +179,7 @@ export default function Budget() {
                 <span className="font-mono text-white">{money(s.spent)}</span>
               </div>
               <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-400 rounded-full" style={{ width: `${(s.spent / maxStore) * 100}%` }} />
+                <div className="h-full bg-linear-to-r from-violet-500 to-indigo-400 rounded-full" style={{ width: `${(s.spent / maxStore) * 100}%` }} />
               </div>
             </div>
           ))}
@@ -251,7 +251,7 @@ export default function Budget() {
 
       {/* Image lightbox */}
       {lightboxId != null && (
-        <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-6 cursor-zoom-out" onClick={() => setLightboxId(null)}>
+        <div className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-6 cursor-zoom-out" onClick={() => setLightboxId(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={`${API_BASE_URL}/api/images/${lightboxId}`} alt="receipt" className="max-h-full max-w-full rounded-xl" />
         </div>

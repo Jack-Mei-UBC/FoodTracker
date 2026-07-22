@@ -371,7 +371,7 @@ export default function DiaryPage() {
       {/* ═══ Section: Header — title + date navigation ═══ */}
       <div data-loc="diary.header" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-emerald-300 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-extrabold tracking-tight bg-linear-to-r from-white via-slate-100 to-emerald-300 bg-clip-text text-transparent">
             Food Diary
           </h1>
           <p className="text-sm text-slate-400 mt-1">{dateLabel}{isToday && <span className="ml-2 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2 py-0.5 uppercase">Today</span>}</p>
@@ -384,7 +384,7 @@ export default function DiaryPage() {
             type="date"
             value={viewDate}
             onChange={e => e.target.value && setViewDate(e.target.value)}
-            className="bg-slate-900/60 border border-white/5 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-emerald-500 transition [color-scheme:dark]"
+            className="bg-slate-900/60 border border-white/5 rounded-xl px-3 py-2 text-sm text-white focus:outline-hidden focus:border-emerald-500 transition scheme-dark"
           />
           <button onClick={() => setViewDate(shiftDate(viewDate, 1))} className="p-2 rounded-xl bg-slate-900/60 border border-white/5 text-slate-300 hover:text-white hover:bg-white/5 transition" title="Next day">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
@@ -471,7 +471,7 @@ export default function DiaryPage() {
                       type="number"
                       value={(goalsDraft as any)[pair[0]]}
                       onChange={e => setGoalsDraft({ ...goalsDraft, [pair[0]]: e.target.value })}
-                      className="w-24 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-xs text-white text-right font-mono focus:outline-none focus:border-emerald-500"
+                      className="w-24 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-xs text-white text-right font-mono focus:outline-hidden focus:border-emerald-500"
                     />
                   </div>
                 ))}
@@ -583,12 +583,12 @@ export default function DiaryPage() {
                   else { setAmount(e.target.value); }
                 }}
                 title="Type a number with a unit (e.g. 600g, 2lb) to auto-fill both fields"
-                className="w-20 bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white text-right font-mono focus:outline-none focus:border-emerald-500"
+                className="w-20 bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white text-right font-mono focus:outline-hidden focus:border-emerald-500"
               />
               <select
                 value={unit}
                 onChange={e => setUnit(e.target.value)}
-                className="bg-slate-950 border border-white/10 rounded-xl px-2 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+                className="bg-slate-950 border border-white/10 rounded-xl px-2 py-2 text-sm text-white focus:outline-hidden focus:border-emerald-500"
               >
                 {DIARY_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
               </select>
@@ -600,14 +600,14 @@ export default function DiaryPage() {
               value={manualCalories}
               onChange={e => setManualCalories(e.target.value)}
               placeholder="kcal"
-              className="w-24 bg-slate-950 border border-amber-500/30 rounded-xl px-3 py-2 text-sm text-white text-right font-mono placeholder-slate-600 focus:outline-none focus:border-amber-500"
+              className="w-24 bg-slate-950 border border-amber-500/30 rounded-xl px-3 py-2 text-sm text-white text-right font-mono placeholder-slate-600 focus:outline-hidden focus:border-amber-500"
             />
           )}
 
           <select
             value={meal}
             onChange={e => setMeal(e.target.value)}
-            className="bg-slate-950 border border-white/10 rounded-xl px-2 py-2 text-sm text-white focus:outline-none focus:border-emerald-500"
+            className="bg-slate-950 border border-white/10 rounded-xl px-2 py-2 text-sm text-white focus:outline-hidden focus:border-emerald-500"
           >
             {MEALS.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
           </select>
@@ -615,7 +615,7 @@ export default function DiaryPage() {
           <button
             type="submit"
             disabled={isSaving}
-            className="bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-xl px-5 py-2 text-sm font-semibold hover:shadow-lg hover:shadow-emerald-500/20 active:scale-[0.98] transition disabled:opacity-50"
+            className="bg-linear-to-r from-emerald-600 to-teal-600 text-white rounded-xl px-5 py-2 text-sm font-semibold hover:shadow-lg hover:shadow-emerald-500/20 active:scale-[0.98] transition disabled:opacity-50"
           >
             {isSaving ? 'Logging…' : 'Add'}
           </button>
@@ -674,13 +674,13 @@ export default function DiaryPage() {
                                 type="text"
                                 value={editDraft.name}
                                 onChange={e => setEditDraft({ ...editDraft, name: e.target.value })}
-                                className="flex-1 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white font-semibold focus:outline-none focus:border-emerald-500"
+                                className="flex-1 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white font-semibold focus:outline-hidden focus:border-emerald-500"
                               />
                               <input
                                 type="time"
                                 value={editDraft.time}
                                 onChange={e => e.target.value && setEditDraft({ ...editDraft, time: e.target.value })}
-                                className="bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white font-mono focus:outline-none focus:border-emerald-500 [color-scheme:dark]"
+                                className="bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white font-mono focus:outline-hidden focus:border-emerald-500 scheme-dark"
                               />
                             </div>
                             <div className="flex flex-wrap gap-2 items-center">
@@ -693,19 +693,19 @@ export default function DiaryPage() {
                                   else setEditDraft({ ...editDraft, amount: e.target.value });
                                 }}
                                 title="Type a number with a unit (e.g. 600g, 2lb) to auto-fill both fields"
-                                className="w-16 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white text-right font-mono focus:outline-none focus:border-emerald-500"
+                                className="w-16 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white text-right font-mono focus:outline-hidden focus:border-emerald-500"
                               />
                               <select
                                 value={editDraft.unit}
                                 onChange={e => setEditDraft({ ...editDraft, unit: e.target.value })}
-                                className="bg-slate-950 border border-white/10 rounded-lg px-1.5 py-1 text-white focus:outline-none"
+                                className="bg-slate-950 border border-white/10 rounded-lg px-1.5 py-1 text-white focus:outline-hidden"
                               >
                                 {DIARY_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                               </select>
                               <select
                                 value={editDraft.meal}
                                 onChange={e => setEditDraft({ ...editDraft, meal: e.target.value })}
-                                className="bg-slate-950 border border-white/10 rounded-lg px-1.5 py-1 text-white focus:outline-none"
+                                className="bg-slate-950 border border-white/10 rounded-lg px-1.5 py-1 text-white focus:outline-hidden"
                               >
                                 {MEALS.map(mm => <option key={mm.key} value={mm.key}>{mm.label}</option>)}
                               </select>
@@ -714,7 +714,7 @@ export default function DiaryPage() {
                                   type="number" step="any" min="0"
                                   value={editDraft.calories}
                                   onChange={e => setEditDraft({ ...editDraft, calories: e.target.value })}
-                                  className="w-16 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white text-right font-mono focus:outline-none focus:border-emerald-500"
+                                  className="w-16 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white text-right font-mono focus:outline-hidden focus:border-emerald-500"
                                 />
                                 <span className="text-slate-500">kcal</span>
                               </div>
@@ -724,7 +724,7 @@ export default function DiaryPage() {
                               value={editDraft.notes}
                               onChange={e => setEditDraft({ ...editDraft, notes: e.target.value })}
                               placeholder="Notes (optional)"
-                              className="w-full bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+                              className="w-full bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white placeholder-slate-600 focus:outline-hidden focus:border-emerald-500"
                             />
                             <div className="flex gap-2">
                               <button type="button" onClick={() => saveEdit(en)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg py-1 font-semibold transition">Save</button>

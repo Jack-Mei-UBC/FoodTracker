@@ -130,7 +130,7 @@ export default function FoodIconPicker({
   };
 
   return (
-    <Modal onClose={onClose} zClass="z-[60]" maxWidth="max-w-lg" panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4" dataLoc="modal.food-icon-picker">
+    <Modal onClose={onClose} zClass="z-60" maxWidth="max-w-lg" panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4" dataLoc="modal.food-icon-picker">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-bold text-white">
           {step === 'pick' ? 'Choose Icon' : 'Crop Icon'}
