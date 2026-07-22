@@ -170,7 +170,7 @@ export default function Staging() {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {jobs.map(job => (
-              <div key={job.id} className="panel p-3 space-y-2 flex flex-col">
+              <div key={job.id} className="bg-muted/50 border rounded-lg p-3 space-y-2 flex flex-col">
                 <div className="aspect-square rounded-lg overflow-hidden bg-slate-950 border border-white/5 flex items-center justify-center">
                   {job.image_id != null ? (
                     // eslint-disable-next-line @next/next/no-img-element

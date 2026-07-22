@@ -284,7 +284,7 @@ export default function FoodDetailModal({
               ) : (
                 <div className="space-y-1.5">
                   {prices.map(log => (
-                    <div key={log.id} className="panel p-2.5 text-xs">
+                    <div key={log.id} className="bg-muted/50 border rounded-lg p-2.5 text-xs">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-2.5 min-w-0">
                           {/* Attached source photo — click to view full size */}
@@ -432,7 +432,7 @@ function ShareNutritionModal({ foodId, foodName, onClose, onShared, onError }: {
       <input type="text" value={query} onChange={e => setQuery(e.target.value)} autoFocus
         placeholder="Search foods with nutrition…"
         className="field-input w-full text-xs rounded-lg" />
-      <div className="panel rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
+      <div className="bg-muted/50 border rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
         {loading ? (
           <p className="text-[11px] text-slate-500 px-3 py-2">Searching…</p>
         ) : results.length === 0 ? (

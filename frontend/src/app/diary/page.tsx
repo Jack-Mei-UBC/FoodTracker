@@ -484,19 +484,19 @@ export default function DiaryPage() {
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="panel p-3">
+                <div className="bg-muted/50 border rounded-lg p-3">
                   <span className="block text-slate-500 text-[10px] uppercase font-semibold">Calories</span>
                   <span className="font-mono font-bold text-white">{goals?.daily_calories ? `${Math.round(Number(goals.daily_calories))}` : '—'}</span>
                 </div>
-                <div className="panel p-3">
+                <div className="bg-muted/50 border rounded-lg p-3">
                   <span className="block text-slate-500 text-[10px] uppercase font-semibold">Protein</span>
                   <span className="font-mono font-bold text-white">{goals?.protein_g ? `${Math.round(Number(goals.protein_g))}g` : '—'}</span>
                 </div>
-                <div className="panel p-3">
+                <div className="bg-muted/50 border rounded-lg p-3">
                   <span className="block text-slate-500 text-[10px] uppercase font-semibold">Carbs</span>
                   <span className="font-mono font-bold text-white">{goals?.carbs_g ? `${Math.round(Number(goals.carbs_g))}g` : '—'}</span>
                 </div>
-                <div className="panel p-3">
+                <div className="bg-muted/50 border rounded-lg p-3">
                   <span className="block text-slate-500 text-[10px] uppercase font-semibold">Fat</span>
                   <span className="font-mono font-bold text-white">{goals?.fat_g ? `${Math.round(Number(goals.fat_g))}g` : '—'}</span>
                 </div>
@@ -516,7 +516,7 @@ export default function DiaryPage() {
           {MICRO_META.map(m => {
             const v = totals[m.field] ?? 0;
             return (
-              <div key={m.field} className={`panel p-2.5 ${v > 0 ? '' : 'opacity-50'}`}>
+              <div key={m.field} className={`bg-muted/50 border rounded-lg p-2.5 ${v > 0 ? '' : 'opacity-50'}`}>
                 <span className="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold truncate">{m.label}</span>
                 <span className="font-mono font-bold text-slate-200 text-sm">
                   {Math.round(v * 10) / 10}<span className="text-slate-500 text-[10px] font-normal ml-0.5">{m.unit}</span>
@@ -668,7 +668,7 @@ export default function DiaryPage() {
                 ) : (
                   <div className="space-y-2">
                     {mealEntries.map(en => (
-                      <div key={en.id} className="panel p-2.5 text-xs">
+                      <div key={en.id} className="bg-muted/50 border rounded-lg p-2.5 text-xs">
                         {editId === en.id ? (
                           <div className="space-y-2">
                             <div className="flex gap-2">

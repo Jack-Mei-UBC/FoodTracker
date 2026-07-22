@@ -175,7 +175,7 @@ export default function NutritionSearch({
       {error && <div className="text-xs font-semibold text-rose-300 bg-rose-950/70 border border-rose-500/30 rounded-lg px-3 py-2">{error}</div>}
 
       {results !== null && (
-        <div className="panel rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
+        <div className="bg-muted/50 border rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
           {results.length === 0 ? (
             <p className="text-[11px] text-slate-500 px-2 py-1.5">No USDA matches with calorie data.</p>
           ) : results.map((c: any) => {

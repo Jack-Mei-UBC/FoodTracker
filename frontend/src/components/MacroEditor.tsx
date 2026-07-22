@@ -145,7 +145,7 @@ export default function MacroEditor({
           </button>
         </div>
         {fdcResults !== null && (
-          <div className="panel rounded-lg max-h-40 overflow-y-auto space-y-1 p-1">
+          <div className="bg-muted/50 border rounded-lg max-h-40 overflow-y-auto space-y-1 p-1">
             {fdcResults.length === 0 ? (
               <p className="text-[11px] text-slate-500 px-2 py-1.5">No USDA matches with calorie data.</p>
             ) : fdcResults.map((c: any) => (

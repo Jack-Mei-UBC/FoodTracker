@@ -832,7 +832,7 @@ export default function ReviewItems({
 
       {/* Receipt total + date (budget tracking) — receipt scans only */}
       {receipt && (
-        <div data-loc="review-items.receipt" className="panel p-4 flex flex-wrap items-end gap-4">
+        <div data-loc="review-items.receipt" className="bg-muted/50 border rounded-lg p-4 flex flex-wrap items-end gap-4">
           <div>
             <Label>Receipt total ($)</Label>
             <input type="number" step="0.01" min="0" value={receiptTotal}
@@ -923,7 +923,7 @@ export default function ReviewItems({
       {/* A scan is usually one shop or one flyer, so its sale rows nearly always
           share an end date — set it once here instead of per row. */}
       {parsedItems.some(it => it.isSale) && (
-        <div data-loc="review-items.sale-expiry" className="panel p-3 flex flex-wrap items-center gap-3">
+        <div data-loc="review-items.sale-expiry" className="bg-muted/50 border rounded-lg p-3 flex flex-wrap items-center gap-3">
           <span className="text-xs text-slate-400">
             <span className="text-rose-300 font-semibold">{parsedItems.filter(it => it.isSale).length}</span> sale price
             {parsedItems.filter(it => it.isSale).length !== 1 ? 's' : ''} — hidden from the dashboard once expired.
@@ -1177,7 +1177,7 @@ export default function ReviewItems({
             placeholder="Search the catalog by name or barcode…" autoFocus
             className="field-input w-full text-xs rounded-lg" />
 
-          <div className="panel rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
+          <div className="bg-muted/50 border rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
             {matchQuery.trim() === '' ? (
               <p className="text-[11px] text-slate-500 px-3 py-2">Type to search your catalog.</p>
             ) : matchResults.length === 0 ? (
@@ -1255,7 +1255,7 @@ export default function ReviewItems({
             ].filter(([n]) => (n as number) > 0)
              .map(([n, label]) => `${n} ${label}${(n as number) === 1 ? '' : 's'}`);
             return (
-              <p className="text-[11px] text-slate-400 panel p-2">
+              <p className="text-[11px] text-slate-400 bg-muted/50 border rounded-lg p-2">
                 {parts.length === 0 ? 'Nothing references this store.' : `References: ${parts.join(', ')}.`}
               </p>
             );

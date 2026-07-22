@@ -400,7 +400,7 @@ export default function Audit() {
               placeholder="New tag name…" className="field-input flex-1 text-xs rounded-lg" />
             <Button type="submit" size="sm">Create</Button>
           </form>
-          <div className="panel rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
+          <div className="bg-muted/50 border rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
             {tags.length === 0 ? (
               <p className="text-[11px] text-slate-500 px-3 py-2">No tags yet.</p>
             ) : tags.map(t => (
@@ -614,7 +614,7 @@ function AutoTagModal({ foodIds, tags, onClose, onCreateTag, onApplied, notify }
                 </div>
               </div>
             )}
-            <div className="panel rounded-lg max-h-72 overflow-y-auto divide-y divide-white/5">
+            <div className="bg-muted/50 border rounded-lg max-h-72 overflow-y-auto divide-y divide-white/5">
               {suggestions.length === 0 && !running && <p className="text-[11px] text-slate-500 px-3 py-2">The model returned nothing usable.</p>}
               {suggestions.map(s => {
                 const skip = skipped.includes(s.food_id);
@@ -702,7 +702,7 @@ function MergeModal({ foods, onClose, onMerged, notify }: {
           <span className="block text-[10px] text-slate-500 font-normal">Pick the survivor — the others are archived and all their data moves onto it.</span>
         </h3>
       </div>
-      <div className="panel rounded-lg max-h-72 overflow-y-auto divide-y divide-white/5">
+      <div className="bg-muted/50 border rounded-lg max-h-72 overflow-y-auto divide-y divide-white/5">
         {foods.map(f => (
           <label key={f.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-white/5">
             <input type="radio" name="merge-survivor" checked={targetId === f.id}
@@ -851,7 +851,7 @@ function FindDuplicatesModal({ foods, onClose, onMerged, notify }: {
             <div className="space-y-2 max-h-80 overflow-y-auto">
               {groupCount === 0 && !running && <p className="text-[11px] text-slate-500 px-1 py-2">No duplicates found.</p>}
               {(groups ?? []).map((g, idx) => g.foods.length < 2 ? null : (
-                <div key={idx} className="panel rounded-lg p-3 space-y-2">
+                <div key={idx} className="bg-muted/50 border rounded-lg p-3 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <span className="text-[10px] text-slate-500 flex-1">{g.reason || 'Likely the same product'}</span>
                     <button onClick={() => dropGroup(idx)} className="text-[10px] text-slate-500 hover:text-rose-400 shrink-0">Dismiss group</button>

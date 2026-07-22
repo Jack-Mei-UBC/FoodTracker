@@ -774,7 +774,7 @@ export default function Dashboard() {
                 <div className="text-center text-xs text-slate-500 py-6">No price spreads found yet. Add price logs for multiple stores.</div>
               ) : (
                 efficiencies.map(eff => (
-                  <div key={eff.food_id} className="panel p-3 space-y-1.5 text-xs">
+                  <div key={eff.food_id} className="bg-muted/50 border rounded-lg p-3 space-y-1.5 text-xs">
                     <div className="flex justify-between items-start">
                       <span className="font-semibold text-slate-200">{eff.food_name}</span>
                       <span className="px-1.5 py-0.5 rounded-sm bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold font-mono">
@@ -1206,7 +1206,7 @@ export default function Dashboard() {
             </div>
 
             {/* Nutrition Facts — edited via the shared MacroEditor popup */}
-            <div className="panel rounded-2xl p-4 space-y-3">
+            <div className="bg-muted/50 border rounded-2xl p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-slate-400">
                   Nutrition Facts <span className="text-slate-600 font-normal">— per serving, feeds the Food Diary</span>
@@ -1249,7 +1249,7 @@ export default function Dashboard() {
             </div>
 
             {/* Usable portion — scales prices into an effective cost per usable unit */}
-            <div className="panel rounded-2xl p-4 space-y-2">
+            <div className="bg-muted/50 border rounded-2xl p-4 space-y-2">
               <span className="text-xs font-semibold text-slate-400 block">
                 Usable Portion <span className="text-slate-600 font-normal">— % of what you buy that's actually usable</span>
               </span>
@@ -1269,7 +1269,7 @@ export default function Dashboard() {
 
             {/* Density — only for foods sold by volume; converts per-volume prices to per-kg */}
             {normalizeUnit(selectedFoodDetails.unit)?.dimension === 'volume' && (
-              <div className="panel rounded-2xl p-4 space-y-2">
+              <div className="bg-muted/50 border rounded-2xl p-4 space-y-2">
                 <span className="text-xs font-semibold text-slate-400 block">
                   Density <span className="text-slate-600 font-normal">— kg per litre, to show volume prices per kg</span>
                 </span>
@@ -1289,7 +1289,7 @@ export default function Dashboard() {
             )}
 
             {/* Price Trend Graphic: Custom SVG visualization */}
-            <div className="panel rounded-2xl p-4">
+            <div className="bg-muted/50 border rounded-2xl p-4">
               <span className="text-xs font-semibold text-slate-400 block mb-3">Price Trend History</span>
               
               {priceHistory.length > 1 ? (

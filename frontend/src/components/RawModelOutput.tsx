@@ -88,7 +88,7 @@ function AttemptRow({ attempt, notify }: { attempt: ScanAttempt; notify?: RawMod
   const usable = attempt.ok && attempt.type && attempt.type !== 'unknown';
 
   return (
-    <div className="panel p-2.5 space-y-2">
+    <div className="bg-muted/50 border rounded-lg p-2.5 space-y-2">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <span className={`badge text-[9px] ${
@@ -145,7 +145,7 @@ function RunHistory({ scanJobId }: { scanJobId: number }) {
       </span>
       <div className="space-y-1">
         {runs.map(r => (
-          <div key={r.id} className="panel px-2.5 py-1.5 flex items-center gap-2 text-[10px]">
+          <div key={r.id} className="bg-muted/50 border rounded-lg px-2.5 py-1.5 flex items-center gap-2 text-[10px]">
             <span className={`badge text-[9px] shrink-0 ${
               !r.ok ? 'text-rose-300 bg-rose-500/10 border-rose-500/20'
               : r.was_winner ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20'

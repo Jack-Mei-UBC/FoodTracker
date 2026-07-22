@@ -694,7 +694,7 @@ export default function MealsPage() {
                 const rowPreview = builderPreview.perRow[i];
                 const price = (food?.latest_prices ?? []).find(p => p.unit_price != null);
                 return (
-                  <div key={`${row.food_id}-${i}`} className="panel flex flex-wrap items-center gap-2 p-2.5 text-xs">
+                  <div key={`${row.food_id}-${i}`} className="bg-muted/50 border rounded-lg flex flex-wrap items-center gap-2 p-2.5 text-xs">
                     <span className="font-semibold text-slate-200 flex-1 min-w-32 truncate">{row.food_name}</span>
                     <input
                       type="text" inputMode="text"
@@ -751,7 +751,7 @@ export default function MealsPage() {
 
           {/* Live totals */}
           {rows.length > 0 && (
-            <div className="panel p-3 flex flex-wrap gap-x-6 gap-y-1 text-xs font-mono">
+            <div className="bg-muted/50 border rounded-lg p-3 flex flex-wrap gap-x-6 gap-y-1 text-xs font-mono">
               <span className="text-slate-300">
                 Meal: <span className="font-bold text-white">{fmtKcal(builderPreview.calories)} kcal</span>
                 <span className="text-slate-500"> · P {Math.round(builderPreview.protein)} C {Math.round(builderPreview.carbs)} F {Math.round(builderPreview.fat)}</span>

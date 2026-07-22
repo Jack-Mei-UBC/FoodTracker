@@ -216,7 +216,7 @@ export default function Budget() {
         {receipts.length === 0 && <p className="text-slate-600 text-sm py-6 text-center">No receipts this month. Scan one, or add it manually.</p>}
         <div className="space-y-2">
           {receipts.map(r => (
-            <div key={r.id} className="panel p-3 flex items-center gap-3">
+            <div key={r.id} className="bg-muted/50 border rounded-lg p-3 flex items-center gap-3">
               {r.image_id != null ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={`${API_BASE_URL}/api/images/${r.image_id}`} alt="receipt" onClick={() => setLightboxId(r.image_id)}

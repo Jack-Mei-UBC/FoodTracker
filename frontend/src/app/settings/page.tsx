@@ -114,7 +114,7 @@ export default function Settings() {
               ))}
             </div>
 
-            <div className="panel p-4 space-y-3">
+            <div className="bg-muted/50 border rounded-lg p-4 space-y-3">
               <div className="flex flex-wrap items-end gap-3">
                 <div>
                   <Label htmlFor="sale-days">Custom duration (days)</Label>
