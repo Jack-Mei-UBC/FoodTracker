@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import { Checkbox } from './ui/checkbox';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandItem } from './ui/command';
+import { Input } from './ui/input';
 import ScanImages from './ScanImages';
 import RawModelOutput, { ScanAttempt } from './RawModelOutput';
 
@@ -768,11 +769,11 @@ export default function ReviewItems({
             No items detected. Add them manually below, check the raw model output, or re-crop this scan.
           </p>
           {onRestage && (
-            <button onClick={onRestage}
-              className="shrink-0 text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1 hover:bg-amber-500/20 transition"
+            <Button onClick={onRestage}
+              variant="outline" size="sm" className="shrink-0 text-amber-300 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20 hover:text-amber-200"
               title="Send back to Staging to re-crop the original photo and run OCR again">
               Re-crop in Staging
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -819,10 +820,10 @@ export default function ReviewItems({
           </div>
           {addingStore && (
             <div className="flex items-center gap-2 bg-slate-950 border border-white/5 p-2 rounded-xl">
-              <input autoFocus value={newStoreName} onChange={e => setNewStoreName(e.target.value)}
+              <Input autoFocus value={newStoreName} onChange={e => setNewStoreName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); createStore(); } }}
                 placeholder="New store name" disabled={savingStore}
-                className="flex-1 bg-transparent text-xs text-white placeholder:text-slate-600 focus:outline-hidden" />
+                className="flex-1 border-none bg-transparent" />
               <Button type="button" onClick={createStore} disabled={savingStore || !newStoreName.trim()} size="sm">
                 {savingStore ? 'Adding…' : 'Add'}
               </Button>
@@ -839,14 +840,14 @@ export default function ReviewItems({
         <div data-loc="review-items.receipt" className="bg-muted/50 border rounded-lg p-4 flex flex-wrap items-end gap-4">
           <div>
             <Label>Receipt total ($)</Label>
-            <input type="number" step="0.01" min="0" value={receiptTotal}
+            <Input type="number" step="0.01" min="0" value={receiptTotal}
               onChange={e => setReceiptTotal(e.target.value)} placeholder="0.00"
-              className="field-input w-28" />
+              className="w-28" />
           </div>
           <div>
             <Label>Purchased on</Label>
-            <input type="date" value={receiptDate}
-              onChange={e => setReceiptDate(e.target.value)} className="field-input w-40" />
+            <Input type="date" value={receiptDate}
+              onChange={e => setReceiptDate(e.target.value)} className="w-40" />
           </div>
           <p className="text-[11px] text-slate-500 flex-1 min-w-48">
             Recorded as a spending row for <span className="text-slate-300">budget tracking</span> when you save. A blank total falls back to the sum of saved item prices.
@@ -910,10 +911,10 @@ export default function ReviewItems({
                       </div>
                     </div>
                     <div className="flex gap-2 shrink-0">
-                      <button onClick={() => approveItem(idx)}
-                        className="text-[11px] bg-emerald-600/80 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg font-bold transition">Approve</button>
-                      <button onClick={() => removeItem(idx)}
-                        className="text-[11px] bg-white/5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 px-3 py-1.5 rounded-lg font-bold transition">Remove</button>
+                      <Button onClick={() => approveItem(idx)} size="sm"
+                        className="bg-emerald-600/80 hover:bg-emerald-500">Approve</Button>
+                      <Button onClick={() => removeItem(idx)} variant="outline" size="sm"
+                        className="text-slate-400 hover:bg-rose-500/20 hover:text-rose-400">Remove</Button>
                     </div>
                   </div>
                 </div>
@@ -934,9 +935,9 @@ export default function ReviewItems({
           </span>
           <div className="flex items-center gap-2 ml-auto">
             <Label className="mb-0">Set all sale end dates</Label>
-            <input type="date" value={bulkSaleEnd || defaultSaleEnd}
+            <Input type="date" value={bulkSaleEnd || defaultSaleEnd}
               onChange={e => applySaleEndToAll(e.target.value)}
-              className="field-input text-xs rounded-lg py-1 w-36" />
+              className="rounded-lg py-1 w-36" />
           </div>
           {parsedItems.some(it => it.isSale && !it.saleEndsAt) && (
             <span className="text-[10px] text-slate-500 w-full">
@@ -1123,43 +1124,46 @@ export default function ReviewItems({
         <div className="flex items-center gap-2 flex-1 min-w-0">
           {/* Search the catalog and add an existing food to log a price against. */}
           <div className="relative flex-1 max-w-xs">
-            <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            <Input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search existing items to add…"
-              className="field-input w-full text-xs rounded-xl" />
+              className="w-full rounded-xl" />
             {searchQuery.trim() !== '' && (
-              <div className="absolute bottom-full mb-1 w-full max-h-56 overflow-y-auto bg-slate-900 border border-white/10 rounded-lg shadow-xl z-20">
-                {searchResults.length === 0
-                  ? <div className="px-3 py-2 text-[11px] text-slate-500">No matches — use &ldquo;Add Item&rdquo; to create it.</div>
-                  : searchResults.map(f => (
-                    <button key={f.id} type="button" onClick={() => addExistingFood(f)}
-                      className="w-full text-left px-3 py-2 text-xs text-white hover:bg-white/5 flex items-center justify-between gap-2 transition">
+              <Command shouldFilter={false} className="absolute bottom-full mb-1 w-full rounded-lg border border-white/10 shadow-xl z-20">
+                <CommandList className="max-h-56">
+                  {searchResults.length === 0 ? (
+                    <CommandEmpty className="text-[11px] text-slate-500 px-3 py-2 text-left">
+                      No matches — use &ldquo;Add Item&rdquo; to create it.
+                    </CommandEmpty>
+                  ) : searchResults.map(f => (
+                    <CommandItem key={f.id} value={String(f.id)} onSelect={() => addExistingFood(f)} className="justify-between">
                       <span className="truncate">{f.name}</span>
                       <span className="text-[10px] text-slate-500 shrink-0">{f.category}</span>
-                    </button>
+                    </CommandItem>
                   ))}
-              </div>
+                </CommandList>
+              </Command>
             )}
           </div>
-          <button onClick={addItem}
-            className="flex items-center gap-1.5 text-xs font-semibold text-violet-300 hover:text-violet-200 bg-violet-500/10 border border-violet-500/20 rounded-xl px-4 py-2.5 transition shrink-0">
+          <Button onClick={addItem}
+            variant="outline" className="gap-1.5 rounded-xl text-violet-300 bg-violet-500/10 border-violet-500/20 hover:bg-violet-500/20 hover:text-violet-200 shrink-0">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             Add Item
-          </button>
+          </Button>
         </div>
         <div className="flex gap-3">
-        <button onClick={() => { setParsedItems([]); onDiscard?.(); }}
-          className="bg-white/5 border border-white/5 rounded-xl px-5 py-2.5 text-xs text-white font-semibold hover:bg-white/10 transition">
+        <Button onClick={() => { setParsedItems([]); onDiscard?.(); }}
+          variant="secondary" className="rounded-xl">
           Discard All
-        </button>
-        <button onClick={commit} disabled={pendingReviewCount > 0 || committing || parsedItems.length === 0}
-          className="bg-linear-to-r from-violet-600 to-indigo-600 text-white rounded-xl px-6 py-2.5 text-xs font-semibold hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+        </Button>
+        <Button onClick={commit} disabled={pendingReviewCount > 0 || committing || parsedItems.length === 0}
+          className="rounded-xl"
           title={pendingReviewCount > 0 ? 'Approve all flagged items first' : ''}>
           {committing ? 'Saving...' : pendingReviewCount > 0
             ? `Approve ${pendingReviewCount} Item${pendingReviewCount > 1 ? 's' : ''} First`
             : 'Save & Log Prices'}
-        </button>
+        </Button>
         </div>
       </div>
 
