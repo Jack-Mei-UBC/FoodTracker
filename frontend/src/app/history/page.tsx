@@ -7,6 +7,7 @@ import { Card } from '../../components/ui/card';
 import { useToast } from '../../components/StatusToast';
 import { Checkbox } from '../../components/ui/checkbox';
 import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -223,10 +224,10 @@ export default function History() {
               ) : a.action === 'revert' ? (
                 <span className="text-[10px] text-slate-600">—</span>
               ) : (
-                <button onClick={() => revert(a.id)}
-                  className="text-[11px] font-bold text-sky-400 hover:text-sky-300 bg-sky-500/10 border border-sky-500/20 rounded-lg px-3 py-1 transition">
+                <Button onClick={() => revert(a.id)}
+                  variant="outline" size="sm" className="text-sky-400 bg-sky-500/10 border-sky-500/20 hover:bg-sky-500/20 hover:text-sky-300">
                   Revert
-                </button>
+                </Button>
               )}
             </div>
           ))}

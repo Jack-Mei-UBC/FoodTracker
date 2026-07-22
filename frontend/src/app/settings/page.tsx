@@ -13,6 +13,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useToast } from '../../components/StatusToast';
 import { Label } from '../../components/ui/label';
 import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
 import { Card } from '../../components/ui/card';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -117,10 +118,10 @@ export default function Settings() {
               <div className="flex flex-wrap items-end gap-3">
                 <div>
                   <Label htmlFor="sale-days">Custom duration (days)</Label>
-                  <input id="sale-days" type="number" min={1} max={365} value={days}
+                  <Input id="sale-days" type="number" min={1} max={365} value={days}
                     onChange={e => setDays(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') save(); }}
-                    className="field-input w-32" />
+                    className="w-32" />
                 </div>
                 <Button onClick={() => save()} disabled={saving || !dirty}>
                   {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}

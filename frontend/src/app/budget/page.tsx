@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { Input } from '../../components/ui/input';
 import { useToast } from '../../components/StatusToast';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -163,8 +164,8 @@ export default function Budget() {
         <div className="flex items-end gap-2 border-t border-white/5 pt-4">
           <div>
             <Label>Monthly budget ($)</Label>
-            <input type="number" step="0.01" min="0" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
-              placeholder="none" className="field-input w-40" />
+            <Input type="number" step="0.01" min="0" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
+              placeholder="none" className="w-40" />
           </div>
           <Button onClick={saveBudget}>Save budget</Button>
         </div>
@@ -310,16 +311,16 @@ function ReceiptForm({ receipt, stores, onClose, onSaved, notify }: {
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label>Total ($)</Label>
-            <input type="number" step="0.01" min="0" value={total} onChange={e => setTotal(e.target.value)} placeholder="0.00" className="field-input w-full" />
+            <Input type="number" step="0.01" min="0" value={total} onChange={e => setTotal(e.target.value)} placeholder="0.00" className="w-full" />
           </div>
           <div>
             <Label>Purchased on</Label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="field-input w-full" />
+            <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full" />
           </div>
         </div>
         <div>
           <Label>Notes</Label>
-          <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="optional" className="field-input w-full" />
+          <Input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="optional" className="w-full" />
         </div>
       </div>
       <div className="flex justify-end gap-2 pt-1">

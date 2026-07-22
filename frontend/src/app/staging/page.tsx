@@ -140,10 +140,10 @@ export default function Staging() {
         </div>
         {jobs.length > 0 && (
           <div className="shrink-0 flex flex-col items-end gap-2">
-            <button onClick={() => sendForProcessing()} disabled={busy}
-              className="text-xs font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-2 hover:bg-emerald-500/20 transition disabled:opacity-50">
+            <Button onClick={() => sendForProcessing()} disabled={busy}
+              variant="outline" size="sm" className="rounded-xl text-emerald-300 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20 hover:text-emerald-200">
               Send all for processing ({jobs.length})
-            </button>
+            </Button>
             <label className="flex items-center gap-2 text-[11px] text-slate-400 cursor-pointer select-none" title="Let the model pool use paid vision models (higher accuracy, token cost) for jobs sent from this page">
               <Checkbox checked={usePaid} onCheckedChange={c => setUsePaid(c === true)} />
               Use paid models (higher accuracy)
