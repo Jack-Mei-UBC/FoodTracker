@@ -5,6 +5,7 @@ import Link from 'next/link';
 import StatusToast, { useToast } from '../../components/StatusToast';
 import { Button, buttonVariants } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 
 // Scanner is now a pure INTAKE surface: every capture is staged for the
 // background queue (there is no synchronous "scan now" path anymore — see
@@ -151,12 +152,14 @@ export default function Scanner() {
           {/* Store selector (prefills the review; applies to all staged images) */}
           <div className="flex items-center justify-between bg-slate-950 border border-white/5 p-2 rounded-xl">
             <span className="text-[10px] text-slate-500 font-semibold uppercase pl-1">Store</span>
-            <select value={targetStoreId} onChange={e => setTargetStoreId(e.target.value)}
-              className="bg-transparent text-xs text-white focus:outline-hidden">
-              {stores.length > 0
-                ? stores.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)
-                : <><option value="1">SuperMarket Central</option><option value="2">Organic Grocer</option><option value="3">Value Foods</option></>}
-            </select>
+            <Select value={targetStoreId} onValueChange={v => v && setTargetStoreId(v)}>
+              <SelectTrigger size="sm" className="border-none bg-transparent"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {stores.length > 0
+                  ? stores.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)
+                  : <><SelectItem value="1">SuperMarket Central</SelectItem><SelectItem value="2">Organic Grocer</SelectItem><SelectItem value="3">Value Foods</SelectItem></>}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

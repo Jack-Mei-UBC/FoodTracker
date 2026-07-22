@@ -130,3 +130,16 @@ test('all seeded fixtures are reachable in the catalog', async ({ page }) => {
   }
   expect(missing).toEqual([]);
 });
+
+test('the Add Food category Select opens, lists options, and picks one', async ({ page }) => {
+  // Phase 3 M3 replaced the native <select> here with Base UI's Select, which
+  // portals its listbox to <body> — this guards that the portal wiring and
+  // value/onValueChange plumbing actually work, not just that the page renders.
+  await page.goto('/');
+  const trigger = page.locator('form:has(input[placeholder="Add product (e.g. Fresh Gala Apples)"]) [role="combobox"]');
+  await trigger.click();
+  const option = page.getByRole('option', { name: 'Meat', exact: true });
+  await expect(option).toBeVisible();
+  await option.click();
+  await expect(trigger).toContainText('Meat');
+});

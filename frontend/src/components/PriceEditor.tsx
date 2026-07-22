@@ -10,6 +10,7 @@ import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { UNIT_OPTIONS, parseAmountInput, formatCanonicalUnitPrice } from '../lib/units';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -154,10 +155,12 @@ export default function PriceEditor({
         <div className="space-y-2.5">
           <div>
             <label className="block text-[11px] font-semibold text-slate-400 mb-1">Store</label>
-            <select value={draft.store_id} onChange={e => setDraft({ ...draft, store_id: e.target.value })} className={field}>
-              <option value="">Choose a store…</option>
-              {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            <Select value={draft.store_id} onValueChange={v => setDraft({ ...draft, store_id: v ?? '' })}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Choose a store…" /></SelectTrigger>
+              <SelectContent>
+                {stores.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex gap-2">
             <div className="flex-1">
@@ -176,10 +179,12 @@ export default function PriceEditor({
             </div>
             <div className="w-24">
               <label className="block text-[11px] font-semibold text-slate-400 mb-1">Unit</label>
-              <select value={draft.amount_unit} onChange={e => setDraft({ ...draft, amount_unit: e.target.value })} className={field}>
-                <option value="">—</option>
-                {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-              </select>
+              <Select value={draft.amount_unit} onValueChange={v => setDraft({ ...draft, amount_unit: v ?? '' })}>
+                <SelectTrigger className="w-full"><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>
+                  {UNIT_OPTIONS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="flex items-center justify-between pt-1">

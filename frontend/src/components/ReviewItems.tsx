@@ -10,6 +10,7 @@ import { Badge } from './ui/badge';
 import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import ScanImages from './ScanImages';
 import RawModelOutput, { ScanAttempt } from './RawModelOutput';
 
@@ -362,7 +363,7 @@ export default function ReviewItems({
     if (storeId != null) setTargetStoreId(storeId);
   }, [storeId]);
 
-  // The store <select> only stages the change; the confirm popup applies it, so
+  // The store Select only stages the change; the confirm popup applies it, so
   // the user can opt to push it to every open review at once.
   const requestStoreChange = (newId: string) => {
     if (newId === targetStoreId) return;
@@ -794,12 +795,14 @@ export default function ReviewItems({
         <div className="space-y-1">
           <div className="flex items-center space-x-3 bg-slate-950 border border-white/5 p-2 rounded-xl">
             <span className="text-xs text-slate-500 font-semibold uppercase pl-1">Store Bought:</span>
-            <select value={targetStoreId} onChange={e => requestStoreChange(e.target.value)}
-              className="bg-transparent text-xs text-white focus:outline-hidden">
-              {stores.length > 0
-                ? stores.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)
-                : <><option value="1">SuperMarket Central</option><option value="2">Organic Grocer</option><option value="3">Value Foods</option></>}
-            </select>
+            <Select value={targetStoreId} onValueChange={v => v && requestStoreChange(v)}>
+              <SelectTrigger size="sm" className="border-none bg-transparent"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {stores.length > 0
+                  ? stores.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)
+                  : <><SelectItem value="1">SuperMarket Central</SelectItem><SelectItem value="2">Organic Grocer</SelectItem><SelectItem value="3">Value Foods</SelectItem></>}
+              </SelectContent>
+            </Select>
             <button type="button" onClick={() => { setAddingStore(v => !v); setNewStoreName(''); }}
               title="Create a new store"
               className="text-xs font-bold text-violet-300 hover:text-violet-200 px-1.5">
@@ -1046,10 +1049,12 @@ export default function ReviewItems({
                   </div>
                 </td>
                 <td className="py-2.5 pr-4">
-                  <select value={item.category} onChange={e => updateParsedItem(idx, 'category', e.target.value)}
-                    className="bg-transparent text-violet-400 font-semibold focus:outline-hidden w-full">
-                    {['Fruits','Vegetables','Dairy','Bakery','Meat','Beverages','Pantry','Grocery'].map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  <Select value={item.category} onValueChange={v => v && updateParsedItem(idx, 'category', v)}>
+                    <SelectTrigger size="sm" className="w-full border-none bg-transparent text-violet-400 font-semibold"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {['Fruits','Vegetables','Dairy','Bakery','Meat','Beverages','Pantry','Grocery'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </td>
                 <td className="py-2.5 pr-4">
                   <div className="flex items-center space-x-1">
@@ -1059,10 +1064,12 @@ export default function ReviewItems({
                       onBlur={() => commitAmountInput(idx)}
                       title="Type a number with a unit (e.g. 600g, 2lb) to auto-fill both fields"
                       className="bg-transparent text-white font-mono focus:outline-hidden border-b border-transparent focus:border-violet-500 w-16" />
-                    <select value={item.amountUnit ?? 'each'} onChange={e => updateParsedItem(idx, 'amountUnit', e.target.value)}
-                      className="bg-transparent text-slate-400 focus:outline-hidden">
-                      {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-                    </select>
+                    <Select value={item.amountUnit ?? 'each'} onValueChange={v => v && updateParsedItem(idx, 'amountUnit', v)}>
+                      <SelectTrigger size="sm" className="border-none bg-transparent text-slate-400"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {UNIT_OPTIONS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </td>
                 <td className="py-2.5 pr-4">
@@ -1263,13 +1270,15 @@ export default function ReviewItems({
 
           <div className="space-y-1">
             <Label>Move its items to</Label>
-            <select value={reassignTo} onChange={e => setReassignTo(e.target.value)} disabled={removingStore}
-              className="field-input w-full">
-              <option value="">Leave unassigned (no store)</option>
-              {stores.filter(s => s.id !== deletingStore.id).map(s => (
-                <option key={s.id} value={String(s.id)}>{s.name}</option>
-              ))}
-            </select>
+            <Select value={reassignTo} onValueChange={v => setReassignTo(v ?? '')} disabled={removingStore}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Leave unassigned (no store)</SelectItem>
+                {stores.filter(s => s.id !== deletingStore.id).map(s => (
+                  <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className="text-[10px] text-slate-500">
               {reassignTo === ''
                 ? 'Items keep their history but will have no store attached.'

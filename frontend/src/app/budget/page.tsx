@@ -5,6 +5,7 @@ import Modal from '../../components/Modal';
 import { Label } from '../../components/ui/label';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import StatusToast, { useToast } from '../../components/StatusToast';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -298,10 +299,13 @@ function ReceiptForm({ receipt, stores, onClose, onSaved, notify }: {
       <div className="space-y-3">
         <div>
           <Label>Store</Label>
-          <select value={storeId} onChange={e => setStoreId(e.target.value)} className="field-input w-full">
-            <option value="">— none —</option>
-            {stores.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
-          </select>
+          <Select value={storeId} onValueChange={v => setStoreId(v ?? '')}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">— none —</SelectItem>
+              {stores.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>

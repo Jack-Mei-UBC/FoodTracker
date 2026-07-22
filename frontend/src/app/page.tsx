@@ -11,6 +11,7 @@ import { Badge } from '../components/ui/badge';
 import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import FoodIconPicker from '../components/FoodIconPicker';
 
 // Interfaces based on database schema
@@ -666,16 +667,14 @@ export default function Dashboard() {
             <form onSubmit={handleTriggerScraper} className="space-y-3 pt-2">
               <div>
                 <Label>Target Supermarket</Label>
-                <select 
-                  value={scrapeRequest.storeId} 
-                  onChange={(e) => setScrapeRequest({ ...scrapeRequest, storeId: e.target.value })}
-                  className="field-input"
-                >
-                  <option value="">-- Choose a store --</option>
-                  {stores.map(store => (
-                    <option key={store.id} value={store.id}>{store.name}</option>
-                  ))}
-                </select>
+                <Select value={scrapeRequest.storeId} onValueChange={v => setScrapeRequest({ ...scrapeRequest, storeId: v ?? '' })}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="-- Choose a store --" /></SelectTrigger>
+                  <SelectContent>
+                    {stores.map(store => (
+                      <SelectItem key={store.id} value={String(store.id)}>{store.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>
@@ -725,16 +724,14 @@ export default function Dashboard() {
             <form onSubmit={handleTriggerCocowest} className="space-y-3 pt-2">
               <div>
                 <Label>Store</Label>
-                <select
-                  value={cocowestRequest.storeId}
-                  onChange={(e) => setCocowestRequest({ ...cocowestRequest, storeId: e.target.value })}
-                  className="field-input focus:border-emerald-500"
-                >
-                  <option value="">-- Choose a store --</option>
-                  {stores.map(store => (
-                    <option key={store.id} value={store.id}>{store.name}</option>
-                  ))}
-                </select>
+                <Select value={cocowestRequest.storeId} onValueChange={v => setCocowestRequest({ ...cocowestRequest, storeId: v ?? '' })}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="-- Choose a store --" /></SelectTrigger>
+                  <SelectContent>
+                    {stores.map(store => (
+                      <SelectItem key={store.id} value={String(store.id)}>{store.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div>
@@ -903,15 +900,14 @@ export default function Dashboard() {
               onChange={(e) => setNewFood({ ...newFood, barcode: e.target.value })}
               className="w-full md:w-32 bg-slate-950 border border-white/5 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden"
             />
-            <select
-              value={newFood.category}
-              onChange={(e) => setNewFood({ ...newFood, category: e.target.value })}
-              className="bg-slate-950 border border-white/5 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden"
-            >
-              {categories.filter(c => c !== 'All').map(c => (
-                <option key={c} value={c}>{c}</option>
-              ))}
-            </select>
+            <Select value={newFood.category} onValueChange={v => v && setNewFood({ ...newFood, category: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {categories.filter(c => c !== 'All').map(c => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <input 
               type="text" 
               placeholder="Unit (e.g. lb)" 
@@ -1049,15 +1045,14 @@ export default function Dashboard() {
                 {pageSize !== 0 && totalPages > 1 && ` · page ${safePage + 1} of ${totalPages}`}
               </span>
               <div className="flex items-center gap-2">
-                <select
-                  value={pageSize}
-                  onChange={e => setPageSize(Number(e.target.value))}
-                  className="bg-slate-900 border border-white/5 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-hidden focus:border-violet-500"
-                >
-                  {PAGE_SIZES.map(s => (
-                    <option key={s} value={s}>{s === 0 ? 'Show all' : `${s} / page`}</option>
-                  ))}
-                </select>
+                <Select value={String(pageSize)} onValueChange={v => v && setPageSize(Number(v))}>
+                  <SelectTrigger size="sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {PAGE_SIZES.map(s => (
+                      <SelectItem key={s} value={String(s)}>{s === 0 ? 'Show all' : `${s} / page`}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {pageSize !== 0 && totalPages > 1 && (
                   <>
                     <button

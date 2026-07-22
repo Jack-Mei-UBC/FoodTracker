@@ -6,6 +6,7 @@ import { scaleNutrients, NutritionFacts, MICRO_META } from '../../lib/nutrition'
 import FoodDetailModal from '../../components/FoodDetailModal';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -587,13 +588,12 @@ export default function DiaryPage() {
                 title="Type a number with a unit (e.g. 600g, 2lb) to auto-fill both fields"
                 className="w-20 bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white text-right font-mono focus:outline-hidden focus:border-emerald-500"
               />
-              <select
-                value={unit}
-                onChange={e => setUnit(e.target.value)}
-                className="bg-slate-950 border border-white/10 rounded-xl px-2 py-2 text-sm text-white focus:outline-hidden focus:border-emerald-500"
-              >
-                {DIARY_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-              </select>
+              <Select value={unit} onValueChange={v => v && setUnit(v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {DIARY_UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
           )}
           {needsManualCalories && (
@@ -606,13 +606,12 @@ export default function DiaryPage() {
             />
           )}
 
-          <select
-            value={meal}
-            onChange={e => setMeal(e.target.value)}
-            className="bg-slate-950 border border-white/10 rounded-xl px-2 py-2 text-sm text-white focus:outline-hidden focus:border-emerald-500"
-          >
-            {MEALS.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
-          </select>
+          <Select value={meal} onValueChange={v => v && setMeal(v)}>
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {MEALS.map(m => <SelectItem key={m.key} value={m.key}>{m.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
 
           <button
             type="submit"
@@ -697,20 +696,18 @@ export default function DiaryPage() {
                                 title="Type a number with a unit (e.g. 600g, 2lb) to auto-fill both fields"
                                 className="w-16 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white text-right font-mono focus:outline-hidden focus:border-emerald-500"
                               />
-                              <select
-                                value={editDraft.unit}
-                                onChange={e => setEditDraft({ ...editDraft, unit: e.target.value })}
-                                className="bg-slate-950 border border-white/10 rounded-lg px-1.5 py-1 text-white focus:outline-hidden"
-                              >
-                                {DIARY_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                              </select>
-                              <select
-                                value={editDraft.meal}
-                                onChange={e => setEditDraft({ ...editDraft, meal: e.target.value })}
-                                className="bg-slate-950 border border-white/10 rounded-lg px-1.5 py-1 text-white focus:outline-hidden"
-                              >
-                                {MEALS.map(mm => <option key={mm.key} value={mm.key}>{mm.label}</option>)}
-                              </select>
+                              <Select value={editDraft.unit} onValueChange={v => v && setEditDraft({ ...editDraft, unit: v })}>
+                                <SelectTrigger size="sm"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {DIARY_UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                              <Select value={editDraft.meal} onValueChange={v => v && setEditDraft({ ...editDraft, meal: v })}>
+                                <SelectTrigger size="sm"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  {MEALS.map(mm => <SelectItem key={mm.key} value={mm.key}>{mm.label}</SelectItem>)}
+                                </SelectContent>
+                              </Select>
                               <div className="flex items-center gap-1">
                                 <input
                                   type="number" step="any" min="0"

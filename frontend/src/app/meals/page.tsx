@@ -10,6 +10,7 @@ import Modal from '../../components/Modal';
 import FoodDetailModal from '../../components/FoodDetailModal';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import NutritionSearch, { SavedFood } from '../../components/NutritionSearch';
 import { UNIT_OPTIONS, parseAmountInput, normalizeUnit } from '../../lib/units';
 import { scaleNutrients, isServingUnit, NutritionFacts } from '../../lib/nutrition';
@@ -709,17 +710,20 @@ export default function MealsPage() {
                       title="Type a number with a unit (e.g. 600g, 2lb) to auto-fill both fields"
                       className="w-16 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white text-right font-mono focus:outline-hidden focus:border-emerald-500"
                     />
-                    <select
+                    <Select
                       value={row.unit}
-                      onChange={e => {
+                      onValueChange={v => {
+                        if (!v) return;
                         const next = rows.slice();
-                        next[i] = { ...row, unit: e.target.value };
+                        next[i] = { ...row, unit: v };
                         setRows(next);
                       }}
-                      className="bg-slate-950 border border-white/10 rounded-lg px-1.5 py-1 text-white focus:outline-hidden"
                     >
-                      {INGREDIENT_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                    </select>
+                      <SelectTrigger size="sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {INGREDIENT_UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                     <span className="font-mono text-slate-400 w-20 text-right">
                       {rowPreview?.scaled ? `${fmtKcal(rowPreview.scaled.calories)} kcal` : <span className="text-amber-500/80">no facts</span>}
                     </span>
@@ -941,9 +945,12 @@ export default function MealsPage() {
             <div className="flex items-center gap-3">
               <div className="flex-1">
                 <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Meal</label>
-                <select value={logSlot} onChange={e => setLogSlot(e.target.value)} className={`w-full ${inputCls}`}>
-                  {MEAL_SLOTS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-                </select>
+                <Select value={logSlot} onValueChange={v => v && setLogSlot(v)}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {MEAL_SLOTS.map(s => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Portions</label>

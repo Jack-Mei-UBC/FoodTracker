@@ -9,6 +9,7 @@
 import React, { useState } from 'react';
 import Modal from './Modal';
 import { Button } from './ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { UNIT_OPTIONS, parseAmountInput } from '../lib/units';
 import { NutritionFacts, MACRO_META, MICRO_META } from '../lib/nutrition';
 
@@ -166,9 +167,12 @@ export default function MacroEditor({
         <div className="flex flex-wrap gap-2 items-center text-xs">
           <label className="text-slate-400">Serving</label>
           <input type="text" inputMode="text" placeholder="e.g. 170g" value={draft.serving_size} onChange={e => onServing(e.target.value)} title="Type a number with a unit (e.g. 170g, 1cup) to auto-fill both fields" className={`${num} w-20`} />
-          <select value={draft.serving_unit} onChange={e => setDraft({ ...draft, serving_unit: e.target.value })} className="bg-slate-950 border border-white/10 rounded-lg px-1.5 py-1 text-white focus:outline-hidden">
-            {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-          </select>
+          <Select value={draft.serving_unit} onValueChange={v => v && setDraft({ ...draft, serving_unit: v })}>
+            <SelectTrigger size="sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {UNIT_OPTIONS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <label className="text-slate-400 ml-2">Calories</label>
           <input type="number" step="any" min="0" value={draft.calories} onChange={e => setDraft({ ...draft, calories: e.target.value })} className={`${num} w-20`} />
           <span className="text-slate-500">kcal</span>
