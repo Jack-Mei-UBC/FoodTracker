@@ -9,12 +9,13 @@ from pydantic import ValidationError
 
 from .config import settings
 from .models import (
+    BarcodeData,
     PriceTagData,
     ReceiptData,
     ScanResponse,
     UnknownData,
 )
-from .prompts import RETRY_PROMPT, SYSTEM_PROMPT, USER_PROMPT
+from .prompts import PROMPT_VERSION, RETRY_PROMPT, USER_PROMPT, build_system_prompt
 
 logger = logging.getLogger("ocr-service")
 
@@ -23,14 +24,15 @@ _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```\s*$", re.IGNORECASE)
 _DATA_MODELS = {
     "receipt": ReceiptData,
     "price_tag": PriceTagData,
+    "barcode": BarcodeData,
     "unknown": UnknownData,
 }
 
 
-def _build_messages(image_jpeg: bytes) -> list[dict]:
+def _build_messages(image_jpeg: bytes, tags: list[str] | None) -> list[dict]:
     b64 = base64.b64encode(image_jpeg).decode("ascii")
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": build_system_prompt(tags)},
         {
             "role": "user",
             "content": [
@@ -130,7 +132,9 @@ def _repair_truncated_json(text: str, start: int) -> dict | None:
                 obj = _decoder().decode(candidate)
             except (json.JSONDecodeError, ValueError):
                 continue
-            if isinstance(obj, dict) and obj.get("type"):
+            # Accept either shape: the legacy flat body ("type") or the
+            # captures-segmented body ("captures") the current prompt asks for.
+            if isinstance(obj, dict) and (obj.get("type") or obj.get("captures")):
                 return obj
     return None
 
@@ -170,23 +174,72 @@ def _extract_json_object(content: str) -> dict:
         return repaired
 
 
-def _parse_scan_response(content: str, model: str) -> ScanResponse:
-    payload = _extract_json_object(content)
+def _sanitize_tags(data: object, allowed: set[str] | None) -> None:
+    """Drop any tag name the model invented outside the vocabulary offered (or
+    ALL tags, if none was offered). The prompt tells the model to only use the
+    supplied list, but free models don't reliably comply — same human-in-the-
+    loop rule as the rest of extraction: only what was actually asked for
+    survives. Mutates the validated pydantic item objects in place."""
+    items = getattr(data, "items", None)
+    if not isinstance(items, list):
+        return
+    for item in items:
+        if not hasattr(item, "tags"):
+            continue
+        item.tags = [t for t in item.tags if allowed and t in allowed] if item.tags else []
 
-    # Validate the data payload against the model matching the declared type,
-    # so a receipt with a malformed item fails here rather than silently
-    # coercing to the wrong union member.
-    capture_type = payload.get("type")
+
+def _validate_capture(raw: dict, allowed_tags: set[str] | None) -> dict:
+    """Validate one capture's data against the model matching its declared
+    type, so a receipt with a malformed item fails here rather than silently
+    coercing to the wrong union member. Raises ValueError on an unrecognized
+    type — the caller decides whether to drop it or fail the whole photo."""
+    capture_type = raw.get("type")
     data_model = _DATA_MODELS.get(capture_type)
     if data_model is None:
         raise ValueError(f"unknown capture type: {capture_type!r}")
+    data = data_model.model_validate(raw.get("data", {}))
+    _sanitize_tags(data, allowed_tags)
+    return {
+        "type": capture_type,
+        "confidence": float(raw.get("confidence", 0)),
+        "data": data,
+    }
 
+
+def _parse_scan_response(content: str, model: str, tags: list[str] | None) -> ScanResponse:
+    payload = _extract_json_object(content)
+    allowed_tags = set(tags) if tags else None
+
+    raw_captures = payload.get("captures")
+    if isinstance(raw_captures, list) and raw_captures:
+        # The current prompt asks for this shape: one entry per region found.
+        # Drop any capture whose type we don't recognize rather than failing
+        # the whole photo over one bad region — a model that free-associates
+        # an extra invented type shouldn't cost the good captures alongside it.
+        captures = []
+        for raw in raw_captures:
+            if not isinstance(raw, dict):
+                continue
+            try:
+                captures.append(_validate_capture(raw, allowed_tags))
+            except (ValidationError, ValueError, TypeError) as err:
+                logger.warning("Dropping unparseable capture (%s): %r", err, raw.get("type"))
+        if not captures:
+            raise ValueError("no recognizable captures in model output")
+        return ScanResponse(model=model, captures=captures, raw_text=content, prompt_version=PROMPT_VERSION)
+
+    # Legacy/fallback shape: a flat { type, confidence, data } body. Some free
+    # models ignore the captures instruction and answer the old way — the
+    # ScanResponse validator synthesizes captures[] from this automatically.
+    capture = _validate_capture(payload, allowed_tags)
     return ScanResponse(
-        type=capture_type,
-        confidence=float(payload.get("confidence", 0)),
+        type=capture["type"],
+        confidence=capture["confidence"],
         model=model,
-        data=data_model.model_validate(payload.get("data", {})),
+        data=capture["data"],
         raw_text=content,
+        prompt_version=PROMPT_VERSION,
     )
 
 
@@ -215,13 +268,15 @@ async def _chat(client: httpx.AsyncClient, messages: list[dict], model: str) -> 
     return data.get("choices", [{}])[0].get("message", {}).get("content") or ""
 
 
-async def scan_image(image_jpeg: bytes, model: str | None = None) -> ScanResponse:
+async def scan_image(image_jpeg: bytes, model: str | None = None, tags: list[str] | None = None) -> ScanResponse:
     # The worker owns model selection (the multi-model pool + retries live there
     # — see worker/src/modelPool.ts), so it passes exactly one model per call and
     # this service is a dumb executor. `model` falls back to OCR_MODEL only for
     # direct /scan calls (host curl / manual tests) that don't specify one.
+    # `tags` is the catalog's tag vocabulary, fetched by the worker per job —
+    # absent for direct/manual calls, in which case the model always returns [].
     model = model or settings.ocr_model
-    messages = _build_messages(image_jpeg)
+    messages = _build_messages(image_jpeg, tags)
 
     try:
         async with httpx.AsyncClient(timeout=settings.request_timeout_seconds) as client:
@@ -235,10 +290,11 @@ async def scan_image(image_jpeg: bytes, model: str | None = None) -> ScanRespons
                     model=model,
                     data=UnknownData(reason="The model returned no usable output for this image."),
                     raw_text=content,
+                    prompt_version=PROMPT_VERSION,
                 )
 
             try:
-                return _parse_scan_response(content, model)
+                return _parse_scan_response(content, model, tags)
             except (json.JSONDecodeError, ValidationError, ValueError, TypeError) as first_err:
                 logger.warning("First parse failed (%s), retrying once", first_err)
                 retry_messages = messages + [
@@ -247,7 +303,7 @@ async def scan_image(image_jpeg: bytes, model: str | None = None) -> ScanRespons
                 ]
                 retry_content = await _chat(client, retry_messages, model)
                 try:
-                    return _parse_scan_response(retry_content, model)
+                    return _parse_scan_response(retry_content, model, tags)
                 except (json.JSONDecodeError, ValidationError, ValueError, TypeError):
                     # Don't hard-fail: return the raw text as an 'unknown' result so
                     # the UI can show it for copy-paste / manual entry instead of a 502.
@@ -263,6 +319,7 @@ async def scan_image(image_jpeg: bytes, model: str | None = None) -> ScanRespons
                         # a retry that returns empty would otherwise discard the
                         # first attempt's output, which is what the inbox shows.
                         raw_text=retry_content or content,
+                        prompt_version=PROMPT_VERSION,
                     )
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="LLM request timed out")

@@ -215,6 +215,17 @@ fi
 check_code "POST /api/scan-jobs/:id/restage 404s on unknown id" 404 \
   "$(post_code "$API/api/scan-jobs/99999999/restage" '{}')"
 
+# scan_runs: the append-only per-model-call history (never cleared by restage/
+# reprocess, unlike scan_jobs.result/attempts) — read-only contract check.
+if [ -z "$SCAN_ID" ]; then
+  skip "GET /api/scan-jobs/:id/runs responds (array) (no scan jobs)"
+else
+  assert_json "GET /api/scan-jobs/:id/runs responds (array)" \
+    "$API/api/scan-jobs/$SCAN_ID/runs" "isinstance(d,list)"
+fi
+check_code "POST /api/scan-jobs/:id/reprocess 404s on unknown id" 404 \
+  "$(post_code "$API/api/scan-jobs/99999999/reprocess" '{}')"
+
 # --- App settings + sale expiry defaults --------------------------------------
 assert_json "GET /api/settings returns default_sale_days" \
   "$API/api/settings" "'default_sale_days' in d"

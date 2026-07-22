@@ -143,6 +143,45 @@ ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS use_paid BOOLEAN NOT NULL DEFAULT
 -- Added post-hoc: existing DBs need the manual ALTER (see the schema.sql gotcha).
 ALTER TABLE scan_jobs ADD COLUMN IF NOT EXISTS attempts JSONB;
 
+-- Append-only per-model-call history for scan jobs, never cleared or overwritten
+-- (unlike scan_jobs.attempts/result, which restage and reprocessing reset). This
+-- is what makes a scan re-processable later: it keeps the exact image, model,
+-- prompt version and tag vocabulary used for EVERY call, including calls made
+-- before a re-crop or a prompt change, so past runs can be compared against new
+-- ones instead of being destroyed by the next attempt. Written direct via the
+-- worker's pg pool (bookkeeping, like scan_jobs progress updates) — never
+-- audited, same precedent as scrape_jobs progress and the restage endpoint.
+CREATE TABLE IF NOT EXISTS scan_runs (
+    id SERIAL PRIMARY KEY,
+    scan_job_id INTEGER NOT NULL REFERENCES scan_jobs(id) ON DELETE CASCADE,
+    -- The exact image bytes this call read — a re-crop repoints scan_jobs.image_id,
+    -- so this is what lets a later run distinguish "read the crop" from "read the
+    -- original" for the same scan_job_id.
+    image_id INTEGER REFERENCES images(id) ON DELETE SET NULL,
+    model VARCHAR(120) NOT NULL,
+    use_paid BOOLEAN NOT NULL DEFAULT false,
+    -- Hash of the system prompt in force at call time (ocr-service PROMPT_VERSION).
+    -- Without this a better result later can't be attributed to a new model vs a
+    -- new prompt.
+    prompt_version VARCHAR(64),
+    -- Tag vocabulary (names) offered to the model for this call — drifts as tags
+    -- are added/removed, so it's captured per-run rather than assumed from the
+    -- current GET /api/tags.
+    tags_vocab JSONB,
+    ok BOOLEAN NOT NULL,
+    was_winner BOOLEAN NOT NULL DEFAULT false,
+    capture_type VARCHAR(20), -- receipt | price_tag | barcode | mixed | unknown, null on hard failure
+    item_count INTEGER,
+    confidence DECIMAL(4, 3),
+    response JSONB, -- full parsed ScanResponse body
+    raw_text TEXT,
+    error TEXT, -- network/HTTP/parse failure detail, null when ok
+    duration_ms INTEGER,
+    started_at TIMESTAMP NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_scan_runs_job ON scan_runs(scan_job_id);
+
 -- Background scrape jobs — progress tracking for both scraper sources (Flipp
 -- flyers and cocowest.ca Costco sale posts). One row per POST /api/scrape/:storeId
 -- (source='flipp') or POST /api/scrape-cocowest (source='cocowest'). The worker
