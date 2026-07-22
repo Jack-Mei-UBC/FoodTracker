@@ -311,6 +311,27 @@ try {
     Check "POST /api/scan-jobs/:id/restage 404s on unknown id" ($code -eq 404)
 }
 
+# scan_runs: the append-only per-model-call history (never cleared by restage/
+# reprocess, unlike scan_jobs.result/attempts) — read-only contract check.
+try {
+    if ($firstJob) {
+        $runs = Get-Json "$API/api/scan-jobs/$($firstJob.id)/runs"
+        Check "GET /api/scan-jobs/:id/runs responds (array)" ($runs -is [array] -or $null -eq $runs)
+    } else {
+        Write-Host "  [SKIP] no scan jobs to inspect"
+    }
+} catch { Check "GET /api/scan-jobs/:id/runs responds (array)" $false }
+
+# Reprocess: a job that doesn't exist must 404 (no row is touched by this call).
+try {
+    Invoke-RestMethod -Uri "$API/api/scan-jobs/99999999/reprocess" -Method Post -ContentType 'application/json' -Body '{}' -TimeoutSec 10 | Out-Null
+    Check "POST /api/scan-jobs/:id/reprocess 404s on unknown id" $false
+} catch {
+    $code = $null
+    try { $code = [int]$_.Exception.Response.StatusCode } catch { }
+    Check "POST /api/scan-jobs/:id/reprocess 404s on unknown id" ($code -eq 404)
+}
+
 # --- Backend: app settings + sale expiry (read-only contract checks) ---------
 try { $st = Get-Json "$API/api/settings"; Check "GET /api/settings returns default_sale_days" (HasProp $st 'default_sale_days') }
 catch { Check "GET /api/settings responds" $false }

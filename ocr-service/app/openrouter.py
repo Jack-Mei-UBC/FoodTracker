@@ -14,7 +14,7 @@ from .models import (
     ScanResponse,
     UnknownData,
 )
-from .prompts import RETRY_PROMPT, SYSTEM_PROMPT, USER_PROMPT
+from .prompts import PROMPT_VERSION, RETRY_PROMPT, SYSTEM_PROMPT, USER_PROMPT
 
 logger = logging.getLogger("ocr-service")
 
@@ -187,6 +187,7 @@ def _parse_scan_response(content: str, model: str) -> ScanResponse:
         model=model,
         data=data_model.model_validate(payload.get("data", {})),
         raw_text=content,
+        prompt_version=PROMPT_VERSION,
     )
 
 
@@ -235,6 +236,7 @@ async def scan_image(image_jpeg: bytes, model: str | None = None) -> ScanRespons
                     model=model,
                     data=UnknownData(reason="The model returned no usable output for this image."),
                     raw_text=content,
+                    prompt_version=PROMPT_VERSION,
                 )
 
             try:
@@ -263,6 +265,7 @@ async def scan_image(image_jpeg: bytes, model: str | None = None) -> ScanRespons
                         # a retry that returns empty would otherwise discard the
                         # first attempt's output, which is what the inbox shows.
                         raw_text=retry_content or content,
+                        prompt_version=PROMPT_VERSION,
                     )
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="LLM request timed out")

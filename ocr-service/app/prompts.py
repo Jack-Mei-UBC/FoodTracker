@@ -101,3 +101,10 @@ Rules for sale dates (both types):
 USER_PROMPT = "Classify this image and extract the data as specified. Respond with only the JSON object."
 
 RETRY_PROMPT = "Your previous response was not valid JSON matching the required shape. Return ONLY the JSON object, nothing else."
+
+# Short hash of the system prompt in force, stamped onto every ScanResponse and
+# logged per-call in scan_runs. Lets a later re-process distinguish "a new model
+# answered differently" from "the prompt itself changed" when comparing runs.
+import hashlib
+
+PROMPT_VERSION = hashlib.sha256(SYSTEM_PROMPT.encode("utf-8")).hexdigest()[:12]

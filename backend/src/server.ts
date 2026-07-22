@@ -1292,6 +1292,25 @@ app.get('/api/scan-jobs/:id', async (req: Request, res: Response) => {
   }
 });
 
+// 16b. Full per-model call history for a scan job — every scan_runs row, newest
+// first. Unlike `result`/`attempts` on the job itself (overwritten on every run,
+// cleared on restage), this never shrinks: it's what shows "gemma read this fine
+// three weeks ago under the old prompt" even after a re-crop or a re-run.
+app.get('/api/scan-jobs/:id/runs', async (req: Request, res: Response) => {
+  try {
+    const result = await db.query(
+      `SELECT id, image_id, model, use_paid, prompt_version, tags_vocab, ok, was_winner,
+              capture_type, item_count, confidence, raw_text, error, duration_ms,
+              started_at, created_at
+       FROM scan_runs WHERE scan_job_id = $1 ORDER BY started_at DESC`,
+      [parseInt(req.params.id)]
+    );
+    res.json(result.rows);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // 17. Mark a scan job reviewed (called after the user commits its items).
 app.post('/api/scan-jobs/:id/reviewed', async (req: Request, res: Response) => {
   try {
@@ -1309,6 +1328,30 @@ app.post('/api/scan-jobs/:id/retry', async (req: Request, res: Response) => {
     const job = await db.query('SELECT * FROM scan_jobs WHERE id = $1', [id]);
     if (job.rows.length === 0) return res.status(404).json({ error: 'Scan job not found' });
     await db.query("UPDATE scan_jobs SET status = 'queued', error = NULL WHERE id = $1", [id]);
+    await addOcrJob(id);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 18b. Re-run OCR on a job's CURRENT image without touching its state otherwise
+// — unlike /restage (which reverts to the original image for a re-crop) or
+// /retry (failed jobs only), this is "the prompt/model pool just changed, redo
+// this scan and see if it does better." Appends a fresh scan_runs history on
+// top of whatever's already there; result/attempts get overwritten with the new
+// outcome same as any run, but nothing is destroyed — see scan_runs above.
+app.post('/api/scan-jobs/:id/reprocess', async (req: Request, res: Response) => {
+  const id = parseInt(req.params.id);
+  const usePaid = req.body?.use_paid === true || req.body?.use_paid === 'true';
+  try {
+    const job = await db.query('SELECT status, use_paid FROM scan_jobs WHERE id = $1', [id]);
+    if (job.rows.length === 0) return res.status(404).json({ error: 'Scan job not found' });
+    if (['staged', 'queued', 'processing'].includes(job.rows[0].status)) {
+      return res.status(400).json({ error: `Job is ${job.rows[0].status} — nothing to reprocess yet` });
+    }
+    const nextUsePaid = req.body?.use_paid != null ? usePaid : job.rows[0].use_paid;
+    await db.query("UPDATE scan_jobs SET status = 'queued', use_paid = $2, error = NULL WHERE id = $1", [id, nextUsePaid]);
     await addOcrJob(id);
     res.json({ success: true });
   } catch (err: any) {

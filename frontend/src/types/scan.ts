@@ -58,8 +58,11 @@ export interface UnknownData {
 }
 
 // `raw_text` is the model's raw output (before JSON parsing); present mainly on
-// failures so the UI can show it for copy-paste. Keep in sync with models.py.
+// failures so the UI can show it for copy-paste. `prompt_version` is a hash of
+// the system prompt in force for this call (ocr-service prompts.PROMPT_VERSION),
+// logged per scan_runs row so a later re-process can tell a prompt change apart
+// from a model change. Keep in sync with models.py.
 export type ScanResponse =
-  | { type: 'receipt'; confidence: number; model: string; raw_text?: string | null; data: ReceiptData }
-  | { type: 'price_tag'; confidence: number; model: string; raw_text?: string | null; data: PriceTagData }
-  | { type: 'unknown'; confidence: number; model: string; raw_text?: string | null; data: UnknownData };
+  | { type: 'receipt'; confidence: number; model: string; raw_text?: string | null; prompt_version?: string | null; data: ReceiptData }
+  | { type: 'price_tag'; confidence: number; model: string; raw_text?: string | null; prompt_version?: string | null; data: PriceTagData }
+  | { type: 'unknown'; confidence: number; model: string; raw_text?: string | null; prompt_version?: string | null; data: UnknownData };

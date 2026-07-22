@@ -395,6 +395,18 @@ const CONTENT_TYPES: Record<string, string> = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp',
 };
 
+// Tag names currently in the catalog, fetched once per scan job for the
+// scan_runs history record (see recordScanRun). Best-effort: a backend hiccup
+// must not fail the scan, so this returns null rather than throwing.
+async function fetchTagVocab(): Promise<string[] | null> {
+  try {
+    const tags = await backendApi('/api/tags');
+    return Array.isArray(tags) ? tags.map((t: any) => t.name).filter(Boolean) : null;
+  } catch {
+    return null;
+  }
+}
+
 // How many product lines a scan result carries — drives the quality gate below.
 function resultItemCount(body: any): number {
   if (!body || typeof body !== 'object') return 0;
@@ -437,28 +449,88 @@ interface ScanAttempt {
   error?: string;       // network/HTTP failure detail (ok: false)
 }
 
+// Appends one row to scan_runs for a single model call — never updated except
+// for the was_winner flip after the whole scan finishes. This is the durable,
+// non-destructive history that scan_jobs.result/attempts (overwritten on every
+// run and cleared on restage) can't provide; it's what lets a scan be
+// re-processed later without losing what earlier calls read. Direct pg write,
+// like the rest of this file's bookkeeping — not the audited backend API.
+async function recordScanRun(opts: {
+  scanJobId: number;
+  imageId: number | null;
+  model: string;
+  usePaid: boolean;
+  tagsVocab: string[] | null;
+  ok: boolean;
+  captureType: string | null;
+  itemCount: number | null;
+  confidence: number | null;
+  response: any | null;
+  rawText: string | null;
+  error: string | null;
+  startedAt: Date;
+  durationMs: number;
+}): Promise<number> {
+  const res = await pool.query(
+    `INSERT INTO scan_runs
+       (scan_job_id, image_id, model, use_paid, prompt_version, tags_vocab, ok,
+        capture_type, item_count, confidence, response, raw_text, error,
+        duration_ms, started_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+     RETURNING id`,
+    [
+      opts.scanJobId, opts.imageId, opts.model, opts.usePaid,
+      opts.response?.prompt_version ?? null,
+      opts.tagsVocab ? JSON.stringify(opts.tagsVocab) : null,
+      opts.ok, opts.captureType, opts.itemCount, opts.confidence,
+      opts.response ? JSON.stringify(opts.response) : null, opts.rawText, opts.error,
+      opts.durationMs, opts.startedAt,
+    ]
+  );
+  return res.rows[0].id;
+}
+
 // One OCR call against one model. Always returns an attempt record; `body` is
 // null on a network/HTTP failure (so the caller can rotate to the next model)
 // and the reason is kept on the record rather than swallowed. The image bytes
-// are read once by the caller and reused across retries.
+// are read once by the caller and reused across retries. Every call — success
+// or failure — also lands a row in scan_runs (see recordScanRun) so it survives
+// a later restage/reprocess that would otherwise overwrite scan_jobs.attempts.
 async function ocrOnce(
   scanJob: any,
   image: { bytes: Uint8Array<ArrayBuffer>; contentType: string },
-  model: string
-): Promise<{ body: any | null; attempt: ScanAttempt }> {
+  model: string,
+  runCtx: { usePaid: boolean; tagsVocab: string[] | null }
+): Promise<{ body: any | null; attempt: ScanAttempt; runId: number }> {
   const form = new FormData();
   // Uint8Array (not a raw Buffer) is the valid BlobPart under current @types/node.
   form.append('image', new Blob([image.bytes], { type: image.contentType }), scanJob.original_filename || 'capture.jpg');
   form.append('model', model);
 
+  const startedAt = new Date();
+  const t0 = Date.now();
+
   try {
     const res = await fetch(`${ocrServiceUrl}/scan`, { method: 'POST', body: form });
     const body = await res.json().catch(() => null);
+    const durationMs = Date.now() - t0;
     if (!res.ok || body == null) {
       const detail = body?.detail || body?.error || 'no detail';
       console.warn(`OCR job ${scanJob.id}: model "${model}" returned ${res.status} (${detail})`);
-      return { body: null, attempt: { model, ok: false, error: `HTTP ${res.status}: ${detail}` } };
+      const error = `HTTP ${res.status}: ${detail}`;
+      const runId = await recordScanRun({
+        scanJobId: scanJob.id, imageId: scanJob.image_id ?? null, model, usePaid: runCtx.usePaid,
+        tagsVocab: runCtx.tagsVocab, ok: false, captureType: null, itemCount: null, confidence: null,
+        response: null, rawText: null, error, startedAt, durationMs,
+      });
+      return { body: null, attempt: { model, ok: false, error }, runId };
     }
+    const runId = await recordScanRun({
+      scanJobId: scanJob.id, imageId: scanJob.image_id ?? null, model, usePaid: runCtx.usePaid,
+      tagsVocab: runCtx.tagsVocab, ok: true, captureType: body.type ?? null,
+      itemCount: resultItemCount(body), confidence: body.confidence ?? null,
+      response: body, rawText: body.raw_text ?? null, error: null, startedAt, durationMs,
+    });
     return {
       body,
       attempt: {
@@ -469,11 +541,18 @@ async function ocrOnce(
         confidence: body.confidence ?? null,
         raw_text: body.raw_text ?? null,
       },
+      runId,
     };
   } catch (err: any) {
+    const durationMs = Date.now() - t0;
     const message = String(err?.message || err);
     console.warn(`OCR job ${scanJob.id}: model "${model}" errored: ${message}`);
-    return { body: null, attempt: { model, ok: false, error: message } };
+    const runId = await recordScanRun({
+      scanJobId: scanJob.id, imageId: scanJob.image_id ?? null, model, usePaid: runCtx.usePaid,
+      tagsVocab: runCtx.tagsVocab, ok: false, captureType: null, itemCount: null, confidence: null,
+      response: null, rawText: null, error: message, startedAt, durationMs,
+    });
+    return { body: null, attempt: { model, ok: false, error: message }, runId };
   }
 }
 
@@ -505,24 +584,38 @@ async function processScanJob(scanJobId: number) {
     const models = orderedModels(imageModelsFor(usePaid), nextStartIndex());
     const attemptCount = Math.min(maxAttempts(), models.length);
 
+    // Tag vocabulary offered to the model, captured per-run so scan_runs history
+    // reflects what was actually available at call time (the list drifts as tags
+    // are added/removed). Not yet threaded into the OCR prompt itself — that's
+    // the tag-injection phase — this only records it for future re-processing.
+    const tagsVocab = await fetchTagVocab();
+    const runCtx = { usePaid, tagsVocab };
+
     let best: any = null;
     let bestScore = -1;
+    let bestRunId: number | null = null;
     let accepted: any = null;
+    let acceptedRunId: number | null = null;
 
     for (let i = 0; i < attemptCount; i++) {
       const model = models[i];
-      const { body, attempt } = await ocrOnce(scanJob, image, model);
+      const { body, attempt, runId } = await ocrOnce(scanJob, image, model, runCtx);
       attempts.push(attempt);
       if (body == null) continue; // network/HTTP failure — try the next model
-      if (isAcceptable(body)) { accepted = body; break; }
+      if (isAcceptable(body)) { accepted = body; acceptedRunId = runId; break; }
       const score = scoreResult(body);
-      if (score > bestScore) { bestScore = score; best = body; }
+      if (score > bestScore) { bestScore = score; best = body; bestRunId = runId; }
     }
 
     const result = accepted ?? best;
     if (result == null) {
       // Every attempt was a hard failure (all models unreachable / non-JSON).
       throw new Error(`OCR failed on all ${attemptCount} model attempt(s)`);
+    }
+
+    const winnerRunId = acceptedRunId ?? bestRunId;
+    if (winnerRunId != null) {
+      await pool.query('UPDATE scan_runs SET was_winner = true WHERE id = $1', [winnerRunId]);
     }
 
     await pool.query(

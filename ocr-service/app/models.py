@@ -83,3 +83,6 @@ class ScanResponse(BaseModel):
     # The model's raw output text (before JSON parsing). Surfaced to the UI on
     # failures so the user can copy-paste anything useful the model saw.
     raw_text: Optional[str] = None
+    # Hash of the system prompt used for this call (prompts.PROMPT_VERSION), so
+    # scan_runs history can tell a prompt change apart from a model change.
+    prompt_version: Optional[str] = None
