@@ -17,7 +17,7 @@ regression. Do not start Phase 3 until Phase 1's Layer 2 contracts are green.
 | **0 — smoke repair + compose split** | ✅ **shipped** | All of F1–F7 landed. Smoke suite is 50/50 green and the two twins are back in sync. |
 | **1 — UI test net** | 🟡 **partly shipped** | Layers 1 & 2 exist (29 Playwright tests, green ×3 consecutive runs). Layer 3 (visual) and the Vitest secondary are **not started**. A real **flake source was found and fixed** — Playwright artifacts were being written into the container's bind mount, triggering mid-run recompiles. |
 | **2 — shadcn prerequisites** | ✅ **shipped** | Next 15 + Tailwind 4 in; tsconfig on ES2020; `cn()` + cva/clsx/tailwind-merge installed; `shadcn init -b base -p nova` run with **Base UI**; `rsc: false` corrected by hand. `shadcn add` verified end-to-end with Button. |
-| **3 — the migration** | 🟢 **M1–M8 all shipped** | Global de-customisation done (bespoke palette/glassmorphism/webfonts deleted, `globals.css` 10.2 KB → 6.2 KB). **M1**: `Modal` → Base UI Dialog, props not frozen (deleted). **M2**: Badge, Label, Button, Card, `.panel` — 48 `.btn*` + 35 `.card` + 30 `.panel` call sites converted; three of four transitional class families deleted from `globals.css` (`.badge` left pending 3 interactive chips). **M3**: all 20 native `<select>`s → Base UI `<Select>`. **M4**: Tabs (audit Active/Archived, meals Catalog/USDA) — also fixed a broken `sonner.tsx` icon import and dropped an unused `next-themes` dependency along the way. **M5**: `StatusToast`/`useToast` → Sonner, plus 5 more copy-pasted duplicates of the same pattern found and fixed. **M6**: all four named comboboxes → cmdk `Command` (done last, per its own note). **M7**: Popover/DropdownMenu — `lib/useClickOutside.ts` deleted (dead code), `ReviewItems`' tag picker → `DropdownMenu`. **M8**: Checkbox — all 11 usages converted; Tooltip had nothing to migrate (no hand-rolled tooltips exist, every one is a native `title=`). **One deliberately deferred item**: `ReviewItems`' "search existing items to add" box still has the literal `overflow-x-auto` clipping bug the plan originally flagged — fixing it needs `Popover`+`Command` with an anchor-ref override not yet exposed by the generated `PopoverContent` wrapper. Every step verified with `tsc --noEmit` + the full Playwright suite (now 34 tests, up from 29 at Phase 3's start), with new permanent interaction tests added wherever a step changed real markup/behavior rather than just class names (Select, Tabs, Toast, Checkbox, Combobox) — verification gaps (mostly OCR-gated or external-API-gated UI) are stated explicitly rather than implied away. |
+| **3 — the migration** | ✅ **shipped — M1–M8 + page sweep** | Global de-customisation done (bespoke palette/glassmorphism/webfonts deleted, `globals.css` 10.2 KB → 6.2 KB, and down further after the page sweep retired `.btn*`/`.panel`/`.badge`/`.field-input` outright). **M1**: `Modal` → Base UI Dialog, props not frozen (deleted). **M2**: Badge, Label, Button, Card, `.panel`. **M3**: all 20 native `<select>`s → Base UI `<Select>`. **M4**: Tabs. **M5**: `StatusToast`/`useToast` → Sonner (plus 5 copy-pasted duplicates fixed). **M6**: all four named comboboxes → cmdk `Command` (done last, per its own note). **M7**: Popover/DropdownMenu — dead `lib/useClickOutside.ts` deleted, `ReviewItems`' tag picker → `DropdownMenu`. **M8**: Checkbox (11 usages); Tooltip had nothing to migrate. **Page sweep**: every page + shared component swept for remaining pasted `<input>`/`<button>` utilities, which also surfaced and fixed a real M2 gap (template-literal `className={\`badge ...\`}` usages the original grep missed) and resolved the 3 interactive-Badge cases M2 had deferred, now verified via a real click test. **One deliberately deferred item, stated not hidden**: `ReviewItems`' "search existing items to add" box still has the literal `overflow-x-auto` clipping bug the plan originally flagged — needs `Popover` anchored to the input via a ref prop the generated `PopoverContent` wrapper doesn't expose yet. Every step verified with `tsc --noEmit` + the full Playwright suite (35 tests, up from 29 at Phase 3's M3 checkpoint), with new permanent interaction tests added wherever a step changed real markup/behavior rather than just class names. |
 | **4 — docs & guardrails** | ⬜ not started | Folded into each Phase 3 step. |
 
 Phase 0's findings below are kept as the **historical record of why** the fixes
@@ -456,10 +456,40 @@ Complete M4>M8 without needing to check in with the user
 **Never migrated** (bespoke, not primitives): `ImageCropper` (react-easy-crop),
 the SVG price-trend chart, image lightboxes, `ScanImages`, `RawModelOutput`.
 
-**Page sweep last.** Once primitives exist, go page by page replacing pasted
-utilities — dashboard → audit → meals → diary → budget → history → inbox →
-staging → scanner → scrapes → settings. **One page per commit**, snapshots
-reviewed each time.
+**Page sweep — ✅ SHIPPED.** Went page by page (dashboard → audit → meals →
+diary → budget → history → inbox → staging → scanner → scrapes → settings →
+shared components), one commit per page/group, `tsc --noEmit` + full
+Playwright suite green after each. Replaced every remaining raw
+`<input>`/`<textarea>`/hand-rolled `<button>` with `Input`/`Textarea`/`Button`,
+and — since the sweep surfaced a real gap M2's Badge pass had missed (its
+grep only matched double-quoted `className="badge ..."`, so every
+`className={\`badge ...\`}` template-literal usage across 8 files went
+unconverted) — retired `.badge` fully too, including the interactive
+tag-remove/filter chips M2 had deferred: Base UI's `Badge` `render` prop
+(`render={<button type="button" />}` + `onClick`, merged via `mergeProps`)
+turned out to work correctly, verified with a real Playwright click test
+(`audit.spec.ts`) rather than left as a guess. `.field-input` is now fully
+retired from `globals.css` alongside `.btn*`, `.panel`, and `.badge` — only
+`.field-label` (9 non-form-control stat headers) and one `.card`
+`<form>` exception remain, both deliberate, both documented inline.
+
+Also extended the M6 combobox treatment to two more inline search-as-you-type
+dropdowns the original four didn't name (diary's food search, `ReviewItems`'
+"search existing items to add") for consistency, and converted `MacroEditor`'s
+and `FoodDetailModal`'s USDA results lists to the same `Command` pattern
+`NutritionSearch` already used. **Deliberately left native**, consistently
+across every page: dense-grid inline row editors with a transparent,
+border-bottom-on-focus style (converting them to bordered `Input` boxes would
+change a real design choice, not retire a duplicated utility), icon-only
+buttons, plain-text links, native radio inputs (no `RadioGroup` was in scope),
+range sliders, and hidden file inputs.
+
+**Known follow-up, stated rather than silently dropped**: `ReviewItems`'
+"search existing items to add" box still has the literal `overflow-x-auto`
+clipping bug the plan originally flagged — it now uses `Command` (consistent
+styling, keyboard nav) but isn't portaled, since fixing that properly needs
+`Popover` anchored to the input via Base UI's `anchor` ref prop, which the
+generated `PopoverContent` wrapper doesn't expose yet.
 
 ---
 
