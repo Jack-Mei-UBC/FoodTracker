@@ -14,6 +14,7 @@ import { Card } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { useToast } from '../components/StatusToast';
 import { Checkbox } from '../components/ui/checkbox';
+import { Input } from '../components/ui/input';
 import FoodIconPicker from '../components/FoodIconPicker';
 
 // Interfaces based on database schema
@@ -664,23 +665,21 @@ export default function Dashboard() {
 
               <div>
                 <Label>Flyer Search <span className="normal-case font-normal text-slate-500">(optional)</span></Label>
-                <input
+                <Input
                   type="text"
                   value={scrapeRequest.query}
                   onChange={(e) => setScrapeRequest({ ...scrapeRequest, query: e.target.value })}
                   placeholder="e.g. milk — blank scans all tracked foods"
-                  className="field-input"
                 />
               </div>
 
               <div>
                 <Label>Postal Code <span className="normal-case font-normal text-slate-500">(optional)</span></Label>
-                <input
+                <Input
                   type="text"
                   value={scrapeRequest.postalCode}
                   onChange={(e) => setScrapeRequest({ ...scrapeRequest, postalCode: e.target.value })}
                   placeholder="V5A 3J2 (server default)"
-                  className="field-input"
                 />
               </div>
 
@@ -721,12 +720,12 @@ export default function Dashboard() {
 
               <div>
                 <Label>cocowest.ca Post URL</Label>
-                <input
+                <Input
                   type="text"
                   value={cocowestRequest.url}
                   onChange={(e) => setCocowestRequest({ ...cocowestRequest, url: e.target.value })}
                   placeholder="https://cocowest.ca/2026/07/weekend-update-..."
-                  className="field-input focus:border-emerald-500"
+                  className="focus-visible:border-emerald-500"
                 />
               </div>
 
@@ -788,23 +787,21 @@ export default function Dashboard() {
             <div className="border-t border-white/5 pt-3">
               <span className="text-xs font-semibold text-violet-400 block mb-2">Register New Store</span>
               <form onSubmit={handleAddStore} className="space-y-2">
-                <input 
-                  type="text" 
-                  value={newStore.name} 
+                <Input
+                  type="text"
+                  value={newStore.name}
                   onChange={(e) => setNewStore({ ...newStore, name: e.target.value })}
-                  placeholder="Store Name" 
-                  className="w-full bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-hidden" 
+                  placeholder="Store Name"
                 />
-                <input 
-                  type="text" 
-                  value={newStore.location} 
+                <Input
+                  type="text"
+                  value={newStore.location}
                   onChange={(e) => setNewStore({ ...newStore, location: e.target.value })}
-                  placeholder="Location / Neighborhood" 
-                  className="w-full bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-hidden" 
+                  placeholder="Location / Neighborhood"
                 />
-                <button type="submit" className="w-full bg-white/5 border border-white/10 rounded-lg py-1.5 text-xs font-semibold hover:bg-white/10 transition text-white">
+                <Button type="submit" variant="secondary" size="sm" className="w-full">
                   Add Store
-                </button>
+                </Button>
               </form>
             </div>
           </Card>
@@ -821,12 +818,12 @@ export default function Dashboard() {
               <svg className="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
-              <input
+              <Input
                 type="text"
                 placeholder="Search name, barcode, alias..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-900 border border-white/5 rounded-2xl pl-10 pr-8 py-2.5 text-sm text-white focus:outline-hidden focus:border-violet-500 transition"
+                className="rounded-2xl pl-10 pr-8"
               />
               {searchQuery && (
                 <button
@@ -854,36 +851,34 @@ export default function Dashboard() {
             {/* Category Filter */}
             <div className="flex items-center space-x-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0">
               {categoryChips.map(cat => (
-                <button
+                <Button
                   key={cat}
                   onClick={() => setSelectedCategory(cat)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition ${
-                    selectedCategory === cat
-                      ? 'bg-violet-600 border-violet-500 text-white'
-                      : 'bg-slate-900/50 border-white/5 text-slate-400 hover:text-white hover:bg-white/5'
-                  }`}
+                  variant={selectedCategory === cat ? 'default' : 'secondary'}
+                  size="sm"
+                  className="rounded-xl"
                 >
                   {cat}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
 
           {/* Add Food Input */}
           <form onSubmit={handleAddFood} className="p-4 bg-slate-900/40 border border-white/5 rounded-2xl flex flex-col md:flex-row gap-3">
-            <input 
-              type="text" 
-              placeholder="Add product (e.g. Fresh Gala Apples)" 
+            <Input
+              type="text"
+              placeholder="Add product (e.g. Fresh Gala Apples)"
               value={newFood.name}
               onChange={(e) => setNewFood({ ...newFood, name: e.target.value })}
-              className="flex-1 bg-slate-950 border border-white/5 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden"
+              className="flex-1 rounded-xl"
             />
-            <input 
-              type="text" 
-              placeholder="Barcode (Optional)" 
+            <Input
+              type="text"
+              placeholder="Barcode (Optional)"
               value={newFood.barcode}
               onChange={(e) => setNewFood({ ...newFood, barcode: e.target.value })}
-              className="w-full md:w-32 bg-slate-950 border border-white/5 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden"
+              className="w-full md:w-32 rounded-xl"
             />
             <Select value={newFood.category} onValueChange={v => v && setNewFood({ ...newFood, category: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
@@ -893,16 +888,16 @@ export default function Dashboard() {
                 ))}
               </SelectContent>
             </Select>
-            <input 
-              type="text" 
-              placeholder="Unit (e.g. lb)" 
+            <Input
+              type="text"
+              placeholder="Unit (e.g. lb)"
               value={newFood.unit}
               onChange={(e) => setNewFood({ ...newFood, unit: e.target.value })}
-              className="w-full md:w-20 bg-slate-950 border border-white/5 rounded-xl px-3 py-2 text-xs text-white focus:outline-hidden"
+              className="w-full md:w-20 rounded-xl"
             />
-            <button type="submit" className="bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-4 py-2 text-xs font-semibold transition">
+            <Button type="submit" className="rounded-xl">
               Quick Add
-            </button>
+            </Button>
           </form>
 
           {/* ═══ Section: Inventory table ═══ */}
@@ -1107,13 +1102,13 @@ export default function Dashboard() {
               <div className="flex flex-wrap items-center gap-2">
                 {/* Primary chip (drop target) */}
                 {editingChip === 'primary' ? (
-                  <input
+                  <Input
                     autoFocus
                     value={chipDraft}
                     onChange={e => setChipDraft(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') saveChipRename(selectedFoodDetails.id); if (e.key === 'Escape') setEditingChip(null); }}
                     onBlur={() => saveChipRename(selectedFoodDetails.id)}
-                    className="bg-slate-900 border border-violet-500/50 text-white text-xs font-bold rounded-full px-3 py-1 focus:outline-hidden w-44"
+                    className="border-violet-500/50 text-xs font-bold rounded-full h-auto py-1 w-44"
                   />
                 ) : (
                   <button
@@ -1136,14 +1131,14 @@ export default function Dashboard() {
                 {/* Alias chips (draggable) */}
                 {(selectedFoodDetails.aliases ?? []).map(a => (
                   editingChip === a.id ? (
-                    <input
+                    <Input
                       key={a.id}
                       autoFocus
                       value={chipDraft}
                       onChange={e => setChipDraft(e.target.value)}
                       onKeyDown={e => { if (e.key === 'Enter') saveChipRename(selectedFoodDetails.id); if (e.key === 'Escape') setEditingChip(null); }}
                       onBlur={() => saveChipRename(selectedFoodDetails.id)}
-                      className="bg-slate-900 border border-sky-500/50 text-white text-xs rounded-full px-3 py-1 focus:outline-hidden w-40"
+                      className="border-sky-500/50 text-xs rounded-full h-auto py-1 w-40"
                     />
                   ) : (
                     <span
@@ -1172,16 +1167,16 @@ export default function Dashboard() {
               </div>
               {/* Add a new known name directly from the dashboard */}
               <div className="flex gap-2 pt-1">
-                <input
+                <Input
                   value={newAlias}
                   onChange={e => setNewAlias(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') addAlias(selectedFoodDetails.id); }}
                   placeholder="Add another name for this food…"
-                  className="flex-1 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-hidden focus:border-sky-500"
+                  className="flex-1 focus-visible:border-sky-500"
                 />
-                <button onClick={() => addAlias(selectedFoodDetails.id)} className="px-3 py-1.5 rounded-lg bg-sky-600/20 border border-sky-500/30 text-sky-300 text-xs font-semibold hover:bg-sky-600/30 transition">
+                <Button onClick={() => addAlias(selectedFoodDetails.id)} variant="secondary" size="sm">
                   Add Name
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -1234,13 +1229,13 @@ export default function Dashboard() {
                 Usable Portion <span className="text-slate-600 font-normal">— % of what you buy that's actually usable</span>
               </span>
               <div className="flex items-center gap-2 flex-wrap">
-                <input
+                <Input
                   type="number" min="1" step="1"
                   value={usableDraft}
                   onChange={e => setUsableDraft(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') saveUsablePct(selectedFoodDetails.id); }}
                   onBlur={() => saveUsablePct(selectedFoodDetails.id)}
-                  className="w-24 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white font-mono focus:outline-hidden focus:border-violet-500"
+                  className="w-24 font-mono focus-visible:border-violet-500"
                 />
                 <span className="text-xs text-slate-500">% usable</span>
                 <span className="text-[10px] text-slate-600">e.g. 70 = 30% bone/waste · &gt;100 for dry goods that expand</span>
@@ -1254,13 +1249,13 @@ export default function Dashboard() {
                   Density <span className="text-slate-600 font-normal">— kg per litre, to show volume prices per kg</span>
                 </span>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <input
+                  <Input
                     type="number" min="0.01" step="0.01"
                     value={densityDraft}
                     onChange={e => setDensityDraft(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') saveDensity(selectedFoodDetails.id); }}
                     onBlur={() => saveDensity(selectedFoodDetails.id)}
-                    className="w-24 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white font-mono focus:outline-hidden focus:border-violet-500"
+                    className="w-24 font-mono focus-visible:border-violet-500"
                   />
                   <span className="text-xs text-slate-500">kg/L</span>
                   <span className="text-[10px] text-slate-600">water ≈ 1 · oil ≈ 0.92 · honey ≈ 1.42</span>
