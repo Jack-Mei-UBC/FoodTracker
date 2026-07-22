@@ -18,6 +18,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { MACRO_META, MICRO_META } from '../lib/nutrition';
 import { Command, CommandList, CommandEmpty, CommandItem } from './ui/command';
+import { Input } from './ui/input';
+import { Button } from './ui/button';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -155,17 +157,17 @@ export default function NutritionSearch({
   return (
     <div data-loc="component.nutrition-search" className="space-y-2">
       <div className="flex gap-2 items-center">
-        <input
+        <Input
           type="text" value={query}
           onChange={e => setQuery(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); search(); } }}
           placeholder="Search USDA (name or barcode)…"
-          className="flex-1 bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-hidden focus:border-sky-500"
+          className="flex-1 focus-visible:border-sky-500"
         />
-        <button type="button" onClick={search} disabled={searching}
-          className="px-3 py-1.5 rounded-lg bg-sky-600/20 border border-sky-500/30 text-sky-300 text-xs font-semibold hover:bg-sky-600/30 transition disabled:opacity-50">
+        <Button type="button" onClick={search} disabled={searching} variant="outline" size="sm"
+          className="text-sky-300 bg-sky-600/20 border-sky-500/30 hover:bg-sky-600/30 hover:text-sky-200">
           {searching ? 'Searching…' : 'Search USDA'}
-        </button>
+        </Button>
       </div>
 
       {autoSave ? (

@@ -13,6 +13,8 @@ import MacroEditor from './MacroEditor';
 import Modal from './Modal';
 import { Badge } from './ui/badge';
 import { Command, CommandInput, CommandList, CommandEmpty, CommandItem } from './ui/command';
+import { Input } from './ui/input';
+import { Button } from './ui/button';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -176,16 +178,16 @@ export default function FoodDetailModal({
                 ))}
               </div>
               <div className="flex gap-2">
-                <input
+                <Input
                   value={newName}
                   onChange={e => setNewName(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') addName(); }}
                   placeholder="Add another name for this food…"
-                  className="flex-1 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-hidden focus:border-sky-500"
+                  className="flex-1 focus-visible:border-sky-500"
                 />
-                <button onClick={addName} className="px-3 py-1.5 rounded-lg bg-sky-600/20 border border-sky-500/30 text-sky-300 text-xs font-semibold hover:bg-sky-600/30 transition">
+                <Button onClick={addName} variant="outline" size="sm" className="text-sky-300 bg-sky-600/20 border-sky-500/30 hover:bg-sky-600/30 hover:text-sky-200">
                   Add Name
-                </button>
+                </Button>
               </div>
             </div>
 
@@ -237,13 +239,13 @@ export default function FoodDetailModal({
                 Usable Portion <span className="normal-case font-normal text-slate-600">— % of what you buy that's actually usable</span>
               </span>
               <div className="flex items-center gap-2">
-                <input
+                <Input
                   type="number" min="1" step="1"
                   value={usableDraft}
                   onChange={e => setUsableDraft(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') saveUsable(); }}
                   onBlur={saveUsable}
-                  className="w-24 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white font-mono focus:outline-hidden focus:border-violet-500"
+                  className="w-24 font-mono focus-visible:border-violet-500"
                 />
                 <span className="text-xs text-slate-500">% usable</span>
                 <span className="text-[10px] text-slate-600">e.g. 70 = 30% bone/waste · &gt;100 for dry goods that expand</span>
@@ -257,13 +259,13 @@ export default function FoodDetailModal({
                   Density <span className="normal-case font-normal text-slate-600">— kg per litre, to show volume prices per kg</span>
                 </span>
                 <div className="flex items-center gap-2">
-                  <input
+                  <Input
                     type="number" min="0.01" step="0.01"
                     value={densityDraft}
                     onChange={e => setDensityDraft(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') saveDensity(); }}
                     onBlur={saveDensity}
-                    className="w-24 bg-slate-950 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white font-mono focus:outline-hidden focus:border-violet-500"
+                    className="w-24 font-mono focus-visible:border-violet-500"
                   />
                   <span className="text-xs text-slate-500">kg/L</span>
                   <span className="text-[10px] text-slate-600">water ≈ 1 · oil ≈ 0.92 · honey ≈ 1.42</span>

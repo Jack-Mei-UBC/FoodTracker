@@ -11,6 +11,7 @@ import Modal from './Modal';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Input } from './ui/input';
 import { Checkbox } from './ui/checkbox';
 import { UNIT_OPTIONS, parseAmountInput, formatCanonicalUnitPrice } from '../lib/units';
 
@@ -141,8 +142,6 @@ export default function PriceEditor({
     }
   };
 
-  const field = 'w-full bg-slate-950 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:border-violet-500';
-
   return (
     <Modal onClose={onClose} maxWidth="max-w-md" dataLoc="modal.price-editor">
         <div>
@@ -166,16 +165,16 @@ export default function PriceEditor({
           <div className="flex gap-2">
             <div className="flex-1">
               <label className="block text-[11px] font-semibold text-slate-400 mb-1">Price ($)</label>
-              <input type="number" step="0.01" min="0" value={draft.price} onChange={e => setDraft({ ...draft, price: e.target.value })} className={`${field} font-mono`} />
+              <Input type="number" step="0.01" min="0" value={draft.price} onChange={e => setDraft({ ...draft, price: e.target.value })} className="font-mono focus-visible:border-violet-500" />
             </div>
             <div className="w-24">
               <label className="block text-[11px] font-semibold text-slate-400 mb-1">Amount</label>
-              <input
+              <Input
                 type="text" inputMode="text" placeholder="e.g. 600g"
                 value={draft.amount}
                 onChange={e => onAmount(e.target.value)}
                 title="Type a number with a unit (e.g. 600g, 2lb) to auto-fill both fields"
-                className={`${field} font-mono`}
+                className="font-mono focus-visible:border-violet-500"
               />
             </div>
             <div className="w-24">
@@ -199,9 +198,9 @@ export default function PriceEditor({
           {draft.is_sale && (
             <div>
               <Label>Sale ends</Label>
-              <input type="date" value={draft.sale_ends_at}
+              <Input type="date" value={draft.sale_ends_at}
                 onChange={e => setDraft({ ...draft, sale_ends_at: e.target.value })}
-                className="field-input w-full" />
+                className="w-full" />
               <p className="text-[10px] text-slate-500 mt-1">
                 {draft.sale_ends_at
                   ? 'After this date the price stops showing as current (history keeps it).'
