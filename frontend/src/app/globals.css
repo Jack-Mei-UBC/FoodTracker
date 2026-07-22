@@ -1,6 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap')
-layer(base);
-
 @import 'tailwindcss';
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -9,29 +6,7 @@ layer(base);
 */
 @custom-variant dark (&:is(.dark *));
 
-@theme {
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-card: hsl(var(--card));
-  --color-border: hsl(var(--border));
-}
-
-/*
-  The default border color has changed to `currentcolor` in Tailwind CSS v4,
-  so we've added these compatibility styles to make sure everything still
-  looks the same as it did with Tailwind CSS v3.
-
-  If we ever want to remove these styles, we need to add an explicit border
-  color utility to any element that depends on these defaults.
-*/
 @layer base {
-  *,
-  ::after,
-  ::before,
-  ::backdrop,
-  ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
-  }
   * {
     @apply border-border outline-ring/50;
   }
@@ -43,173 +18,55 @@ layer(base);
   }
 }
 
+/* ─────────────────────────────────────────────────────────────────────────────
+   Transitional class vocabulary — RETIRING.
+   ---------------------------------------------------------------------------
+   These exist only because ~270 call sites still reference them. Each one is a
+   placeholder for a shadcn component that replaces it during Phase 3:
+     .card                 -> <Card>
+     .panel                -> <Card> (nested) / plain bg-muted
+     .field-label          -> <Label>
+     .field-input          -> <Input>
+     .btn/-primary/-secondary -> <Button variant="default|secondary">
+     .badge                -> <Badge>
+   Do NOT add new ones, and do not reach for these in new code — use the shadcn
+   component. Every definition below is now written in shadcn TOKENS rather than
+   hard-coded palette values, so they inherit the theme instead of pinning a
+   bespoke one. The block is deleted outright once the last call site is gone.
+   ───────────────────────────────────────────────────────────────────────────── */
+
 @utility card {
-  /* Glass card surface: the `glass-panel border border-white/5 rounded-2xl`
-     combo. Padding (p-5/p-6) and accent-border variants (border-violet-500/20…)
-     stay inline since they vary. For the hover-lift cards keep `glass-panel-hover`
-     alongside — .card doesn't include the lift. */
-  @apply rounded-2xl;
-  background: rgba(8, 12, 28, 0.65);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  @apply bg-card text-card-foreground border rounded-xl;
 }
 
 @utility panel {
-  /* Inner/nested panel: the semi-solid `bg-slate-950/60 border border-white/5`
-     surface used *inside* cards (efficiency rows, diary macro tiles, meal
-     ingredient rows, the dashboard modal's sub-sections). Distinct from .card
-     (which is the translucent glass outer surface). Bakes in the dominant
-     rounded-xl; the few rounded-2xl uses override it inline. Padding stays inline. */
-  @apply bg-slate-950/60 border border-white/5 rounded-xl;
+  @apply bg-muted/50 border rounded-lg;
 }
 
 @utility field-label {
-  /* Form field label. */
-  @apply block text-xs font-semibold text-slate-400 mb-1;
+  @apply block text-sm font-medium mb-1;
 }
 
 @utility field-input {
-  /* Text input / <select>. Emerald-focus sites add `focus:border-emerald-500`. */
-  @apply w-full bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 transition focus:outline-hidden focus:border-violet-500;
+  @apply w-full bg-background border rounded-md px-3 py-2 text-sm transition focus-visible:outline-hidden focus-visible:ring-3 focus-visible:ring-ring/50;
 }
 
 @utility btn {
-  /* Buttons: `.btn` base + a color modifier. Sizing (w-full/py-2/px-5) stays
-     inline because it varies from button to button. */
-  @apply inline-flex items-center justify-center rounded-xl text-sm font-semibold transition active:scale-[0.98] disabled:opacity-50;
+  @apply inline-flex items-center justify-center rounded-lg text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50;
 }
 
 @utility btn-primary {
-  @apply bg-linear-to-r from-violet-600 to-indigo-600 text-white hover:shadow-lg hover:shadow-indigo-500/20;
+  @apply bg-primary text-primary-foreground hover:bg-primary/80;
 }
 
 @utility btn-secondary {
-  @apply bg-white/5 border border-white/10 text-slate-300 hover:bg-white/10;
+  @apply bg-secondary text-secondary-foreground hover:bg-secondary/80;
 }
 
 @utility badge {
-  /* Small pill/tag badge: category chips, status/source tags, approval states.
-     Text size (text-[9px], text-[10px]), tracking, and color (text-, bg-, border-)
-     stay inline since they vary per badge. */
-  @apply font-bold uppercase px-2 py-0.5 rounded-full border;
+  @apply font-medium px-2 py-0.5 rounded-full border;
 }
 
-@layer utilities {
-  :root {
-    --background: 224 71% 4%;
-    --foreground: 213 31% 91%;
-    --card: 222 47% 7%;
-    --border: 223 27% 15%;
-    --primary: 263 70% 50%;
-    --primary-glow: rgba(139, 92, 246, 0.15);
-    --success: 142 70% 45%;
-    --warning: 37 90% 50%;
-    --danger: 346 80% 55%;
-  }
-
-  body {
-    background-color: #05070f;
-    color: hsl(var(--foreground));
-    font-family: 'Inter', sans-serif;
-    background-image:
-      radial-gradient(at 0% 0%, rgba(30, 27, 75, 0.3) 0, transparent 50%),
-      radial-gradient(at 100% 100%, rgba(15, 23, 42, 0.5) 0, transparent 50%);
-    background-attachment: fixed;
-    min-height: 100vh;
-  }
-
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    font-family: 'Outfit', sans-serif;
-  }
-
-  /* ═══════════════════════════════════════════════════════════════════════════
-   Shared class vocabulary
-   ---------------------------------------------------------------------------
-   These are the named, grouped forms of the Tailwind strings that were being
-   copy-pasted across every page. Reuse them instead of re-pasting the raw
-   utilities; keep the parts that genuinely vary per site (padding, width,
-   accent color) as inline utilities.
-
-   They live in `@layer components` on purpose: the components layer is emitted
-   BEFORE Tailwind's utilities layer, so an inline utility still wins over the
-   same property in one of these classes. That's why `className="btn btn-primary
-   rounded-lg"` correctly rounds `lg` even though `.btn` @applies `rounded-xl`,
-   and why the emerald-focus inputs can just add `focus:border-emerald-500`.
-   ═══════════════════════════════════════════════════════════════════════════ */
-}
-
-/* Glassmorphism utility */
-.glass-panel {
-  background: rgba(8, 12, 28, 0.65);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-}
-
-.glass-panel-hover {
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.glass-panel-hover:hover {
-  background: rgba(13, 20, 44, 0.8);
-  border-color: rgba(139, 92, 246, 0.25);
-  box-shadow: 0 10px 30px -10px var(--primary-glow);
-  transform: translateY(-2px);
-}
-
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: rgba(5, 7, 15, 0.5);
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 246, 0.2);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(139, 92, 246, 0.4);
-}
-
-/* Micro animations */
-@keyframes pulse-glow {
-  0%, 100% {
-    box-shadow: 0 0 15px 0 rgba(139, 92, 246, 0.1);
-  }
-  50% {
-    box-shadow: 0 0 25px 5px rgba(139, 92, 246, 0.25);
-  }
-}
-
-.pulse-glow-active {
-  animation: pulse-glow 2s infinite ease-in-out;
-}
-
-@keyframes slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.animate-slide-up {
-  animation: slide-up 0.4s ease-out forwards;
-}
 /*
   ---break---
 */

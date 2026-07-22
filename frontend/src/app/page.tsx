@@ -570,7 +570,7 @@ export default function Dashboard() {
   const categories = ['All', 'Fruits', 'Vegetables', 'Dairy', 'Bakery', 'Pantry', 'Meat', 'Beverages', 'Other'];
 
   return (
-    <div data-loc="page.dashboard" className="space-y-8 animate-slide-up relative">
+    <div data-loc="page.dashboard" className="space-y-8 relative">
 
       {/* Toast Notification */}
       {notification && (
@@ -599,7 +599,7 @@ export default function Dashboard() {
 
       {/* ═══ Section: Summary Cards ═══ */}
       <div data-loc="dashboard.summary-cards" className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="card p-6 glass-panel-hover flex items-center justify-between">
+        <div className="card p-6 flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">Tracked Foods</span>
             <h3 className="text-3xl font-extrabold text-white mt-1">{foods.length}</h3>
@@ -612,7 +612,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="card p-6 glass-panel-hover flex items-center justify-between">
+        <div className="card p-6 flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">Stores Tracked</span>
             <h3 className="text-3xl font-extrabold text-white mt-1">{stores.length}</h3>
@@ -625,7 +625,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="card p-6 glass-panel-hover flex items-center justify-between">
+        <div className="card p-6 flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold uppercase text-slate-500 tracking-wider">Average Spread Savings</span>
             <h3 className="text-3xl font-extrabold text-emerald-400 mt-1">

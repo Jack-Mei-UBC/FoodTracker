@@ -749,7 +749,7 @@ export default function ReviewItems({
   if (parsedItems.length === 0 && !manualEntry && !hasRawText && !hasAttempts) return null;
 
   return (
-    <div data-loc="component.review-items" className="card rounded-3xl p-6 space-y-6 animate-slide-up">
+    <div data-loc="component.review-items" className="card rounded-3xl p-6 space-y-6">
       {label && <div className="text-xs font-semibold text-slate-400 truncate">{label}</div>}
 
       {/* Source photo(s) alongside the extracted items — the crop that was read

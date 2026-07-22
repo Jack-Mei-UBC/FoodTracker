@@ -476,7 +476,7 @@ export default function MealsPage() {
   const inputCls = "bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-hidden focus:border-emerald-500 transition";
 
   return (
-    <div data-loc="page.meals" className="space-y-8 animate-slide-up relative">
+    <div data-loc="page.meals" className="space-y-8 relative">
       {notification && (
         <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl shadow-xl flex items-center space-x-3 ${
           notification.type === 'success' ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950/90 text-rose-300 border border-rose-500/30'

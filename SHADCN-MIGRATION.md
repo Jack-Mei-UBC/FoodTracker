@@ -17,7 +17,7 @@ regression. Do not start Phase 3 until Phase 1's Layer 2 contracts are green.
 | **0 — smoke repair + compose split** | ✅ **shipped** | All of F1–F7 landed. Smoke suite is 50/50 green and the two twins are back in sync. |
 | **1 — UI test net** | 🟡 **partly shipped** | Layers 1 & 2 exist (29 Playwright tests, green ×3 consecutive runs). Layer 3 (visual) and the Vitest secondary are **not started**. A real **flake source was found and fixed** — Playwright artifacts were being written into the container's bind mount, triggering mid-run recompiles. |
 | **2 — shadcn prerequisites** | ✅ **shipped** | Next 15 + Tailwind 4 in; tsconfig on ES2020; `cn()` + cva/clsx/tailwind-merge installed; `shadcn init -b base -p nova` run with **Base UI**; `rsc: false` corrected by hand. `shadcn add` verified end-to-end with Button. |
-| **3 — the migration** | ⬜ not started | Gated on Phase 1 Layer 2, which is now green. |
+| **3 — the migration** | 🟡 **started** | Global de-customisation done: bespoke palette, glassmorphism, custom scrollbars, `pulse-glow`, `animate-slide-up` and the webfonts are **deleted**; `globals.css` is 10.2 KB → ~6.2 KB with **zero hard-coded palette values**. Component swaps (M1–M8) not started. |
 | **4 — docs & guardrails** | ⬜ not started | Folded into each Phase 3 step. |
 
 Phase 0's findings below are kept as the **historical record of why** the fixes
@@ -397,11 +397,11 @@ Radix of Path A.
       `true`, which would break the Capacitor static export. Note
       `components.json` rejects unknown keys, so that constraint could not be
       recorded as a comment inside the file; it lives in CLAUDE.md.
-- [ ] **Decide the font question.** `init` wired Geist via `next/font/google`,
-      but the app's `body { font-family: 'Inter' }` still wins, so Geist is
-      **loaded and never rendered**. Either adopt it (drop the Inter/Outfit
-      `@import` + rules) or remove the `next/font` import. Right now it is a
-      wasted font fetch.
+- [x] ~~**Decide the font question.**~~ **Resolved: Geist only, self-hosted.**
+      The Inter/Outfit Google-CDN `@import` is gone. The deciding factor was not
+      aesthetics but that a CDN webfont **fails offline** in the Capacitor build
+      and adds a render-blocking third-party request; `next/font` bundles Geist.
+      Verified: zero `fonts.googleapis`/`gstatic` requests at runtime.
 - [x] ~~Before committing to B, spike **React 19 compatibility for
       `react-easy-crop` and `lucide-react`**~~ — **moot.** Next 15 accepts React
       18, so the app never moved to React 19. Was the one genuine unknown in that

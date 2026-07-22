@@ -17,10 +17,12 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={cn("font-sans", geist.variable)}>
+    // `dark` pins shadcn's stock dark palette. The app has always been dark, and
+    // this is the supported way to say so — one class instead of a bespoke theme.
+    <html lang="en" className={cn("dark font-sans", geist.variable)}>
       <body className="antialiased min-h-screen flex flex-col">
         {/* Navigation Bar */}
-        <header data-loc="layout.header" className="sticky top-0 z-50 glass-panel border-b border-white/5 px-4 lg:px-8 py-4 flex items-center justify-between">
+        <header data-loc="layout.header" className="sticky top-0 z-50 bg-background/80 backdrop-blur border-b px-4 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             {/* Logo */}
             <div className="w-10 h-10 rounded-xl bg-linear-to-tr from-violet-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
@@ -103,7 +105,7 @@ export default function RootLayout({
         </header>
 
         {/* Main Content Area */}
-        <main data-loc="layout.main" className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-8 animate-slide-up">
+        <main data-loc="layout.main" className="flex-1 max-w-7xl w-full mx-auto p-4 lg:p-8">
           {children}
         </main>
 

@@ -358,7 +358,7 @@ export default function DiaryPage() {
   ];
 
   return (
-    <div data-loc="page.diary" className="space-y-8 animate-slide-up relative">
+    <div data-loc="page.diary" className="space-y-8 relative">
       {notification && (
         <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl shadow-xl flex items-center space-x-3 ${
           notification.type === 'success' ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950/90 text-rose-300 border border-rose-500/30'

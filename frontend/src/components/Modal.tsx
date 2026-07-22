@@ -7,14 +7,18 @@
 // Image lightboxes (click-anywhere-closes, self-constraining <img>) stay
 // hand-rolled — everything else must use this instead of forking the markup.
 //
-// Renders via a portal into document.body. This is required, not cosmetic:
-// every page root div and <main> carries `.animate-slide-up`, a CSS animation
-// that sets a `transform` and (per spec) that makes the ancestor a new
-// containing block for `position: fixed` descendants. Without the portal, a
-// modal centers within that ancestor's full scrollable content box instead of
-// the viewport — i.e. "opens in the middle of the page" and is unreachable
-// once the page is taller than the viewport. This was the actual root cause
-// of the modal-positioning bug (max-h-[90vh] alone does not fix it).
+// Renders via a portal into document.body. KEEP IT THAT WAY.
+//
+// History: page roots used to carry `.animate-slide-up`, whose `transform`
+// made the ancestor a containing block for `position: fixed` descendants — so
+// an inline modal centered inside the page's scrollable content box instead of
+// the viewport, and became unreachable on a long page. `max-h-[90vh]` did not
+// fix it; the portal did. That animation has since been deleted, so the
+// specific trigger is gone, but the portal stays: ANY transform/filter/
+// backdrop-filter on an ancestor re-creates the same trap, and it's exactly
+// what Base UI's Dialog does internally when this component migrates to it.
+// `frontend/e2e/modal.spec.ts` asserts viewport centering, so removing the
+// portal fails the suite rather than silently regressing.
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
@@ -77,7 +81,7 @@ export default function Modal({
       onClick={() => onCloseRef.current()}
     >
       <div
-        className={`w-full ${maxWidth} max-h-[90vh] overflow-y-auto relative animate-slide-up ${panelClassName}`}
+        className={`w-full ${maxWidth} max-h-[90vh] overflow-y-auto relative ${panelClassName}`}
         onClick={e => e.stopPropagation()}
         data-loc={dataLoc}
       >
