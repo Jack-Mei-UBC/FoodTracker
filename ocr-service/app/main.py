@@ -26,7 +26,12 @@ async def scan(
     # accepted for symmetry/logging but the worker already resolves the model.
     model: Optional[str] = Form(None),
     use_paid: Optional[str] = Form(None),
+    # Catalog tag vocabulary, comma-separated (the worker fetches it from
+    # GET /api/tags per job). Omitted for direct/manual calls — the model then
+    # always returns an empty tags array per item.
+    tags: Optional[str] = Form(None),
 ) -> ScanResponse:
     raw = await image.read()
     jpeg = prepare_image(raw)
-    return await scan_image(jpeg, model=model)
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+    return await scan_image(jpeg, model=model, tags=tag_list)

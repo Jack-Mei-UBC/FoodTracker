@@ -506,6 +506,9 @@ async function ocrOnce(
   // Uint8Array (not a raw Buffer) is the valid BlobPart under current @types/node.
   form.append('image', new Blob([image.bytes], { type: image.contentType }), scanJob.original_filename || 'capture.jpg');
   form.append('model', model);
+  if (runCtx.tagsVocab && runCtx.tagsVocab.length > 0) {
+    form.append('tags', runCtx.tagsVocab.join(','));
+  }
 
   const startedAt = new Date();
   const t0 = Date.now();

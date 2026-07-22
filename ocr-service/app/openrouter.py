@@ -15,7 +15,7 @@ from .models import (
     ScanResponse,
     UnknownData,
 )
-from .prompts import PROMPT_VERSION, RETRY_PROMPT, SYSTEM_PROMPT, USER_PROMPT
+from .prompts import PROMPT_VERSION, RETRY_PROMPT, USER_PROMPT, build_system_prompt
 
 logger = logging.getLogger("ocr-service")
 
@@ -29,10 +29,10 @@ _DATA_MODELS = {
 }
 
 
-def _build_messages(image_jpeg: bytes) -> list[dict]:
+def _build_messages(image_jpeg: bytes, tags: list[str] | None) -> list[dict]:
     b64 = base64.b64encode(image_jpeg).decode("ascii")
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": build_system_prompt(tags)},
         {
             "role": "user",
             "content": [
@@ -132,7 +132,9 @@ def _repair_truncated_json(text: str, start: int) -> dict | None:
                 obj = _decoder().decode(candidate)
             except (json.JSONDecodeError, ValueError):
                 continue
-            if isinstance(obj, dict) and obj.get("type"):
+            # Accept either shape: the legacy flat body ("type") or the
+            # captures-segmented body ("captures") the current prompt asks for.
+            if isinstance(obj, dict) and (obj.get("type") or obj.get("captures")):
                 return obj
     return None
 
@@ -172,22 +174,52 @@ def _extract_json_object(content: str) -> dict:
         return repaired
 
 
-def _parse_scan_response(content: str, model: str) -> ScanResponse:
-    payload = _extract_json_object(content)
-
-    # Validate the data payload against the model matching the declared type,
-    # so a receipt with a malformed item fails here rather than silently
-    # coercing to the wrong union member.
-    capture_type = payload.get("type")
+def _validate_capture(raw: dict) -> dict:
+    """Validate one capture's data against the model matching its declared
+    type, so a receipt with a malformed item fails here rather than silently
+    coercing to the wrong union member. Raises ValueError on an unrecognized
+    type — the caller decides whether to drop it or fail the whole photo."""
+    capture_type = raw.get("type")
     data_model = _DATA_MODELS.get(capture_type)
     if data_model is None:
         raise ValueError(f"unknown capture type: {capture_type!r}")
+    return {
+        "type": capture_type,
+        "confidence": float(raw.get("confidence", 0)),
+        "data": data_model.model_validate(raw.get("data", {})),
+    }
 
+
+def _parse_scan_response(content: str, model: str) -> ScanResponse:
+    payload = _extract_json_object(content)
+
+    raw_captures = payload.get("captures")
+    if isinstance(raw_captures, list) and raw_captures:
+        # The current prompt asks for this shape: one entry per region found.
+        # Drop any capture whose type we don't recognize rather than failing
+        # the whole photo over one bad region — a model that free-associates
+        # an extra invented type shouldn't cost the good captures alongside it.
+        captures = []
+        for raw in raw_captures:
+            if not isinstance(raw, dict):
+                continue
+            try:
+                captures.append(_validate_capture(raw))
+            except (ValidationError, ValueError, TypeError) as err:
+                logger.warning("Dropping unparseable capture (%s): %r", err, raw.get("type"))
+        if not captures:
+            raise ValueError("no recognizable captures in model output")
+        return ScanResponse(model=model, captures=captures, raw_text=content, prompt_version=PROMPT_VERSION)
+
+    # Legacy/fallback shape: a flat { type, confidence, data } body. Some free
+    # models ignore the captures instruction and answer the old way — the
+    # ScanResponse validator synthesizes captures[] from this automatically.
+    capture = _validate_capture(payload)
     return ScanResponse(
-        type=capture_type,
-        confidence=float(payload.get("confidence", 0)),
+        type=capture["type"],
+        confidence=capture["confidence"],
         model=model,
-        data=data_model.model_validate(payload.get("data", {})),
+        data=capture["data"],
         raw_text=content,
         prompt_version=PROMPT_VERSION,
     )
@@ -218,13 +250,15 @@ async def _chat(client: httpx.AsyncClient, messages: list[dict], model: str) -> 
     return data.get("choices", [{}])[0].get("message", {}).get("content") or ""
 
 
-async def scan_image(image_jpeg: bytes, model: str | None = None) -> ScanResponse:
+async def scan_image(image_jpeg: bytes, model: str | None = None, tags: list[str] | None = None) -> ScanResponse:
     # The worker owns model selection (the multi-model pool + retries live there
     # — see worker/src/modelPool.ts), so it passes exactly one model per call and
     # this service is a dumb executor. `model` falls back to OCR_MODEL only for
     # direct /scan calls (host curl / manual tests) that don't specify one.
+    # `tags` is the catalog's tag vocabulary, fetched by the worker per job —
+    # absent for direct/manual calls, in which case the model always returns [].
     model = model or settings.ocr_model
-    messages = _build_messages(image_jpeg)
+    messages = _build_messages(image_jpeg, tags)
 
     try:
         async with httpx.AsyncClient(timeout=settings.request_timeout_seconds) as client:
