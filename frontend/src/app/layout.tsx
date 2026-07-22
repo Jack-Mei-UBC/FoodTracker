@@ -1,6 +1,10 @@
 import type { Metadata } from 'next'
 import './globals.css'
 import Link from 'next/link'
+import { Geist } from "next/font/google";
+import { cn } from "@/lib/utils";
+
+const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
 export const metadata: Metadata = {
   title: 'FoodTracker PWA | Grocery Price Intelligence',
@@ -13,7 +17,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={cn("font-sans", geist.variable)}>
       <body className="antialiased min-h-screen flex flex-col">
         {/* Navigation Bar */}
         <header data-loc="layout.header" className="sticky top-0 z-50 glass-panel border-b border-white/5 px-4 lg:px-8 py-4 flex items-center justify-between">

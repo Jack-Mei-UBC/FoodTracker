@@ -16,7 +16,7 @@ regression. Do not start Phase 3 until Phase 1's Layer 2 contracts are green.
 |---|---|---|
 | **0 — smoke repair + compose split** | ✅ **shipped** | All of F1–F7 landed. Smoke suite is 50/50 green and the two twins are back in sync. |
 | **1 — UI test net** | 🟡 **partly shipped** | Layers 1 & 2 exist (29 Playwright tests, green ×3 consecutive runs). Layer 3 (visual) and the Vitest secondary are **not started**. A real **flake source was found and fixed** — Playwright artifacts were being written into the container's bind mount, triggering mid-run recompiles. |
-| **2 — shadcn prerequisites** | 🟡 **half built** | **P2 UNBLOCKED and shipped: Next 15 + Tailwind 4 are in, verified.** The Path B cascade turned out to be cheap — React 18 stays, zero source changes. Remaining: P1 (tsconfig es5→ES2020), P3/P4 (deps + `cn()`), P5 (`components.json`, `shadcn init -b base`). |
+| **2 — shadcn prerequisites** | ✅ **shipped** | Next 15 + Tailwind 4 in; tsconfig on ES2020; `cn()` + cva/clsx/tailwind-merge installed; `shadcn init -b base -p nova` run with **Base UI**; `rsc: false` corrected by hand. `shadcn add` verified end-to-end with Button. |
 | **3 — the migration** | ⬜ not started | Gated on Phase 1 Layer 2, which is now green. |
 | **4 — docs & guardrails** | ⬜ not started | Folded into each Phase 3 step. |
 
@@ -261,11 +261,13 @@ per-turn hook, so it runs manually and in CI. Document that split.
 
 ---
 
-## Phase 2 — shadcn prerequisites 🟡 DECIDED, NOT BUILT
+## Phase 2 — shadcn prerequisites ✅ SHIPPED
 
-> **State:** the decisions below are made (P5, P6, P7 marked ✅), but **nothing is
-> installed** — no `class-variance-authority`, no `@radix-ui/*`, no `cmdk`, no
-> `components.json`, no `cn()` helper. P2 is hard-blocked; see the cascade.
+> **State: DONE.** Next 15 + Tailwind 4, tsconfig on `ES2020`,
+> `class-variance-authority`/`clsx`/`tailwind-merge` installed, `cn()` at
+> `src/lib/utils.ts`, `components.json` written by `shadcn init -b base -p nova`,
+> and `@base-ui/react` in place. **Base UI, not Radix** — it became shadcn's
+> default in July 2026. Verified end-to-end by generating `ui/button.tsx`.
 
 | # | Item | Notes |
 |---|---|---|
@@ -385,14 +387,24 @@ Radix of Path A.
 
 - [x] ~~Decide Path A vs Path B.~~ **Decided: B.** Next 15 + Tailwind 4 shipped;
       Phase 3 targets **Base UI**.
-- [ ] **P1 — `tsconfig.json` `target: es5` → `ES2020`.** Still outstanding; the
-      `[...set]` spread gotcha in CLAUDE.md remains true until it's done.
-- [ ] **P3/P4 — install `class-variance-authority`, `clsx`, `tailwind-merge`,
-      `cmdk`; add `cn()` at `src/lib/utils.ts`.**
-- [ ] **P5 — `shadcn init -b base`** with `rsc: false` (mandatory: the static
-      export has no server) and `aliases.components: "@/components/ui"`.
-- [ ] Before committing to B, spike **React 19 compatibility for
-      `react-easy-crop` and `lucide-react`** — the one genuine unknown in that
+- [x] ~~**P1 — `tsconfig.json` `target: es5` → `ES2020`.**~~ Done; verified a
+      `[...set]`/`[...map]` probe compiles. The CLAUDE.md gotcha is retired.
+- [x] ~~**P3/P4 — deps + `cn()`.**~~ Done (`cva`, `clsx`, `tailwind-merge`).
+      `cmdk` deliberately **not** installed yet — Base UI may cover the combobox
+      (M6); decide when that step is reached rather than adding a dep on spec.
+- [x] ~~**P5 — `shadcn init -b base`.**~~ Done with preset `nova` (Lucide +
+      Geist). **`rsc` had to be corrected to `false` by hand** — the CLI writes
+      `true`, which would break the Capacitor static export. Note
+      `components.json` rejects unknown keys, so that constraint could not be
+      recorded as a comment inside the file; it lives in CLAUDE.md.
+- [ ] **Decide the font question.** `init` wired Geist via `next/font/google`,
+      but the app's `body { font-family: 'Inter' }` still wins, so Geist is
+      **loaded and never rendered**. Either adopt it (drop the Inter/Outfit
+      `@import` + rules) or remove the `next/font` import. Right now it is a
+      wasted font fetch.
+- [x] ~~Before committing to B, spike **React 19 compatibility for
+      `react-easy-crop` and `lucide-react`**~~ — **moot.** Next 15 accepts React
+      18, so the app never moved to React 19. Was the one genuine unknown in that
       path, and cheap to test ahead of the framework major. `ImageCropper` is on
       the never-migrated list, so a `react-easy-crop` break would have to be
       solved rather than designed around.
