@@ -11,6 +11,7 @@ import { Label } from './ui/label';
 import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
 import ScanImages from './ScanImages';
 import RawModelOutput, { ScanAttempt } from './RawModelOutput';
 
@@ -232,8 +233,6 @@ export default function ReviewItems({
   // constrained to this vocabulary server-side (ocr-service drops anything the
   // model invented) — fetched here too so the user can add one the scan missed.
   const [catalogTags, setCatalogTags] = useState<{ id: number; name: string }[]>([]);
-  // Which row's tag picker is open (null = none).
-  const [tagPickerFor, setTagPickerFor] = useState<number | null>(null);
 
   const toast = (text: string, type: 'success' | 'error' = 'success') => notify?.(text, type);
 
@@ -1021,23 +1020,21 @@ export default function ReviewItems({
                         {t} ×
                       </button>
                     ))}
-                    <button type="button" onClick={() => setTagPickerFor(tagPickerFor === idx ? null : idx)}
-                      className="text-[10px] text-slate-500 hover:text-slate-300">
-                      + tag
-                    </button>
-                    {tagPickerFor === idx && (
-                      <div className="flex flex-wrap items-center gap-1 w-full mt-1">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger className="text-[10px] text-slate-500 hover:text-slate-300">
+                        + tag
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
                         {catalogTags.filter(t => !(item.tags ?? []).includes(t.name)).map(t => (
-                          <button key={t.id} type="button" onClick={() => { toggleItemTag(idx, t.name); setTagPickerFor(null); }}
-                            className="badge text-[9px] normal-case text-slate-400 bg-white/5 border-white/10 hover:text-white hover:bg-white/10">
+                          <DropdownMenuItem key={t.id} onClick={() => toggleItemTag(idx, t.name)}>
                             {t.name}
-                          </button>
+                          </DropdownMenuItem>
                         ))}
                         {catalogTags.length === 0 && (
-                          <span className="text-[10px] text-slate-600">No tags in the catalog yet.</span>
+                          <DropdownMenuItem disabled>No tags in the catalog yet.</DropdownMenuItem>
                         )}
-                      </div>
-                    )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </td>
                 <td className="py-2.5 pr-4">
