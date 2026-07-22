@@ -11,6 +11,7 @@ import FoodDetailModal from '../../components/FoodDetailModal';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
 import NutritionSearch, { SavedFood } from '../../components/NutritionSearch';
 import { UNIT_OPTIONS, parseAmountInput, normalizeUnit } from '../../lib/units';
 import { scaleNutrients, isServingUnit, NutritionFacts } from '../../lib/nutrition';
@@ -623,19 +624,13 @@ export default function MealsPage() {
           {/* Ingredient search — from the catalog, or from USDA. The USDA tab is
               save-on-pick: nothing is added to the catalog until you press "Add to
               meal" on a specific result (a recipe ingredient must reference a food). */}
-          <div className="space-y-2">
-            <div className="flex gap-1 text-[11px] font-semibold">
-              <button type="button" onClick={() => setIngredientSource('catalog')}
-                className={`px-3 py-1 rounded-lg border transition ${ingredientSource === 'catalog' ? 'text-violet-200 bg-violet-500/15 border-violet-500/30' : 'text-slate-400 border-white/10 hover:bg-white/5'}`}>
-                Catalog
-              </button>
-              <button type="button" onClick={() => setIngredientSource('usda')}
-                className={`px-3 py-1 rounded-lg border transition ${ingredientSource === 'usda' ? 'text-sky-200 bg-sky-500/15 border-sky-500/30' : 'text-slate-400 border-white/10 hover:bg-white/5'}`}>
-                USDA database
-              </button>
-            </div>
+          <Tabs value={ingredientSource} onValueChange={v => v && setIngredientSource(v as 'catalog' | 'usda')} className="space-y-2">
+            <TabsList>
+              <TabsTrigger value="catalog">Catalog</TabsTrigger>
+              <TabsTrigger value="usda">USDA database</TabsTrigger>
+            </TabsList>
 
-            {ingredientSource === 'catalog' ? (
+            <TabsContent value="catalog">
               <div className="relative">
                 <input
                   type="text"
@@ -681,11 +676,12 @@ export default function MealsPage() {
                   </div>
                 )}
               </div>
-            ) : (
+            </TabsContent>
+            <TabsContent value="usda">
               <NutritionSearch category="USDA" pickLabel="Add to meal"
                 onSaved={registerSavedFood} onPick={addSavedFoodToMeal} notify={showToast} />
-            )}
-          </div>
+            </TabsContent>
+          </Tabs>
 
           {/* Ingredient rows */}
           {rows.length > 0 && (

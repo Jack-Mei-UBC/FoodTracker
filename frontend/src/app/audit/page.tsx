@@ -20,6 +20,7 @@ import Modal from '../../components/Modal';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
 import { NutritionFacts, formatCaloriesPer100 } from '../../lib/nutrition';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -198,15 +199,14 @@ export default function Audit() {
       {/* ═══ Section: Filters ═══ */}
       <Card data-loc="audit.filters" className="rounded-3xl p-5 space-y-4">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex gap-1 text-[11px] font-semibold">
-            {(['active', 'archived'] as const).map(t => (
-              <button key={t} onClick={() => { setTab(t); setCat('All'); setTagFilter(null); }}
-                className={`px-3 py-1.5 rounded-lg border transition capitalize ${
-                  tab === t ? 'text-violet-200 bg-violet-500/15 border-violet-500/30' : 'text-slate-400 border-white/10 hover:bg-white/5'}`}>
-                {t}
-              </button>
-            ))}
-          </div>
+          <Tabs value={tab} onValueChange={v => { if (!v) return; setTab(v as 'active' | 'archived'); setCat('All'); setTagFilter(null); }}>
+            <TabsList>
+              <TabsTrigger value="active" className="capitalize">active</TabsTrigger>
+              <TabsTrigger value="archived" className="capitalize">archived</TabsTrigger>
+            </TabsList>
+            <TabsContent value="active" />
+            <TabsContent value="archived" />
+          </Tabs>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search name or barcode…" className="field-input flex-1 min-w-48 text-xs rounded-xl" />
           <span className="text-xs text-slate-500">{filtered.length} item{filtered.length !== 1 ? 's' : ''}</span>
