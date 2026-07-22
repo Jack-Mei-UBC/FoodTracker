@@ -9,6 +9,7 @@ import { useToast } from '../../components/StatusToast';
 import { scanResultToRawItems, receiptCaptureData } from '../../lib/scanResult';
 import type { GeoPoint } from '../../lib/geo';
 import { Card } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -246,7 +247,7 @@ export default function Inbox() {
             <div key={job.id} className="bg-slate-900/50 border border-white/5 rounded-xl px-4 py-3 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3 text-sm min-w-0">
-                  <span className={`badge text-[9px] ${STATUS_STYLES[job.status] ?? STATUS_STYLES.queued}`}>{job.status}</span>
+                  <Badge variant="outline" className={`text-[9px] ${STATUS_STYLES[job.status] ?? STATUS_STYLES.queued}`}>{job.status}</Badge>
                   <span className="text-white font-medium truncate">{job.original_filename ?? `job #${job.id}`}</span>
                   {job.status === 'done' && <span className="text-slate-500 text-xs">{job.result_type} · {job.item_count} item{job.item_count !== 1 ? 's' : ''}</span>}
                   {job.status === 'failed' && <span className="text-rose-400 text-xs truncate max-w-[220px]">{job.error}</span>}

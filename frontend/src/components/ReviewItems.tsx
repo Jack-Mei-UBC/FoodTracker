@@ -1016,11 +1016,11 @@ export default function ReviewItems({
                       the vocabulary server-side; the picker only offers real ones. */}
                   <div className="flex flex-wrap items-center gap-1 mt-1">
                     {(item.tags ?? []).map(t => (
-                      <button key={t} type="button" onClick={() => toggleItemTag(idx, t)}
+                      <Badge key={t} variant="outline" render={<button type="button" />} onClick={() => toggleItemTag(idx, t)}
                         title="Remove this tag"
-                        className="badge text-[9px] normal-case text-teal-300 bg-teal-500/10 border-teal-500/20 hover:bg-rose-500/10 hover:text-rose-300 hover:border-rose-500/20 transition">
+                        className="text-[9px] normal-case text-teal-300 bg-teal-500/10 border-teal-500/20 hover:bg-rose-500/10 hover:text-rose-300 hover:border-rose-500/20 transition cursor-pointer">
                         {t} ×
-                      </button>
+                      </Badge>
                     ))}
                     <DropdownMenu>
                       <DropdownMenuTrigger className="text-[10px] text-slate-500 hover:text-slate-300">
@@ -1101,7 +1101,7 @@ export default function ReviewItems({
                     ? <Badge variant="outline" className="text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ OK</Badge>
                     : item.approved
                     ? <Badge variant="outline" className="text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ Approved</Badge>
-                    : <button onClick={() => approveItem(idx)} className="badge text-[9px] text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20 transition">Approve</button>}
+                    : <Badge variant="outline" render={<button type="button" />} onClick={() => approveItem(idx)} className="text-[9px] text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20 transition cursor-pointer">Approve</Badge>}
                 </td>
                 <td className="py-2.5 text-center">
                   <button onClick={() => removeItem(idx)} title="Remove this item" aria-label="Remove item"

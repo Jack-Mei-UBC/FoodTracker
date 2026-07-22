@@ -23,6 +23,7 @@ import { Card } from '../../components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
 import { Checkbox } from '../../components/ui/checkbox';
 import { NutritionFacts, formatCaloriesPer100 } from '../../lib/nutrition';
+import { Input } from '../../components/ui/input';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -207,18 +208,18 @@ export default function Audit() {
             <TabsContent value="active" />
             <TabsContent value="archived" />
           </Tabs>
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search name or barcode…" className="field-input flex-1 min-w-48 text-xs rounded-xl" />
+          <Input type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search name or barcode…" className="flex-1 min-w-48 rounded-xl" />
           <span className="text-xs text-slate-500">{filtered.length} item{filtered.length !== 1 ? 's' : ''}</span>
         </div>
 
         <div className="flex flex-wrap gap-1.5">
           {['All'].concat(categories).map(c => (
-            <button key={c} onClick={() => setCat(c)}
-              className={`badge text-[10px] transition ${
+            <Badge key={c} variant="outline" render={<button type="button" />} onClick={() => setCat(c)}
+              className={`text-[10px] transition cursor-pointer ${
                 cat === c ? 'text-violet-200 bg-violet-500/20 border-violet-500/40' : 'text-slate-400 bg-white/5 border-white/10 hover:bg-white/10'}`}>
               {c}{c !== 'All' && <span className="text-slate-500"> {foods.filter(f => f.category === c).length}</span>}
-            </button>
+            </Badge>
           ))}
         </div>
 
@@ -226,11 +227,11 @@ export default function Audit() {
           <div className="flex flex-wrap gap-1.5 items-center border-t border-white/5 pt-3">
             <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mr-1">Tags</span>
             {tags.map(t => (
-              <button key={t.id} onClick={() => setTagFilter(tagFilter === t.id ? null : t.id)}
-                className={`badge text-[10px] transition ${
+              <Badge key={t.id} variant="outline" render={<button type="button" />} onClick={() => setTagFilter(tagFilter === t.id ? null : t.id)}
+                className={`text-[10px] transition cursor-pointer ${
                   tagFilter === t.id ? 'text-sky-200 bg-sky-500/20 border-sky-500/40' : 'text-sky-300/70 bg-sky-500/5 border-sky-500/20 hover:bg-sky-500/10'}`}>
                 {t.name}<span className="text-slate-500"> {t.food_count ?? 0}</span>
-              </button>
+              </Badge>
             ))}
           </div>
         )}
@@ -243,35 +244,35 @@ export default function Audit() {
             <span className="text-sm font-bold text-white">{selected.length} selected</span>
             <button onClick={() => setSelected([])} className="text-[11px] text-slate-400 hover:text-white">Clear</button>
             <div className="flex-1" />
-            <button onClick={() => setAiOpen(true)} disabled={busy || tab === 'archived'}
+            <Button onClick={() => setAiOpen(true)} disabled={busy || tab === 'archived'}
               title="Let an LLM propose tags for the selected items — you review before anything is applied"
-              className="text-xs font-bold text-violet-200 bg-violet-500/15 border border-violet-500/30 rounded-lg px-4 py-2 hover:bg-violet-500/25 transition disabled:opacity-50">
+              variant="outline" size="sm" className="text-violet-200 bg-violet-500/15 border-violet-500/30 hover:bg-violet-500/25 hover:text-violet-100">
               ✨ Auto-tag with AI
-            </button>
+            </Button>
             {tab === 'active' && (
-              <button onClick={() => setMergeOpen(true)} disabled={busy || selected.length < 2}
+              <Button onClick={() => setMergeOpen(true)} disabled={busy || selected.length < 2}
                 title="Merge the selected items into one — keeps all their prices, names, nutrition and tags"
-                className="text-xs font-bold text-amber-200 bg-amber-500/15 border border-amber-500/30 rounded-lg px-4 py-2 hover:bg-amber-500/25 transition disabled:opacity-50">
+                variant="outline" size="sm" className="text-amber-200 bg-amber-500/15 border-amber-500/30 hover:bg-amber-500/25 hover:text-amber-100">
                 Merge {selected.length}
-              </button>
+              </Button>
             )}
-            <input type="text" list="audit-categories" value={newCategory} onChange={e => setNewCategory(e.target.value)}
-              placeholder="Set category (e.g. Non-food)" className="field-input w-44 text-xs rounded-lg" />
+            <Input type="text" list="audit-categories" value={newCategory} onChange={e => setNewCategory(e.target.value)}
+              placeholder="Set category (e.g. Non-food)" className="w-44 rounded-lg" />
             <datalist id="audit-categories">
               {categories.map(c => <option key={c} value={c} />)}
             </datalist>
             <Button onClick={() => runBulk('category')} disabled={busy}
               variant="secondary" size="sm">Apply category</Button>
             {tab === 'active' ? (
-              <button onClick={() => runBulk('archive')} disabled={busy}
-                className="text-xs font-bold text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg px-4 py-2 hover:bg-rose-500/20 transition disabled:opacity-50">
+              <Button onClick={() => runBulk('archive')} disabled={busy}
+                variant="outline" size="sm" className="text-rose-300 bg-rose-500/10 border-rose-500/30 hover:bg-rose-500/20 hover:text-rose-200">
                 {busy ? 'Working…' : `Archive ${selected.length}`}
-              </button>
+              </Button>
             ) : (
-              <button onClick={() => runBulk('restore')} disabled={busy}
-                className="text-xs font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-4 py-2 hover:bg-emerald-500/20 transition disabled:opacity-50">
+              <Button onClick={() => runBulk('restore')} disabled={busy}
+                variant="outline" size="sm" className="text-emerald-300 bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20 hover:text-emerald-200">
                 {busy ? 'Working…' : `Restore ${selected.length}`}
-              </button>
+              </Button>
             )}
           </div>
 
@@ -396,8 +397,8 @@ export default function Audit() {
           </div>
           <form onSubmit={async e => { e.preventDefault(); if (await createTag(newTagName)) setNewTagName(''); }}
             className="flex gap-2">
-            <input type="text" value={newTagName} onChange={e => setNewTagName(e.target.value)} maxLength={60}
-              placeholder="New tag name…" className="field-input flex-1 text-xs rounded-lg" />
+            <Input type="text" value={newTagName} onChange={e => setNewTagName(e.target.value)} maxLength={60}
+              placeholder="New tag name…" className="flex-1 rounded-lg" />
             <Button type="submit" size="sm">Create</Button>
           </form>
           <div className="bg-muted/50 border rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
@@ -566,23 +567,23 @@ function AutoTagModal({ foodIds, tags, onClose, onCreateTag, onApplied, notify }
         <div className="flex flex-wrap gap-1.5">
           {tags.length === 0 && <span className="text-[11px] text-slate-600">No tags yet — create one below.</span>}
           {tags.map(t => (
-            <button key={t.id} type="button" onClick={() => toggleTag(t.id)}
-              className={`badge text-[10px] normal-case transition ${
+            <Badge key={t.id} variant="outline" render={<button type="button" />} onClick={() => toggleTag(t.id)}
+              className={`text-[10px] normal-case transition cursor-pointer ${
                 chosen.includes(t.id) ? 'text-sky-200 bg-sky-500/25 border-sky-500/50' : 'text-slate-400 bg-white/5 border-white/10 hover:bg-white/10'}`}>
               {chosen.includes(t.id) ? '✓ ' : ''}{t.name}
-            </button>
+            </Badge>
           ))}
         </div>
         <div className="flex gap-2">
-          <input type="text" value={newTagName} onChange={e => setNewTagName(e.target.value)} maxLength={60}
-            placeholder="…or create a new tag" className="field-input flex-1 text-xs rounded-lg" />
+          <Input type="text" value={newTagName} onChange={e => setNewTagName(e.target.value)} maxLength={60}
+            placeholder="…or create a new tag" className="flex-1 rounded-lg" />
           <Button type="button" disabled={!newTagName.trim()}
             onClick={async () => { const t = await onCreateTag(newTagName); if (t) { setChosen(prev => prev.concat(t.id)); setNewTagName(''); } }}
             variant="secondary" size="sm">Create &amp; use</Button>
         </div>
-        <input type="text" value={hint} onChange={e => setHint(e.target.value)}
+        <Input type="text" value={hint} onChange={e => setHint(e.target.value)}
           placeholder="Optional hint (e.g. “anything you can't eat is Non-food”)"
-          className="field-input w-full text-xs rounded-lg" />
+          className="w-full rounded-lg" />
       </div>
 
       {suggestions === null ? (

@@ -8,6 +8,7 @@ import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { useToast } from '../../components/StatusToast';
+import { Badge } from '../../components/ui/badge';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -647,9 +648,9 @@ export default function DiaryPage() {
               <Card key={m.key} className="p-5 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className={`text-sm font-bold ${m.accent}`}>{m.label}</h3>
-                  <span className={`badge normal-case text-xs font-mono ${m.chip} ${m.accent}`}>
+                  <Badge variant="outline" className={`normal-case text-xs font-mono ${m.chip} ${m.accent}`}>
                     {Math.round(subtotal)} kcal
-                  </span>
+                  </Badge>
                 </div>
                 {mealEntries.length === 0 ? (
                   <p className="text-xs text-slate-600">Nothing logged.</p>

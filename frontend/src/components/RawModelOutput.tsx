@@ -13,6 +13,7 @@
 // auto-expanded when nothing parsed, which is exactly when it's the main event.
 
 import React, { useState, useEffect } from 'react';
+import { Badge } from './ui/badge';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -91,12 +92,12 @@ function AttemptRow({ attempt, notify }: { attempt: ScanAttempt; notify?: RawMod
     <div className="bg-muted/50 border rounded-lg p-2.5 space-y-2">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 min-w-0">
-          <span className={`badge text-[9px] ${
+          <Badge variant="outline" className={`text-[9px] ${
             !attempt.ok ? 'text-rose-300 bg-rose-500/10 border-rose-500/20'
             : usable ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20'
             : 'text-amber-300 bg-amber-500/10 border-amber-500/20'}`}>
             {!attempt.ok ? 'error' : attempt.type ?? 'unknown'}
-          </span>
+          </Badge>
           <span className="text-[11px] font-mono text-slate-300 truncate">{attempt.model}</span>
           {attempt.ok && (
             <span className="text-[10px] text-slate-500 shrink-0">
@@ -146,12 +147,12 @@ function RunHistory({ scanJobId }: { scanJobId: number }) {
       <div className="space-y-1">
         {runs.map(r => (
           <div key={r.id} className="bg-muted/50 border rounded-lg px-2.5 py-1.5 flex items-center gap-2 text-[10px]">
-            <span className={`badge text-[9px] shrink-0 ${
+            <Badge variant="outline" className={`text-[9px] shrink-0 ${
               !r.ok ? 'text-rose-300 bg-rose-500/10 border-rose-500/20'
               : r.was_winner ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20'
               : 'text-amber-300 bg-amber-500/10 border-amber-500/20'}`}>
               {!r.ok ? 'error' : r.capture_type ?? 'unknown'}{r.was_winner ? ' · winner' : ''}
-            </span>
+            </Badge>
             <span className="font-mono text-slate-300 truncate">{r.model}</span>
             <span className="text-slate-500 shrink-0 ml-auto">
               {r.ok && `${r.item_count ?? 0} item${(r.item_count ?? 0) !== 1 ? 's' : ''} · `}

@@ -6,6 +6,7 @@ import PriceEditor from '../../components/PriceEditor';
 import { Card } from '../../components/ui/card';
 import { useToast } from '../../components/StatusToast';
 import { Checkbox } from '../../components/ui/checkbox';
+import { Badge } from '../../components/ui/badge';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -162,9 +163,9 @@ export default function History() {
                     {formatUnitPrice(Number(log.price), log.amount ? Number(log.amount) : null, log.amount_unit) ?? '—'}
                   </td>
                   <td className="py-2.5 pr-4">
-                    <span className={`badge text-[9px] ${SOURCE_COLORS[log.source] ?? SOURCE_COLORS.manual}`}>
+                    <Badge variant="outline" className={`text-[9px] ${SOURCE_COLORS[log.source] ?? SOURCE_COLORS.manual}`}>
                       {log.source}
-                    </span>
+                    </Badge>
                   </td>
                   <td className="py-2.5 pr-4">
                     {log.image_id ? (

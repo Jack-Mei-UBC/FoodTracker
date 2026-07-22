@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -147,10 +148,10 @@ function ScrapesInner() {
               {/* Header row */}
               <button onClick={() => toggle(job.id)} className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-white/2 transition">
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className={`badge text-[9px] shrink-0 ${STATUS_STYLES[job.status] ?? STATUS_STYLES.queued}`}>{job.status}</span>
-                  <span className={`badge text-[9px] shrink-0 ${job.source === 'cocowest' ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20' : 'text-violet-300 bg-violet-500/10 border-violet-500/20'}`}>
+                  <Badge variant="outline" className={`text-[9px] shrink-0 ${STATUS_STYLES[job.status] ?? STATUS_STYLES.queued}`}>{job.status}</Badge>
+                  <Badge variant="outline" className={`text-[9px] shrink-0 ${job.source === 'cocowest' ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20' : 'text-violet-300 bg-violet-500/10 border-violet-500/20'}`}>
                     {job.source === 'cocowest' ? 'Costco' : 'Flipp'}
-                  </span>
+                  </Badge>
                   <span className="text-white font-semibold truncate">{job.store_name ?? `Store #${job.store_id}`}</span>
                   <span className="text-slate-500 text-xs shrink-0">{modeLabel(job)}</span>
                   {job.postal_code && <span className="text-slate-600 text-[11px] font-mono shrink-0 hidden sm:inline">{job.postal_code}</span>}

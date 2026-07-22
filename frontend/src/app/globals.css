@@ -26,14 +26,15 @@
      .card                 -> <Card> (1 call site left — diary/page.tsx's
                                 data-loc="diary.add-entry" <form>; Card only renders
                                 a <div>, so a form element can't become one)
-     .field-label          -> <Label>
-     .field-input          -> <Input>
-     .badge                -> <Badge> (3 call sites left — interactive tag-remove
-                                chips in ReviewItems.tsx, deferred pending a verified
-                                click-test through Base UI's render prop)
-   .btn/.btn-primary/.btn-secondary and .panel were fully retired (Button and inline
-   bg-muted/50 border rounded-lg passes); .card was retired down to that one
-   non-<div> exception above.
+     .field-label          -> <Label> (9 call sites left — <span>/<div> stat
+                                headers with no associated form control, where
+                                a real <label> would be semantically wrong)
+     .field-input          -> <Input> (page-sweep in progress)
+   .btn/.btn-primary/.btn-secondary, .panel, and .badge are fully retired —
+   .badge's remaining "interactive chip" cases turned out to work fine through
+   Base UI's render prop (Badge render={<button/>} + onClick), verified with a
+   real Playwright click test; .card was retired down to one non-<div>
+   exception (a <form> element).
    Do NOT add new ones, and do not reach for these in new code — use the shadcn
    component. Every definition below is now written in shadcn TOKENS rather than
    hard-coded palette values, so they inherit the theme instead of pinning a
@@ -50,10 +51,6 @@
 
 @utility field-input {
   @apply w-full bg-background border rounded-md px-3 py-2 text-sm transition focus-visible:outline-hidden focus-visible:ring-3 focus-visible:ring-ring/50;
-}
-
-@utility badge {
-  @apply font-medium px-2 py-0.5 rounded-full border;
 }
 
 /*

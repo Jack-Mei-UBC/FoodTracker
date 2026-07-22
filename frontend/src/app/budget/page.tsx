@@ -5,6 +5,7 @@ import Modal from '../../components/Modal';
 import { Label } from '../../components/ui/label';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { useToast } from '../../components/StatusToast';
 
@@ -227,7 +228,7 @@ export default function Budget() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-white truncate">{r.store_name || 'Unknown store'}</span>
-                  <span className={`badge text-[9px] ${r.source === 'scan' ? 'text-sky-300 bg-sky-500/10 border-sky-500/20' : 'text-slate-400 bg-slate-500/10 border-slate-500/20'}`}>{r.source}</span>
+                  <Badge variant="outline" className={`text-[9px] ${r.source === 'scan' ? 'text-sky-300 bg-sky-500/10 border-sky-500/20' : 'text-slate-400 bg-slate-500/10 border-slate-500/20'}`}>{r.source}</Badge>
                 </div>
                 <div className="text-xs text-slate-500">{r.purchased_on}{r.item_count ? ` · ${r.item_count} item${r.item_count !== 1 ? 's' : ''}` : ''}{r.notes ? ` · ${r.notes}` : ''}</div>
               </div>
