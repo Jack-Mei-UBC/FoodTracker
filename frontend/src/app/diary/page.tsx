@@ -9,6 +9,8 @@ import { Card } from '../../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { useToast } from '../../components/StatusToast';
 import { Badge } from '../../components/ui/badge';
+import { Input } from '../../components/ui/input';
+import { Command, CommandList, CommandItem } from '../../components/ui/command';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -370,22 +372,22 @@ export default function DiaryPage() {
           <p className="text-sm text-slate-400 mt-1">{dateLabel}{isToday && <span className="ml-2 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2 py-0.5 uppercase">Today</span>}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setViewDate(shiftDate(viewDate, -1))} className="p-2 rounded-xl bg-slate-900/60 border border-white/5 text-slate-300 hover:text-white hover:bg-white/5 transition" title="Previous day">
+          <Button onClick={() => setViewDate(shiftDate(viewDate, -1))} variant="outline" size="icon" className="rounded-xl" title="Previous day">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" /></svg>
-          </button>
-          <input
+          </Button>
+          <Input
             type="date"
             value={viewDate}
             onChange={e => e.target.value && setViewDate(e.target.value)}
-            className="bg-slate-900/60 border border-white/5 rounded-xl px-3 py-2 text-sm text-white focus:outline-hidden focus:border-emerald-500 transition scheme-dark"
+            className="rounded-xl focus-visible:border-emerald-500 scheme-dark"
           />
-          <button onClick={() => setViewDate(shiftDate(viewDate, 1))} className="p-2 rounded-xl bg-slate-900/60 border border-white/5 text-slate-300 hover:text-white hover:bg-white/5 transition" title="Next day">
+          <Button onClick={() => setViewDate(shiftDate(viewDate, 1))} variant="outline" size="icon" className="rounded-xl" title="Next day">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
-          </button>
+          </Button>
           {!isToday && (
-            <button onClick={() => setViewDate(localDateStr(new Date()))} className="px-3 py-2 rounded-xl bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold hover:bg-emerald-600/30 transition">
+            <Button onClick={() => setViewDate(localDateStr(new Date()))} variant="outline" size="sm" className="text-emerald-300 bg-emerald-600/20 border-emerald-500/30 hover:bg-emerald-600/30 hover:text-emerald-200">
               Today
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -460,11 +462,11 @@ export default function DiaryPage() {
                 ] as const).map(pair => (
                   <div key={pair[0]} className="flex items-center justify-between gap-2">
                     <label className="text-xs text-slate-400">{pair[1]}</label>
-                    <input
+                    <Input
                       type="number"
                       value={(goalsDraft as any)[pair[0]]}
                       onChange={e => setGoalsDraft({ ...goalsDraft, [pair[0]]: e.target.value })}
-                      className="w-24 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-xs text-white text-right font-mono focus:outline-hidden focus:border-emerald-500"
+                      className="w-24 text-right font-mono focus-visible:border-emerald-500"
                     />
                   </div>
                 ))}
@@ -528,46 +530,48 @@ export default function DiaryPage() {
         <div className="flex flex-col lg:flex-row gap-3">
           {/* Food search with suggestions */}
           <div className="relative flex-1">
-            <input
+            <Input
               type="text"
               value={query}
               onChange={e => { setQuery(e.target.value); setSelectedFood(null); setOneOffName(null); setShowSuggestions(true); }}
               onFocus={() => setShowSuggestions(true)}
               placeholder="Search the catalog (e.g. Greek Yogurt)…"
-              className="field-input focus:border-emerald-500"
+              className="focus-visible:border-emerald-500"
             />
             {showSuggestions && query.trim() && !selectedFood && oneOffName === null && (
-              <div className="absolute z-20 mt-1 w-full bg-[#0b101f] border border-white/10 rounded-xl overflow-hidden shadow-2xl">
-                {suggestions.map(f => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    onClick={() => pickFood(f)}
-                    className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-white/5 transition flex justify-between items-center"
+              <Command shouldFilter={false} className="absolute z-20 mt-1 w-full rounded-xl border border-white/10 shadow-2xl">
+                <CommandList>
+                  {suggestions.map(f => (
+                    <CommandItem
+                      key={f.id}
+                      value={String(f.id)}
+                      onSelect={() => pickFood(f)}
+                      className="justify-between"
+                    >
+                      <span>{f.name} <span className="text-slate-500">· {f.category}</span></span>
+                      {f.nutrition ? (
+                        <span className="font-mono text-emerald-400">{fmtKcal(f.nutrition.calories)} kcal/serv</span>
+                      ) : (
+                        <span className="text-[10px] text-slate-500">no facts</span>
+                      )}
+                    </CommandItem>
+                  ))}
+                  <CommandItem
+                    value="__one-off__"
+                    onSelect={pickOneOff}
+                    className="text-emerald-300 border-t border-white/5"
                   >
-                    <span>{f.name} <span className="text-slate-500">· {f.category}</span></span>
-                    {f.nutrition ? (
-                      <span className="font-mono text-emerald-400">{fmtKcal(f.nutrition.calories)} kcal/serv</span>
-                    ) : (
-                      <span className="text-[10px] text-slate-500">no facts</span>
-                    )}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  onClick={pickOneOff}
-                  className="w-full text-left px-3 py-2 text-xs text-emerald-300 hover:bg-emerald-500/10 transition border-t border-white/5"
-                >
-                  + Log “{query.trim()}” as a one-off entry (calories only)
-                </button>
-              </div>
+                    + Log “{query.trim()}” as a one-off entry (calories only)
+                  </CommandItem>
+                </CommandList>
+              </Command>
             )}
           </div>
 
           {/* Amount + unit (catalog foods) or calories (one-off / no facts) */}
           {oneOffName === null && (
             <div className="flex gap-2">
-              <input
+              <Input
                 type="text" inputMode="text" placeholder="e.g. 600g"
                 value={amount}
                 onChange={e => {
@@ -576,7 +580,7 @@ export default function DiaryPage() {
                   else { setAmount(e.target.value); }
                 }}
                 title="Type a number with a unit (e.g. 600g, 2lb) to auto-fill both fields"
-                className="w-20 bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white text-right font-mono focus:outline-hidden focus:border-emerald-500"
+                className="w-20 text-right font-mono focus-visible:border-emerald-500"
               />
               <Select value={unit} onValueChange={v => v && setUnit(v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
@@ -587,12 +591,12 @@ export default function DiaryPage() {
             </div>
           )}
           {needsManualCalories && (
-            <input
+            <Input
               type="number" step="any" min="0"
               value={manualCalories}
               onChange={e => setManualCalories(e.target.value)}
               placeholder="kcal"
-              className="w-24 bg-slate-950 border border-amber-500/30 rounded-xl px-3 py-2 text-sm text-white text-right font-mono placeholder-slate-600 focus:outline-hidden focus:border-amber-500"
+              className="w-24 border-amber-500/30 text-right font-mono focus-visible:border-amber-500"
             />
           )}
 
@@ -603,13 +607,13 @@ export default function DiaryPage() {
             </SelectContent>
           </Select>
 
-          <button
+          <Button
             type="submit"
             disabled={isSaving}
-            className="bg-linear-to-r from-emerald-600 to-teal-600 text-white rounded-xl px-5 py-2 text-sm font-semibold hover:shadow-lg hover:shadow-emerald-500/20 active:scale-[0.98] transition disabled:opacity-50"
+            className="rounded-xl"
           >
             {isSaving ? 'Logging…' : 'Add'}
-          </button>
+          </Button>
         </div>
 
         {/* Live preview / hints */}
@@ -661,21 +665,21 @@ export default function DiaryPage() {
                         {editId === en.id ? (
                           <div className="space-y-2">
                             <div className="flex gap-2">
-                              <input
+                              <Input
                                 type="text"
                                 value={editDraft.name}
                                 onChange={e => setEditDraft({ ...editDraft, name: e.target.value })}
-                                className="flex-1 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white font-semibold focus:outline-hidden focus:border-emerald-500"
+                                className="flex-1 font-semibold focus-visible:border-emerald-500"
                               />
-                              <input
+                              <Input
                                 type="time"
                                 value={editDraft.time}
                                 onChange={e => e.target.value && setEditDraft({ ...editDraft, time: e.target.value })}
-                                className="bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white font-mono focus:outline-hidden focus:border-emerald-500 scheme-dark"
+                                className="font-mono focus-visible:border-emerald-500 scheme-dark"
                               />
                             </div>
                             <div className="flex flex-wrap gap-2 items-center">
-                              <input
+                              <Input
                                 type="text" inputMode="text" placeholder="e.g. 600g"
                                 value={editDraft.amount}
                                 onChange={e => {
@@ -684,7 +688,7 @@ export default function DiaryPage() {
                                   else setEditDraft({ ...editDraft, amount: e.target.value });
                                 }}
                                 title="Type a number with a unit (e.g. 600g, 2lb) to auto-fill both fields"
-                                className="w-16 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white text-right font-mono focus:outline-hidden focus:border-emerald-500"
+                                className="w-16 text-right font-mono focus-visible:border-emerald-500"
                               />
                               <Select value={editDraft.unit} onValueChange={v => v && setEditDraft({ ...editDraft, unit: v })}>
                                 <SelectTrigger size="sm"><SelectValue /></SelectTrigger>
@@ -699,25 +703,25 @@ export default function DiaryPage() {
                                 </SelectContent>
                               </Select>
                               <div className="flex items-center gap-1">
-                                <input
+                                <Input
                                   type="number" step="any" min="0"
                                   value={editDraft.calories}
                                   onChange={e => setEditDraft({ ...editDraft, calories: e.target.value })}
-                                  className="w-16 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white text-right font-mono focus:outline-hidden focus:border-emerald-500"
+                                  className="w-16 text-right font-mono focus-visible:border-emerald-500"
                                 />
                                 <span className="text-slate-500">kcal</span>
                               </div>
                             </div>
-                            <input
+                            <Input
                               type="text"
                               value={editDraft.notes}
                               onChange={e => setEditDraft({ ...editDraft, notes: e.target.value })}
                               placeholder="Notes (optional)"
-                              className="w-full bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white placeholder-slate-600 focus:outline-hidden focus:border-emerald-500"
+                              className="w-full focus-visible:border-emerald-500"
                             />
                             <div className="flex gap-2">
-                              <button type="button" onClick={() => saveEdit(en)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg py-1 font-semibold transition">Save</button>
-                              <button type="button" onClick={() => setEditId(null)} className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-lg py-1 font-semibold transition">Cancel</button>
+                              <Button type="button" onClick={() => saveEdit(en)} size="sm" className="flex-1">Save</Button>
+                              <Button type="button" onClick={() => setEditId(null)} variant="secondary" size="sm" className="flex-1">Cancel</Button>
                             </div>
                           </div>
                         ) : (
