@@ -8,6 +8,7 @@ import FoodDetailModal from './FoodDetailModal';
 import Modal from './Modal';
 import { Badge } from './ui/badge';
 import { Label } from './ui/label';
+import { Button } from './ui/button';
 import ScanImages from './ScanImages';
 import RawModelOutput, { ScanAttempt } from './RawModelOutput';
 
@@ -817,10 +818,9 @@ export default function ReviewItems({
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); createStore(); } }}
                 placeholder="New store name" disabled={savingStore}
                 className="flex-1 bg-transparent text-xs text-white placeholder:text-slate-600 focus:outline-hidden" />
-              <button type="button" onClick={createStore} disabled={savingStore || !newStoreName.trim()}
-                className="btn btn-primary rounded-lg px-3 py-1 text-[11px] disabled:opacity-50">
+              <Button type="button" onClick={createStore} disabled={savingStore || !newStoreName.trim()} size="sm">
                 {savingStore ? 'Adding…' : 'Add'}
-              </button>
+              </Button>
             </div>
           )}
           {geoMatchedStore && (
@@ -1200,11 +1200,11 @@ export default function ReviewItems({
           </div>
 
           <div className="flex justify-between gap-2 pt-1">
-            <button onClick={() => unmatchItem(matchFor)} className="btn btn-secondary rounded-lg px-4 py-2 text-xs"
+            <Button onClick={() => unmatchItem(matchFor)} variant="secondary" size="sm"
               title="Ignore any match and create this as a brand-new catalog item">
               Create as a new item
-            </button>
-            <button onClick={closeMatch} className="btn btn-secondary rounded-lg px-4 py-2 text-xs">Cancel</button>
+            </Button>
+            <Button onClick={closeMatch} variant="secondary" size="sm">Cancel</Button>
           </div>
         </Modal>
       )}
@@ -1229,10 +1229,10 @@ export default function ReviewItems({
             </label>
           )}
           <div className="flex justify-end gap-2 pt-1">
-            <button onClick={() => setPendingStore(null)} className="btn btn-secondary rounded-lg px-4 py-2 text-xs">Cancel</button>
-            <button onClick={confirmStoreChange} className="btn btn-primary rounded-lg px-4 py-2 text-xs">
+            <Button onClick={() => setPendingStore(null)} variant="secondary" size="sm">Cancel</Button>
+            <Button onClick={confirmStoreChange} size="sm">
               {applyToAll && openReviewCount > 1 ? 'Change all' : 'Change'}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
@@ -1277,11 +1277,10 @@ export default function ReviewItems({
           </div>
 
           <div className="flex justify-end gap-2 pt-1">
-            <button onClick={() => setDeletingStore(null)} disabled={removingStore} className="btn btn-secondary rounded-lg px-4 py-2 text-xs disabled:opacity-50">Cancel</button>
-            <button onClick={deleteStore} disabled={removingStore}
-              className="btn btn-primary rounded-lg px-4 py-2 text-xs bg-rose-600 hover:bg-rose-500 disabled:opacity-50">
+            <Button onClick={() => setDeletingStore(null)} disabled={removingStore} variant="secondary" size="sm">Cancel</Button>
+            <Button onClick={deleteStore} disabled={removingStore} variant="destructive" size="sm">
               {removingStore ? 'Removing…' : 'Remove'}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}

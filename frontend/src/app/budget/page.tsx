@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Modal from '../../components/Modal';
 import { Label } from '../../components/ui/label';
+import { Button } from '../../components/ui/button';
 import StatusToast, { useToast } from '../../components/StatusToast';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -121,10 +122,10 @@ export default function Budget() {
           <p className="text-sm text-slate-400 mt-1">Every committed receipt scan records its store and total here. Track spend against a monthly budget.</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button onClick={() => setMonth(m => shiftMonth(m, -1))} className="btn btn-secondary rounded-lg px-3 py-2 text-xs">←</button>
+          <Button onClick={() => setMonth(m => shiftMonth(m, -1))} variant="secondary" size="sm">←</Button>
           <span className="text-sm font-semibold text-white w-36 text-center">{monthLabel(month)}</span>
-          <button onClick={() => setMonth(m => shiftMonth(m, 1))} disabled={month >= nowMonth()}
-            className="btn btn-secondary rounded-lg px-3 py-2 text-xs disabled:opacity-40">→</button>
+          <Button onClick={() => setMonth(m => shiftMonth(m, 1))} disabled={month >= nowMonth()}
+            variant="secondary" size="sm">→</Button>
         </div>
       </div>
 
@@ -163,7 +164,7 @@ export default function Budget() {
             <input type="number" step="0.01" min="0" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
               placeholder="none" className="field-input w-40" />
           </div>
-          <button onClick={saveBudget} className="btn btn-primary rounded-lg px-4 py-2.5 text-xs">Save budget</button>
+          <Button onClick={saveBudget}>Save budget</Button>
         </div>
       </div>
 
@@ -209,7 +210,7 @@ export default function Budget() {
       <div data-loc="budget.receipts" className="card rounded-3xl p-6 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-white">Receipts · {monthLabel(month)}</h2>
-          <button onClick={() => setAdding(true)} className="btn btn-primary rounded-xl px-4 py-2 text-xs">+ Add receipt</button>
+          <Button onClick={() => setAdding(true)} size="sm">+ Add receipt</Button>
         </div>
         {receipts.length === 0 && <p className="text-slate-600 text-sm py-6 text-center">No receipts this month. Scan one, or add it manually.</p>}
         <div className="space-y-2">
@@ -317,8 +318,8 @@ function ReceiptForm({ receipt, stores, onClose, onSaved, notify }: {
         </div>
       </div>
       <div className="flex justify-end gap-2 pt-1">
-        <button onClick={onClose} className="btn btn-secondary rounded-lg px-4 py-2 text-xs">Cancel</button>
-        <button onClick={save} disabled={saving} className="btn btn-primary rounded-lg px-4 py-2 text-xs">{saving ? 'Saving…' : 'Save'}</button>
+        <Button onClick={onClose} variant="secondary" size="sm">Cancel</Button>
+        <Button onClick={save} disabled={saving} size="sm">{saving ? 'Saving…' : 'Save'}</Button>
       </div>
     </Modal>
   );

@@ -10,6 +10,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Modal from '../../components/Modal';
 import ImageCropper from '../../components/ImageCropper';
+import { Button } from '../../components/ui/button';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -180,10 +181,10 @@ export default function Staging() {
                   <div className="text-[10px] text-slate-500 truncate">{job.store_name ?? 'No store'} · {fmtDate(job.created_at)}</div>
                 </div>
                 <div className="flex items-center gap-1.5 mt-auto">
-                  <button onClick={() => openCrop(job)} disabled={busy}
-                    className="btn btn-secondary flex-1 rounded-lg py-1.5 text-[11px]">Crop</button>
-                  <button onClick={() => sendForProcessing([job.id])} disabled={busy}
-                    className="btn btn-primary flex-1 rounded-lg py-1.5 text-[11px]">Process</button>
+                  <Button onClick={() => openCrop(job)} disabled={busy}
+                    variant="secondary" size="sm" className="flex-1">Crop</Button>
+                  <Button onClick={() => sendForProcessing([job.id])} disabled={busy}
+                    size="sm" className="flex-1">Process</Button>
                   <button onClick={() => discard(job.id)} disabled={busy}
                     className="text-[11px] text-slate-500 hover:text-rose-400 px-1.5 transition" title="Discard">✕</button>
                 </div>

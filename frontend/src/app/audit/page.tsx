@@ -18,6 +18,7 @@ import StatusToast, { useToast } from '../../components/StatusToast';
 import FoodDetailModal from '../../components/FoodDetailModal';
 import Modal from '../../components/Modal';
 import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
 import { NutritionFacts, formatCaloriesPer100 } from '../../lib/nutrition';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -185,11 +186,11 @@ export default function Audit() {
           </p>
         </div>
         <div className="shrink-0 flex items-center gap-2">
-          <button onClick={() => setDupOpen(true)} disabled={tab === 'archived'}
+          <Button onClick={() => setDupOpen(true)} disabled={tab === 'archived'}
             title="Let an LLM find likely-duplicate items across the catalog — you review before anything merges"
-            className="btn btn-secondary rounded-xl px-4 py-2 text-xs disabled:opacity-50">✨ Find duplicates</button>
-          <button onClick={() => setTagPanelOpen(true)}
-            className="btn btn-secondary rounded-xl px-4 py-2 text-xs">Manage tags</button>
+            variant="secondary" size="sm">✨ Find duplicates</Button>
+          <Button onClick={() => setTagPanelOpen(true)}
+            variant="secondary" size="sm">Manage tags</Button>
         </div>
       </div>
 
@@ -258,8 +259,8 @@ export default function Audit() {
             <datalist id="audit-categories">
               {categories.map(c => <option key={c} value={c} />)}
             </datalist>
-            <button onClick={() => runBulk('category')} disabled={busy}
-              className="btn btn-secondary rounded-lg px-3 py-2 text-xs">Apply category</button>
+            <Button onClick={() => runBulk('category')} disabled={busy}
+              variant="secondary" size="sm">Apply category</Button>
             {tab === 'active' ? (
               <button onClick={() => runBulk('archive')} disabled={busy}
                 className="text-xs font-bold text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg px-4 py-2 hover:bg-rose-500/20 transition disabled:opacity-50">
@@ -396,7 +397,7 @@ export default function Audit() {
             className="flex gap-2">
             <input type="text" value={newTagName} onChange={e => setNewTagName(e.target.value)} maxLength={60}
               placeholder="New tag name…" className="field-input flex-1 text-xs rounded-lg" />
-            <button type="submit" className="btn btn-primary rounded-lg px-4 py-2 text-xs">Create</button>
+            <Button type="submit" size="sm">Create</Button>
           </form>
           <div className="panel rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
             {tags.length === 0 ? (
@@ -574,9 +575,9 @@ function AutoTagModal({ foodIds, tags, onClose, onCreateTag, onApplied, notify }
         <div className="flex gap-2">
           <input type="text" value={newTagName} onChange={e => setNewTagName(e.target.value)} maxLength={60}
             placeholder="…or create a new tag" className="field-input flex-1 text-xs rounded-lg" />
-          <button type="button" disabled={!newTagName.trim()}
+          <Button type="button" disabled={!newTagName.trim()}
             onClick={async () => { const t = await onCreateTag(newTagName); if (t) { setChosen(prev => prev.concat(t.id)); setNewTagName(''); } }}
-            className="btn btn-secondary rounded-lg px-3 py-2 text-xs disabled:opacity-50">Create &amp; use</button>
+            variant="secondary" size="sm">Create &amp; use</Button>
         </div>
         <input type="text" value={hint} onChange={e => setHint(e.target.value)}
           placeholder="Optional hint (e.g. “anything you can't eat is Non-food”)"
@@ -585,11 +586,10 @@ function AutoTagModal({ foodIds, tags, onClose, onCreateTag, onApplied, notify }
 
       {suggestions === null ? (
         <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onClose} className="btn btn-secondary rounded-lg px-4 py-2 text-xs">Cancel</button>
-          <button onClick={generate} disabled={running || chosen.length === 0}
-            className="btn btn-primary rounded-lg px-4 py-2 text-xs disabled:opacity-50">
+          <Button onClick={onClose} variant="secondary" size="sm">Cancel</Button>
+          <Button onClick={generate} disabled={running || chosen.length === 0} size="sm">
             {running ? 'Asking the model…' : 'Generate suggestions'}
-          </button>
+          </Button>
         </div>
       ) : (
         <>
@@ -639,15 +639,14 @@ function AutoTagModal({ foodIds, tags, onClose, onCreateTag, onApplied, notify }
             </div>
           </div>
           <div className="flex justify-between gap-2 pt-1">
-            <button onClick={generate} disabled={running} className="btn btn-secondary rounded-lg px-4 py-2 text-xs disabled:opacity-50">
+            <Button onClick={generate} disabled={running} variant="secondary" size="sm">
               {running ? 'Tagging…' : 'Regenerate'}
-            </button>
+            </Button>
             <div className="flex gap-2">
-              <button onClick={onClose} className="btn btn-secondary rounded-lg px-4 py-2 text-xs">Cancel</button>
-              <button onClick={apply} disabled={applying || running || willApply === 0}
-                className="btn btn-primary rounded-lg px-4 py-2 text-xs disabled:opacity-50">
+              <Button onClick={onClose} variant="secondary" size="sm">Cancel</Button>
+              <Button onClick={apply} disabled={applying || running || willApply === 0} size="sm">
                 {applying ? 'Applying…' : `Apply to ${willApply} item${willApply !== 1 ? 's' : ''}`}
-              </button>
+              </Button>
             </div>
           </div>
         </>
@@ -720,11 +719,10 @@ function MergeModal({ foods, onClose, onMerged, notify }: {
         ))}
       </div>
       <div className="flex justify-end gap-2">
-        <button onClick={onClose} className="btn btn-secondary rounded-lg px-4 py-2 text-xs">Cancel</button>
-        <button onClick={run} disabled={busy}
-          className="btn btn-primary rounded-lg px-4 py-2 text-xs disabled:opacity-50">
+        <Button onClick={onClose} variant="secondary" size="sm">Cancel</Button>
+        <Button onClick={run} disabled={busy} size="sm">
           {busy ? 'Merging…' : `Merge into “${target?.name ?? ''}”`}
-        </button>
+        </Button>
       </div>
     </Modal>
   );
@@ -824,10 +822,9 @@ function FindDuplicatesModal({ foods, onClose, onMerged, notify }: {
       {groups === null ? (
         <div className="flex items-center justify-between gap-2">
           <p className="text-[11px] text-slate-500">Scans {foods.length} active item{foods.length !== 1 ? 's' : ''} for likely duplicates.</p>
-          <button onClick={generate} disabled={running || foods.length < 2}
-            className="btn btn-primary rounded-lg px-4 py-2 text-xs disabled:opacity-50">
+          <Button onClick={generate} disabled={running || foods.length < 2} size="sm">
             {running ? 'Scanning…' : 'Scan for duplicates'}
-          </button>
+          </Button>
         </div>
       ) : (
         <>
@@ -874,15 +871,14 @@ function FindDuplicatesModal({ foods, onClose, onMerged, notify }: {
             </div>
           </div>
           <div className="flex justify-between gap-2 pt-1">
-            <button onClick={generate} disabled={running} className="btn btn-secondary rounded-lg px-4 py-2 text-xs disabled:opacity-50">
+            <Button onClick={generate} disabled={running} variant="secondary" size="sm">
               {running ? 'Scanning…' : 'Rescan'}
-            </button>
+            </Button>
             <div className="flex gap-2">
-              <button onClick={onClose} className="btn btn-secondary rounded-lg px-4 py-2 text-xs">Cancel</button>
-              <button onClick={apply} disabled={applying || running || groupCount === 0}
-                className="btn btn-primary rounded-lg px-4 py-2 text-xs disabled:opacity-50">
+              <Button onClick={onClose} variant="secondary" size="sm">Cancel</Button>
+              <Button onClick={apply} disabled={applying || running || groupCount === 0} size="sm">
                 {applying ? 'Merging…' : `Merge ${groupCount} group${groupCount !== 1 ? 's' : ''}`}
-              </button>
+              </Button>
             </div>
           </div>
         </>

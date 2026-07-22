@@ -8,6 +8,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Modal from '../../components/Modal';
 import FoodDetailModal from '../../components/FoodDetailModal';
+import { Button } from '../../components/ui/button';
 import NutritionSearch, { SavedFood } from '../../components/NutritionSearch';
 import { UNIT_OPTIONS, parseAmountInput, normalizeUnit } from '../../lib/units';
 import { scaleNutrients, isServingUnit, NutritionFacts } from '../../lib/nutrition';
@@ -781,12 +782,12 @@ export default function MealsPage() {
             >
               {isSaving ? 'Saving…' : editMealId ? 'Save changes' : 'Save meal'}
             </button>
-            <button
+            <Button
               onClick={resetBuilder}
-              className="btn btn-secondary px-5 py-2"
+              variant="secondary"
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -961,12 +962,13 @@ export default function MealsPage() {
               >
                 {isLogging ? 'Logging…' : 'Log it'}
               </button>
-              <button
+              <Button
                 onClick={() => setLogMeal(null)}
-                className="btn btn-secondary flex-1 py-2"
+                variant="secondary"
+                className="flex-1"
               >
                 Cancel
-              </button>
+              </Button>
             </div>
         </Modal>
       )}

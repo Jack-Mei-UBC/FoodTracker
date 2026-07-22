@@ -8,6 +8,7 @@
 
 import React, { useState } from 'react';
 import Modal from './Modal';
+import { Button } from './ui/button';
 import { UNIT_OPTIONS, parseAmountInput } from '../lib/units';
 import { NutritionFacts, MACRO_META, MICRO_META } from '../lib/nutrition';
 
@@ -203,10 +204,10 @@ export default function MacroEditor({
         )}
 
         <div className="flex gap-2 pt-1">
-          <button onClick={save} disabled={busy} className="flex-1 bg-linear-to-r from-emerald-600 to-teal-600 text-white rounded-lg py-2 text-sm font-semibold hover:shadow-lg transition disabled:opacity-50">
+          <Button onClick={save} disabled={busy} className="flex-1">
             {busy ? 'Saving…' : 'Save Facts'}
-          </button>
-          <button onClick={onClose} disabled={busy} className="btn btn-secondary rounded-lg px-4 py-2">Cancel</button>
+          </Button>
+          <Button onClick={onClose} disabled={busy} variant="secondary">Cancel</Button>
         </div>
     </Modal>
   );

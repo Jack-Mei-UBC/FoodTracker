@@ -12,6 +12,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import StatusToast, { useToast } from '../../components/StatusToast';
 import { Label } from '../../components/ui/label';
+import { Button } from '../../components/ui/button';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -103,12 +104,12 @@ export default function Settings() {
           <>
             <div className="flex flex-wrap gap-2">
               {PRESETS.map(p => (
-                <button key={p.days} onClick={() => { setDays(String(p.days)); save(p.days); }}
+                <Button key={p.days} onClick={() => { setDays(String(p.days)); save(p.days); }}
                   disabled={saving}
                   title={p.hint}
-                  className={`btn rounded-xl px-4 py-2 text-xs ${savedDays === p.days ? 'btn-primary' : 'btn-secondary'}`}>
+                  variant={savedDays === p.days ? 'default' : 'secondary'}>
                   {p.label}
-                </button>
+                </Button>
               ))}
             </div>
 
@@ -121,10 +122,9 @@ export default function Settings() {
                     onKeyDown={e => { if (e.key === 'Enter') save(); }}
                     className="field-input w-32" />
                 </div>
-                <button onClick={() => save()} disabled={saving || !dirty}
-                  className="btn btn-primary rounded-xl px-5 py-2 text-xs">
+                <Button onClick={() => save()} disabled={saving || !dirty}>
                   {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
-                </button>
+                </Button>
               </div>
               {preview && (
                 <p className="text-xs text-slate-400">

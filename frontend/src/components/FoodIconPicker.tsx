@@ -9,6 +9,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Modal from './Modal';
+import { Button } from './ui/button';
 import ImageCropper from './ImageCropper';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -170,13 +171,14 @@ export default function FoodIconPicker({
             <p className="text-xs text-slate-500">No saved images for this food yet — upload one instead.</p>
           )}
           {ownImageId != null && (
-            <button
+            <Button
               onClick={resetToDefault}
               disabled={busy}
-              className="btn btn-secondary w-full rounded-lg py-2 text-xs"
+              variant="secondary"
+              className="w-full"
             >
               Reset to default
-            </button>
+            </Button>
           )}
         </div>
       ) : source ? (

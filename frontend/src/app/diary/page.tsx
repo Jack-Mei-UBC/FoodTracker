@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { UNIT_OPTIONS, parseAmountInput } from '../../lib/units';
 import { scaleNutrients, NutritionFacts, MICRO_META } from '../../lib/nutrition';
 import FoodDetailModal from '../../components/FoodDetailModal';
+import { Button } from '../../components/ui/button';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -476,8 +477,8 @@ export default function DiaryPage() {
                   </div>
                 ))}
                 <div className="flex gap-2 pt-1">
-                  <button onClick={saveGoals} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg py-1.5 text-xs font-semibold transition">Save</button>
-                  <button onClick={() => setEditingGoals(false)} className="btn btn-secondary flex-1 rounded-lg py-1.5 text-xs">Cancel</button>
+                  <Button onClick={saveGoals} size="sm" className="flex-1">Save</Button>
+                  <Button onClick={() => setEditingGoals(false)} variant="secondary" size="sm" className="flex-1">Cancel</Button>
                 </div>
               </div>
             ) : (

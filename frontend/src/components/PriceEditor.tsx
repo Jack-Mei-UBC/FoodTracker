@@ -8,6 +8,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
+import { Button } from './ui/button';
 import { Label } from './ui/label';
 import { UNIT_OPTIONS, parseAmountInput, formatCanonicalUnitPrice } from '../lib/units';
 
@@ -205,17 +206,17 @@ export default function PriceEditor({
         </div>
 
         <div className="flex gap-2 pt-1">
-          <button onClick={save} disabled={busy} className="btn btn-primary flex-1 rounded-lg py-2">
+          <Button onClick={save} disabled={busy} className="flex-1">
             {busy ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Price'}
-          </button>
+          </Button>
           {isEdit && onDeleted && (
-            <button onClick={del} disabled={busy} className="bg-rose-600/20 border border-rose-500/30 text-rose-300 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-rose-600/30 transition disabled:opacity-50">
+            <Button onClick={del} disabled={busy} variant="destructive">
               Delete
-            </button>
+            </Button>
           )}
-          <button onClick={onClose} disabled={busy} className="btn btn-secondary rounded-lg px-4 py-2">
+          <Button onClick={onClose} disabled={busy} variant="secondary">
             Cancel
-          </button>
+          </Button>
         </div>
     </Modal>
   );

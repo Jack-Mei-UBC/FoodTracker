@@ -9,6 +9,7 @@ import MacroEditor from '../components/MacroEditor';
 import Modal from '../components/Modal';
 import { Badge } from '../components/ui/badge';
 import { Label } from '../components/ui/label';
+import { Button } from '../components/ui/button';
 import FoodIconPicker from '../components/FoodIconPicker';
 
 // Interfaces based on database schema
@@ -698,12 +699,12 @@ export default function Dashboard() {
                 />
               </div>
 
-              <button
+              <Button
                 type="submit"
-                className="btn btn-primary w-full py-2 duration-200"
+                className="w-full"
               >
                 Dispatch Flyer Scrape
-              </button>
+              </Button>
             </form>
             <a href="/scrapes" className="block text-center text-[11px] font-semibold text-violet-400 hover:text-violet-300 transition pt-1">
               View scraper activity →

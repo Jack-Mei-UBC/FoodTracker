@@ -3,6 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import StatusToast, { useToast } from '../../components/StatusToast';
+import { Button, buttonVariants } from '../../components/ui/button';
 
 // Scanner is now a pure INTAKE surface: every capture is staged for the
 // background queue (there is no synchronous "scan now" path anymore — see
@@ -158,14 +159,14 @@ export default function Scanner() {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <button onClick={() => { if (!queuing) fileInputRef.current?.click(); }} disabled={queuing}
-              className="btn btn-primary rounded-xl py-3 text-sm font-semibold disabled:opacity-50">
+            <Button onClick={() => { if (!queuing) fileInputRef.current?.click(); }} disabled={queuing}
+              size="lg">
               {queuing ? 'Adding…' : 'Choose images'}
-            </button>
-            <button onClick={pasteFromClipboard} disabled={queuing}
-              className="btn btn-secondary rounded-xl py-3 text-sm font-semibold disabled:opacity-50">
+            </Button>
+            <Button onClick={pasteFromClipboard} disabled={queuing}
+              variant="secondary" size="lg">
               Paste from clipboard
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -183,8 +184,8 @@ export default function Scanner() {
             </div>
           )}
           <div className="flex flex-col gap-2 pt-1">
-            <Link href="/staging" className="btn btn-primary rounded-xl py-2.5 text-xs font-semibold text-center">Go to Staging →</Link>
-            <Link href="/inbox" className="btn btn-secondary rounded-xl py-2.5 text-xs font-semibold text-center">Open Inbox</Link>
+            <Link href="/staging" className={buttonVariants({ className: 'w-full' })}>Go to Staging →</Link>
+            <Link href="/inbox" className={buttonVariants({ variant: 'secondary', className: 'w-full' })}>Open Inbox</Link>
           </div>
         </div>
       </div>
