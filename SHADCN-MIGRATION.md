@@ -18,7 +18,7 @@ regression. Do not start Phase 3 until Phase 1's Layer 2 contracts are green.
 | **1 — UI test net** | 🟡 **partly shipped** | Layers 1 & 2 exist (29 Playwright tests, green ×3 consecutive runs). Layer 3 (visual) and the Vitest secondary are **not started**. A real **flake source was found and fixed** — Playwright artifacts were being written into the container's bind mount, triggering mid-run recompiles. |
 | **2 — shadcn prerequisites** | ✅ **shipped** | Next 15 + Tailwind 4 in; tsconfig on ES2020; `cn()` + cva/clsx/tailwind-merge installed; `shadcn init -b base -p nova` run with **Base UI**; `rsc: false` corrected by hand. `shadcn add` verified end-to-end with Button. |
 | **3 — the migration** | ✅ **shipped — M1–M8 + page sweep** | Global de-customisation done (bespoke palette/glassmorphism/webfonts deleted, `globals.css` 10.2 KB → 6.2 KB, and down further after the page sweep retired `.btn*`/`.panel`/`.badge`/`.field-input` outright). **M1**: `Modal` → Base UI Dialog, props not frozen (deleted). **M2**: Badge, Label, Button, Card, `.panel`. **M3**: all 20 native `<select>`s → Base UI `<Select>`. **M4**: Tabs. **M5**: `StatusToast`/`useToast` → Sonner (plus 5 copy-pasted duplicates fixed). **M6**: all four named comboboxes → cmdk `Command` (done last, per its own note). **M7**: Popover/DropdownMenu — dead `lib/useClickOutside.ts` deleted, `ReviewItems`' tag picker → `DropdownMenu`. **M8**: Checkbox (11 usages); Tooltip had nothing to migrate. **Page sweep**: every page + shared component swept for remaining pasted `<input>`/`<button>` utilities, which also surfaced and fixed a real M2 gap (template-literal `className={\`badge ...\`}` usages the original grep missed) and resolved the 3 interactive-Badge cases M2 had deferred, now verified via a real click test. **One deliberately deferred item, stated not hidden**: `ReviewItems`' "search existing items to add" box still has the literal `overflow-x-auto` clipping bug the plan originally flagged — needs `Popover` anchored to the input via a ref prop the generated `PopoverContent` wrapper doesn't expose yet. Every step verified with `tsc --noEmit` + the full Playwright suite (35 tests, up from 29 at Phase 3's M3 checkpoint), with new permanent interaction tests added wherever a step changed real markup/behavior rather than just class names. |
-| **4 — docs & guardrails** | ⬜ not started | Folded into each Phase 3 step. |
+| **4 — docs & guardrails** | ✅ **shipped** | CLAUDE.md and README.md rewritten to match the shipped migration; a drift guard added to both smoke-test twins, verified with a real injected-then-removed regression. |
 
 Phase 0's findings below are kept as the **historical record of why** the fixes
 look the way they do — they read in the past tense on purpose. The problems they
@@ -493,22 +493,11 @@ generated `PopoverContent` wrapper doesn't expose yet.
 
 ---
 
-## Phase 4 — Documentation and guardrails ⬜ NOT STARTED
+## Phase 4 — Documentation and guardrails ✅ SHIPPED
 
-- **CLAUDE.md**: rewrite the shared-class-vocabulary section (now
-  `src/components/ui` + `cva` variants); ~~update the Modal invariant~~ **done in
-  M1** — portaling is now Base UI's job, explanation kept since the
-  transform/containing-block gotcha is still *why* it's required; ~~delete the
-  es5 iteration gotcha~~ **done in Phase 2**; update the `data-loc` section for
-  forwarding through shadcn components; add a
-  new invariant: *UI primitives live in `src/components/ui` — don't hand-roll,
-  and don't paste raw utilities for anything a primitive covers.*
-- **README.md**: the verification story now includes Playwright.
-- **A drift guard.** An ESLint rule or a grep check in the smoke script that
-  fails when a known pasted utility string reappears (e.g.
-  `bg-slate-950 border border-white/10 rounded-lg`). **This is the part a
-  library alone does not give you** — shadcn narrows the easy path, it doesn't
-  close it. Without this, drift returns.
+- **CLAUDE.md** ✅: rewrote the "Transitional class vocabulary" section to state `.btn*`/`.panel`/`.badge`/`.field-input` are fully retired (only `.field-label`'s 9 non-form-control cases and `.card`'s one `<form>` exception remain, both explained inline); ~~update the Modal invariant~~ **done in M1**; ~~delete the es5 iteration gotcha~~ **done in Phase 2**; rewrote the shadcn/Base UI section from "set up, migration not started" to document what's actually shipped, including the Badge `render`-prop pattern and the one known `Popover`-anchor follow-up; added the invariant *UI primitives live in `src/components/ui` — don't hand-roll, and don't paste raw utilities for anything a primitive covers* (with the dense-grid-inline-editor exception spelled out, since that's a real recurring judgment call, not a gap); extended the `data-loc` section to state — as a verified fact, not an assumption — that every generated `ui/*` component forwards `data-loc` via prop spreading, confirmed by reading the generated source.
+- **README.md** ✅: verification story updated with the current Playwright test count (35) and the shadcn-primitive interaction tests (Select/Tabs/Checkbox/Command/Badge); frontend stack badge and table row bumped from Next 14/plain Tailwind to Next 15/Tailwind 4/shadcn+Base UI; the "Conventions & invariants" list's stale entries (the `.animate-slide-up` Modal trap, the retired class vocabulary, the retired pre-ES2015 gotcha) rewritten to match current reality instead of describing a pre-migration state as if it were still true.
+- **A drift guard** ✅ — added to **both** smoke-test twins (`scripts/smoke-test.ps1` and `scripts/smoke-test.sh`, kept in sync per their own hand-synced-pair convention), not just one: a static grep of `frontend/src/**/*.{ts,tsx}` for `className="..."` / `className={` `...` `}` containing `.btn`, `.btn-primary`, `.btn-secondary`, `.panel`, `.badge`, or `.field-input` as a whole word. Runs **unconditionally**, before the backend-health gate, since it's a pure filesystem check that needs no running stack — and it's wired into the same `$fail`/`$script:failures` accumulator as every other assertion, so a drift hit fails the run even when the backend is down and everything else skips (a regression here shouldn't hide behind "nothing was verified"). Verified doing real work, not just typechecked: injected a scratch file with `className="btn btn-primary"` into `frontend/src`, confirmed both twins reported `[FAIL] ... drift-test.tsx: .btn` etc., then removed it and confirmed both went green again.
 
 ---
 
@@ -522,8 +511,7 @@ Phase 0 ✅  →  Phase 1 🟡  →  Phase 2 🟡  →  Phase 3 ⬜  →  Phase 
 Rough effort: Phase 0 ≈ half a session · Phase 1 ≈ 1–2 sessions · Phase 2 ≈ half
 a session · Phase 3 ≈ the bulk, several sessions · Phase 4 ≈ folded into each.
 
-**Next action:** Phase 2's blocker is the real fork in the road — pick Path A
-(stay on Tailwind 3 + frozen `shadcn@2.3.0`) or Path B (Next 14→15 first). Phase
-3 cannot start until that's decided, since it determines whether components come
-from Radix or Base UI. The Phase 1 open items above are independent and can be
-picked up in any order meanwhile.
+**All four phases are now shipped.** What's left is small and explicitly tracked, not hidden:
+- Phase 1's Layer 3 (visual regression snapshots) and the Vitest secondary were never started — genuinely optional, not blocking anything.
+- `ReviewItems`' "search existing items to add" combobox still has the literal `overflow-x-auto` clipping bug — needs `Popover` extended to accept an `anchor` ref prop (see Phase 3 M6).
+- `.field-label` (9 sites) and one `.card` `<form>` exception remain by design, not oversight — see Phase 3 M2 and CLAUDE.md.

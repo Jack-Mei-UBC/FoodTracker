@@ -3,7 +3,7 @@
 ![FoodTracker](docs/banner.svg)
 
 [![smoke](https://github.com/Jack-Mei-UBC/FoodTracker/actions/workflows/smoke.yml/badge.svg)](https://github.com/Jack-Mei-UBC/FoodTracker/actions/workflows/smoke.yml)
-&nbsp;![Next.js](https://img.shields.io/badge/Next.js-14-000?logo=next.js)
+&nbsp;![Next.js](https://img.shields.io/badge/Next.js-15-000?logo=next.js)
 &nbsp;![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)
 &nbsp;![FastAPI](https://img.shields.io/badge/FastAPI-Python%203.12-009688?logo=fastapi&logoColor=white)
 &nbsp;![Postgres](https://img.shields.io/badge/Postgres-15-4169e1?logo=postgresql&logoColor=white)
@@ -49,7 +49,7 @@ Six containers orchestrated by `docker-compose.yml`. Each service is its own pac
 
 | Service | Stack | Port | Role |
 |---|---|---|---|
-| `frontend` | Next.js 14 (App Router), TS, Tailwind | 3000 | PWA UI |
+| `frontend` | Next.js 15 (App Router), TS, Tailwind 4, shadcn/ui + Base UI | 3000 | PWA UI |
 | `backend` | Express, TypeScript | 4000 | REST API; owns Postgres; enqueues jobs |
 | `worker` | BullMQ, Node/TS | — | Processes the scraping **and** OCR queues |
 | `ocr-service` | FastAPI, Python 3.12 | 8000 (loopback) | Vision-LLM extraction via OpenRouter |
@@ -190,7 +190,7 @@ It gates on backend health, then asserts the foods/diary/goals/efficiency endpoi
 
 The same checks run in **CI** (`.github/workflows/smoke.yml`) via a portable bash twin, `scripts/smoke-test.sh`, so the "every change is verified" guarantee holds for outside contributors too — not just on my machine. CI boots only the services the checks need (`db`, `redis`, `backend`, `frontend`) and runs in strict mode (`STRICT=1` — a stack that fails to boot is a failing build, never a silent skip).
 
-On top of the smoke net sits a **Playwright UI test net** (`frontend/e2e/` — [its README](frontend/e2e/README.md)): route smoke for every page plus style-agnostic *interaction contracts* (modal viewport-centering and stacked-Escape ordering, dashboard search/sort/filter, the per-100 kcal basis, the expired-sale rule), seeded from a deterministic fixture set inserted through the REST API. It's deliberately **not** wired to the per-turn Stop hook (too slow) — run it with the stack up: `docker compose up -d --wait`, then `npm run seed && npm run test:e2e` from `frontend/`.
+On top of the smoke net sits a **Playwright UI test net** (`frontend/e2e/` — [its README](frontend/e2e/README.md), 35 tests and counting): route smoke for every page plus style-agnostic *interaction contracts* — modal viewport-centering and stacked-Escape ordering, dashboard search/sort/filter, the per-100 kcal basis, the expired-sale rule, and (added alongside the shadcn/ui migration) real click-driven tests for the Base UI primitives that replaced hand-rolled markup: a `Select` opening and picking an option, a `Tabs` swap, a `Checkbox` toggling via its label text (not just the control itself), a `Command` combobox's `onSelect`, and a `Badge` rendered as a clickable filter chip. Seeded from a deterministic fixture set inserted through the REST API. It's deliberately **not** wired to the per-turn Stop hook (too slow) — run it with the stack up: `docker compose up -d --wait`, then `npm run seed && npm run test:e2e` from `frontend/`.
 
 ---
 
@@ -199,10 +199,9 @@ On top of the smoke net sits a **Playwright UI test net** (`frontend/e2e/` — [
 The full list lives in [CLAUDE.md](CLAUDE.md). The load-bearing ones:
 
 - **Two input surfaces, reused everywhere.** `PriceEditor` and `MacroEditor` are the only ways to enter a price or nutrition facts — launched from the dashboard, diary, inbox, and history. Don't build a third form.
-- **One shared `Modal` for every popup.** All popup overlays render through `frontend/src/components/Modal.tsx`, which portals into `document.body` so it isn't trapped by the page's `.animate-slide-up` CSS transform (a transformed ancestor becomes the containing block for `position: fixed` — the bug behind "modals open in the middle of the page"). Don't hand-roll a `fixed inset-0` overlay.
-- **One named class vocabulary.** The recurring Tailwind strings (`.card`, `.field-input`, `.field-label`, `.btn`/`.btn-primary`/`.btn-secondary`) are defined once in `globals.css` `@layer components` and reused across every page; per-site padding/width/accent stays as inline utilities (which still override the component class because they sit in a later layer). Reuse them instead of re-pasting the raw utilities. Major JSX regions carry a `{/* ═══ Section: … ═══ */}` banner so they're easy to point at.
+- **One shared `Modal` for every popup**, now a thin wrapper over Base UI's `Dialog` — it portals into `document.body`, which is what keeps it out of any transformed ancestor's containing block (the bug behind "modals open in the middle of the page"; the app no longer has a transformed ancestor to trigger it, but the portal is what makes that a non-issue going forward too). Don't hand-roll a `fixed inset-0` overlay.
+- **UI primitives live in `frontend/src/components/ui/`** (shadcn/ui generated components over Base UI, not Radix). The old hand-rolled Tailwind class vocabulary (`.card`, `.field-input`, `.field-label`, `.btn*`, `.badge`) has been migrated to real components (`Card`, `Input`, `Label`, `Button`, `Badge`, plus `Select`/`Tabs`/`Checkbox`/`Command`/`Popover`/`DropdownMenu`/Sonner) — see [SHADCN-MIGRATION.md](SHADCN-MIGRATION.md) for the full record. Reuse the primitive, don't paste raw utilities or hand-roll a new one. Major JSX regions carry a `{/* ═══ Section: … ═══ */}` banner so they're easy to point at.
 - **Three hand-synced contracts** (OCR response shape — now a composite `captures[]` per photo — unit tables, nutrition scaling) are duplicated across languages and kept in sync by hand; each file says so.
-- **Frontend build targets pre-ES2015 iteration** — use `Array.from(...)`, never `[...set]`.
 - **Every "current price" query filters `deleted_at IS NULL`.**
 - **`consumed_at` is a naive local timestamp** — the client owns timezone handling.
 
@@ -220,5 +219,5 @@ scripts/       smoke-test.ps1 + .sh twins (the verification loop), manual-ai-tes
 .claude/       settings.json (hooks wiring the loop) + agents/ (the four subagents)
 CLAUDE.md      The living spec: invariants, gotchas, architecture
 ROADMAP.md     Candidate future features (shopping lists, weekly planner, …)
-SHADCN-MIGRATION.md  Living plan for the shadcn/ui restyle (phased, test-gated)
+SHADCN-MIGRATION.md  shadcn/ui restyle plan + record (phased, test-gated — Phase 3 shipped)
 ```
