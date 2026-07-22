@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Modal from '../../components/Modal';
+import { Label } from '../../components/ui/label';
 import StatusToast, { useToast } from '../../components/StatusToast';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -158,7 +159,7 @@ export default function Budget() {
 
         <div className="flex items-end gap-2 border-t border-white/5 pt-4">
           <div>
-            <label className="field-label">Monthly budget ($)</label>
+            <Label>Monthly budget ($)</Label>
             <input type="number" step="0.01" min="0" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
               placeholder="none" className="field-input w-40" />
           </div>
@@ -294,7 +295,7 @@ function ReceiptForm({ receipt, stores, onClose, onSaved, notify }: {
       <h3 className="text-sm font-bold text-white">{receipt ? 'Edit receipt' : 'Add receipt'}</h3>
       <div className="space-y-3">
         <div>
-          <label className="field-label">Store</label>
+          <Label>Store</Label>
           <select value={storeId} onChange={e => setStoreId(e.target.value)} className="field-input w-full">
             <option value="">— none —</option>
             {stores.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
@@ -302,16 +303,16 @@ function ReceiptForm({ receipt, stores, onClose, onSaved, notify }: {
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="field-label">Total ($)</label>
+            <Label>Total ($)</Label>
             <input type="number" step="0.01" min="0" value={total} onChange={e => setTotal(e.target.value)} placeholder="0.00" className="field-input w-full" />
           </div>
           <div>
-            <label className="field-label">Purchased on</label>
+            <Label>Purchased on</Label>
             <input type="date" value={date} onChange={e => setDate(e.target.value)} className="field-input w-full" />
           </div>
         </div>
         <div>
-          <label className="field-label">Notes</label>
+          <Label>Notes</Label>
           <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="optional" className="field-input w-full" />
         </div>
       </div>

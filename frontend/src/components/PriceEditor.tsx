@@ -8,6 +8,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
+import { Label } from './ui/label';
 import { UNIT_OPTIONS, parseAmountInput, formatCanonicalUnitPrice } from '../lib/units';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -190,7 +191,7 @@ export default function PriceEditor({
           {/* A sale price is hidden from current-price views once this date passes. */}
           {draft.is_sale && (
             <div>
-              <label className="field-label">Sale ends</label>
+              <Label>Sale ends</Label>
               <input type="date" value={draft.sale_ends_at}
                 onChange={e => setDraft({ ...draft, sale_ends_at: e.target.value })}
                 className="field-input w-full" />

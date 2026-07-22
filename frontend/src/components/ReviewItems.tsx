@@ -6,6 +6,8 @@ import { bestCatalogMatch } from '../lib/match';
 import { nearestStore, GeoPoint } from '../lib/geo';
 import FoodDetailModal from './FoodDetailModal';
 import Modal from './Modal';
+import { Badge } from './ui/badge';
+import { Label } from './ui/label';
 import ScanImages from './ScanImages';
 import RawModelOutput, { ScanAttempt } from './RawModelOutput';
 
@@ -831,20 +833,20 @@ export default function ReviewItems({
       {receipt && (
         <div data-loc="review-items.receipt" className="panel p-4 flex flex-wrap items-end gap-4">
           <div>
-            <label className="field-label">Receipt total ($)</label>
+            <Label>Receipt total ($)</Label>
             <input type="number" step="0.01" min="0" value={receiptTotal}
               onChange={e => setReceiptTotal(e.target.value)} placeholder="0.00"
               className="field-input w-28" />
           </div>
           <div>
-            <label className="field-label">Purchased on</label>
+            <Label>Purchased on</Label>
             <input type="date" value={receiptDate}
               onChange={e => setReceiptDate(e.target.value)} className="field-input w-40" />
           </div>
           <p className="text-[11px] text-slate-500 flex-1 min-w-48">
             Recorded as a spending row for <span className="text-slate-300">budget tracking</span> when you save. A blank total falls back to the sum of saved item prices.
           </p>
-          {receiptSaved && <span className="badge text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ recorded</span>}
+          {receiptSaved && <Badge variant="outline" className="text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ recorded</Badge>}
         </div>
       )}
 
@@ -869,8 +871,8 @@ export default function ReviewItems({
                   <div className="flex gap-3 items-start">
                     <div className="shrink-0 mt-0.5">
                       {item.reviewReason === 'new_product'
-                        ? <span className="badge text-[9px] text-violet-300 bg-violet-500/15 border-violet-500/25">NEW</span>
-                        : <span className="badge text-[9px] text-amber-300 bg-amber-500/15 border-amber-500/25">⚠ PRICE</span>}
+                        ? <Badge variant="outline" className="text-[9px] text-violet-300 bg-violet-500/15 border-violet-500/25">NEW</Badge>
+                        : <Badge variant="outline" className="text-[9px] text-amber-300 bg-amber-500/15 border-amber-500/25">⚠ PRICE</Badge>}
                     </div>
                     <div className="flex-1 space-y-1.5">
                       <input type="text" value={item.name} onChange={e => updateParsedItem(idx, 'name', e.target.value)}
@@ -926,7 +928,7 @@ export default function ReviewItems({
             {parsedItems.filter(it => it.isSale).length !== 1 ? 's' : ''} — hidden from the dashboard once expired.
           </span>
           <div className="flex items-center gap-2 ml-auto">
-            <label className="field-label mb-0">Set all sale end dates</label>
+            <Label className="mb-0">Set all sale end dates</Label>
             <input type="date" value={bulkSaleEnd || defaultSaleEnd}
               onChange={e => applySaleEndToAll(e.target.value)}
               className="field-input text-xs rounded-lg py-1 w-36" />
@@ -1090,9 +1092,9 @@ export default function ReviewItems({
                 </td>
                 <td className="py-2.5 text-center">
                   {!item.needsReview
-                    ? <span className="badge text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ OK</span>
+                    ? <Badge variant="outline" className="text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ OK</Badge>
                     : item.approved
-                    ? <span className="badge text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ Approved</span>
+                    ? <Badge variant="outline" className="text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ Approved</Badge>
                     : <button onClick={() => approveItem(idx)} className="badge text-[9px] text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20 transition">Approve</button>}
                 </td>
                 <td className="py-2.5 text-center">
@@ -1259,7 +1261,7 @@ export default function ReviewItems({
           })()}
 
           <div className="space-y-1">
-            <label className="field-label">Move its items to</label>
+            <Label>Move its items to</Label>
             <select value={reassignTo} onChange={e => setReassignTo(e.target.value)} disabled={removingStore}
               className="field-input w-full">
               <option value="">Leave unassigned (no store)</option>

@@ -11,6 +11,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import StatusToast, { useToast } from '../../components/StatusToast';
+import { Label } from '../../components/ui/label';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -114,7 +115,7 @@ export default function Settings() {
             <div className="panel p-4 space-y-3">
               <div className="flex flex-wrap items-end gap-3">
                 <div>
-                  <label className="field-label" htmlFor="sale-days">Custom duration (days)</label>
+                  <Label htmlFor="sale-days">Custom duration (days)</Label>
                   <input id="sale-days" type="number" min={1} max={365} value={days}
                     onChange={e => setDays(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') save(); }}

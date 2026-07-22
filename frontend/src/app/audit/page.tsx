@@ -17,6 +17,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import StatusToast, { useToast } from '../../components/StatusToast';
 import FoodDetailModal from '../../components/FoodDetailModal';
 import Modal from '../../components/Modal';
+import { Badge } from '../../components/ui/badge';
 import { NutritionFacts, formatCaloriesPer100 } from '../../lib/nutrition';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -277,12 +278,12 @@ export default function Audit() {
             <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mr-1">Tag selection</span>
             {tags.length === 0 && <span className="text-[11px] text-slate-600">No tags yet — create one under “Manage tags”.</span>}
             {tags.map(t => (
-              <span key={t.id} className="badge text-[10px] text-sky-300 bg-sky-500/10 border-sky-500/25 flex items-center gap-1 normal-case">
+              <Badge key={t.id} variant="outline" className="text-[10px] text-sky-300 bg-sky-500/10 border-sky-500/25 flex items-center gap-1 normal-case">
                 <button onClick={() => runBulk('tag', [t.id])} disabled={busy} title={`Add “${t.name}” to the ${selected.length} selected`}
                   className="hover:text-sky-100">{t.name}</button>
                 <button onClick={() => runBulk('untag', [t.id])} disabled={busy} title={`Remove “${t.name}” from the ${selected.length} selected`}
                   className="text-slate-500 hover:text-rose-400">✕</button>
-              </span>
+              </Badge>
             ))}
           </div>
         </div>
@@ -351,11 +352,11 @@ export default function Audit() {
                         {f.name}
                         {f.barcode && <span className="block text-[10px] text-slate-600 font-mono">{f.barcode}</span>}
                       </td>
-                      <td className="py-2"><span className="badge text-[9px] text-slate-300 bg-white/5 border-white/10">{f.category}</span></td>
+                      <td className="py-2"><Badge variant="outline" className="text-[9px] text-slate-300 bg-white/5 border-white/10">{f.category}</Badge></td>
                       <td className="py-2">
                         <span className="flex flex-wrap gap-1">
                           {(f.tags ?? []).map(t => (
-                            <span key={t.id} className="badge text-[9px] normal-case text-sky-300 bg-sky-500/10 border-sky-500/25">{t.name}</span>
+                            <Badge key={t.id} variant="outline" className="text-[9px] normal-case text-sky-300 bg-sky-500/10 border-sky-500/25">{t.name}</Badge>
                           ))}
                         </span>
                       </td>
@@ -625,11 +626,11 @@ function AutoTagModal({ foodIds, tags, onClose, onCreateTag, onApplied, notify }
                     <span className="flex flex-wrap gap-1 justify-end shrink-0">
                       {s.tag_ids.length === 0 && <span className="text-[10px] text-slate-600">no tag</span>}
                       {s.tag_ids.map(tid => (
-                        <span key={tid} className="badge text-[9px] normal-case text-sky-300 bg-sky-500/10 border-sky-500/25 flex items-center gap-1">
+                        <Badge key={tid} variant="outline" className="text-[9px] normal-case text-sky-300 bg-sky-500/10 border-sky-500/25 flex items-center gap-1">
                           {tagById.get(tid)?.name ?? tid}
                           <button onClick={() => dropTag(s.food_id, tid)} title="Don't apply this tag"
                             className="text-slate-500 hover:text-rose-400">✕</button>
-                        </span>
+                        </Badge>
                       ))}
                     </span>
                   </div>
@@ -714,7 +715,7 @@ function MergeModal({ foods, onClose, onMerged, notify }: {
                 {f.nutrition ? ` · ${formatCaloriesPer100(f.nutrition, f.unit) ?? `${Math.round(Number(f.nutrition.calories))} kcal`}` : ''}
               </span>
             </span>
-            {targetId === f.id && <span className="badge text-[9px] text-amber-200 bg-amber-500/20 border-amber-500/40 shrink-0">survivor</span>}
+            {targetId === f.id && <Badge variant="outline" className="text-[9px] text-amber-200 bg-amber-500/20 border-amber-500/40 shrink-0">survivor</Badge>}
           </label>
         ))}
       </div>
@@ -863,7 +864,7 @@ function FindDuplicatesModal({ foods, onClose, onMerged, notify }: {
                         onChange={() => setSurvivor(idx, f.id)} className="accent-amber-500 cursor-pointer shrink-0" />
                       <span className="text-xs text-slate-200 flex-1 min-w-0 truncate">{f.name}</span>
                       {g.survivorId === f.id
-                        ? <span className="badge text-[9px] text-amber-200 bg-amber-500/20 border-amber-500/40 shrink-0">survivor</span>
+                        ? <Badge variant="outline" className="text-[9px] text-amber-200 bg-amber-500/20 border-amber-500/40 shrink-0">survivor</Badge>
                         : <button onClick={(e) => { e.preventDefault(); dropFood(idx, f.id); }} title="Remove from this group"
                             className="text-slate-500 hover:text-rose-400 text-xs shrink-0">✕</button>}
                     </label>

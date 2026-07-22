@@ -11,6 +11,7 @@ import { NutritionFacts, nutrientsPer100 } from '../lib/nutrition';
 import PriceEditor, { EditablePriceLog } from './PriceEditor';
 import MacroEditor from './MacroEditor';
 import Modal from './Modal';
+import { Badge } from './ui/badge';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -156,7 +157,7 @@ export default function FoodDetailModal({
         ) : (
           <>
             <div>
-              <span className="badge text-[10px] text-violet-400 bg-violet-500/10 border-violet-500/20">{food.category}</span>
+              <Badge variant="outline" className="text-[10px] text-violet-400 bg-violet-500/10 border-violet-500/20">{food.category}</Badge>
               <h2 className="text-2xl font-extrabold text-white mt-1.5">{food.name}</h2>
               <p className="text-xs text-slate-400 mt-1">Barcode: {food.barcode || 'N/A'}</p>
             </div>

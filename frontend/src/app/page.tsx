@@ -7,6 +7,8 @@ import { canonicalUnitPrice, normalizeUnit } from '../lib/units';
 import PriceEditor from '../components/PriceEditor';
 import MacroEditor from '../components/MacroEditor';
 import Modal from '../components/Modal';
+import { Badge } from '../components/ui/badge';
+import { Label } from '../components/ui/label';
 import FoodIconPicker from '../components/FoodIconPicker';
 
 // Interfaces based on database schema
@@ -661,7 +663,7 @@ export default function Dashboard() {
             
             <form onSubmit={handleTriggerScraper} className="space-y-3 pt-2">
               <div>
-                <label className="field-label">Target Supermarket</label>
+                <Label>Target Supermarket</Label>
                 <select 
                   value={scrapeRequest.storeId} 
                   onChange={(e) => setScrapeRequest({ ...scrapeRequest, storeId: e.target.value })}
@@ -675,7 +677,7 @@ export default function Dashboard() {
               </div>
 
               <div>
-                <label className="field-label">Flyer Search <span className="normal-case font-normal text-slate-500">(optional)</span></label>
+                <Label>Flyer Search <span className="normal-case font-normal text-slate-500">(optional)</span></Label>
                 <input
                   type="text"
                   value={scrapeRequest.query}
@@ -686,7 +688,7 @@ export default function Dashboard() {
               </div>
 
               <div>
-                <label className="field-label">Postal Code <span className="normal-case font-normal text-slate-500">(optional)</span></label>
+                <Label>Postal Code <span className="normal-case font-normal text-slate-500">(optional)</span></Label>
                 <input
                   type="text"
                   value={scrapeRequest.postalCode}
@@ -720,7 +722,7 @@ export default function Dashboard() {
 
             <form onSubmit={handleTriggerCocowest} className="space-y-3 pt-2">
               <div>
-                <label className="field-label">Store</label>
+                <Label>Store</Label>
                 <select
                   value={cocowestRequest.storeId}
                   onChange={(e) => setCocowestRequest({ ...cocowestRequest, storeId: e.target.value })}
@@ -734,7 +736,7 @@ export default function Dashboard() {
               </div>
 
               <div>
-                <label className="field-label">cocowest.ca Post URL</label>
+                <Label>cocowest.ca Post URL</Label>
                 <input
                   type="text"
                   value={cocowestRequest.url}
@@ -978,12 +980,12 @@ export default function Dashboard() {
                             <div className="flex items-center gap-1.5">
                               <span className="font-semibold text-white truncate max-w-[240px]">{food.name}</span>
                               {hasSale && (
-                                <span className="badge text-[9px] text-amber-400 bg-amber-500/10 border-amber-500/20 shrink-0">sale</span>
+                                <Badge variant="outline" className="text-[9px] text-amber-400 bg-amber-500/10 border-amber-500/20 shrink-0">sale</Badge>
                               )}
                               {Number(food.usable_pct) !== 100 && (
-                                <span className="badge text-[9px] text-amber-400 bg-amber-500/10 border-amber-500/20 shrink-0" title="Usable portion of what you buy">
+                                <Badge variant="outline" className="text-[9px] text-amber-400 bg-amber-500/10 border-amber-500/20 shrink-0" title="Usable portion of what you buy">
                                   {Number(food.usable_pct)}%
-                                </span>
+                                </Badge>
                               )}
                             </div>
                             <div className="text-[10px] text-slate-500 truncate max-w-[240px] sm:hidden">{food.category}</div>
@@ -991,7 +993,7 @@ export default function Dashboard() {
 
                           {/* Category */}
                           <td className="px-3 hidden sm:table-cell">
-                            <span className="badge text-[9px] text-violet-400 bg-violet-500/10 border-violet-500/20">{food.category}</span>
+                            <Badge variant="outline" className="text-[9px] text-violet-400 bg-violet-500/10 border-violet-500/20">{food.category}</Badge>
                           </td>
 
                           {/* Best (cheapest canonical) price */}
@@ -1106,9 +1108,9 @@ export default function Dashboard() {
                 )}
               </button>
               <div className="min-w-0">
-                <span className="badge text-[10px] text-violet-400 bg-violet-500/10 border-violet-500/20">
+                <Badge variant="outline" className="text-[10px] text-violet-400 bg-violet-500/10 border-violet-500/20">
                   {selectedFoodDetails.category}
-                </span>
+                </Badge>
                 <h2 className="text-2xl font-extrabold text-white mt-1.5">{selectedFoodDetails.name}</h2>
                 <p className="text-xs text-slate-400 mt-1">Barcode: {selectedFoodDetails.barcode || 'N/A'}</p>
               </div>
