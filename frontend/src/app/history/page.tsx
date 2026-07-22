@@ -5,6 +5,7 @@ import { formatUnitPrice } from '../../lib/units';
 import PriceEditor from '../../components/PriceEditor';
 import { Card } from '../../components/ui/card';
 import { useToast } from '../../components/StatusToast';
+import { Checkbox } from '../../components/ui/checkbox';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -119,7 +120,7 @@ export default function History() {
           <p className="text-sm text-slate-400 mt-1">Every logged price. Edit or delete entries — all changes are revertible below.</p>
         </div>
         <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-          <input type="checkbox" checked={includeDeleted} onChange={e => setIncludeDeleted(e.target.checked)} className="accent-violet-500" />
+          <Checkbox checked={includeDeleted} onCheckedChange={c => setIncludeDeleted(c === true)} />
           Show deleted
         </label>
       </div>

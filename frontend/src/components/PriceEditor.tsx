@@ -11,6 +11,7 @@ import Modal from './Modal';
 import { Button } from './ui/button';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Checkbox } from './ui/checkbox';
 import { UNIT_OPTIONS, parseAmountInput, formatCanonicalUnitPrice } from '../lib/units';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -189,7 +190,7 @@ export default function PriceEditor({
           </div>
           <div className="flex items-center justify-between pt-1">
             <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-              <input type="checkbox" checked={draft.is_sale} onChange={e => setDraft({ ...draft, is_sale: e.target.checked })} className="accent-amber-500" />
+              <Checkbox checked={draft.is_sale} onCheckedChange={c => setDraft({ ...draft, is_sale: c === true })} />
               On sale
             </label>
             {preview && <span className="text-xs font-mono text-emerald-400">{preview}</span>}

@@ -21,6 +21,7 @@ import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
+import { Checkbox } from '../../components/ui/checkbox';
 import { NutritionFacts, formatCaloriesPer100 } from '../../lib/nutrition';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -304,8 +305,8 @@ export default function Audit() {
               <thead>
                 <tr className="border-b border-white/5 text-slate-500">
                   <th className="py-2 w-8">
-                    <input type="checkbox" checked={allSelected} onChange={toggleAll}
-                      title="Select all filtered" className="accent-violet-500 cursor-pointer" />
+                    <Checkbox checked={allSelected} onCheckedChange={toggleAll}
+                      title="Select all filtered" className="cursor-pointer" />
                   </th>
                   <th className="py-2 w-12"></th>
                   <th className="py-2">Name</th>
@@ -324,10 +325,10 @@ export default function Audit() {
                       onClick={e => onRowClick(index, e)}
                       className={`border-b border-white/5 cursor-pointer transition ${checked ? 'bg-violet-500/10' : 'hover:bg-white/5'}`}>
                       <td className="py-2">
-                        <input type="checkbox" checked={checked} readOnly
-                          onClick={e => e.stopPropagation()}
-                          onChange={() => setSelected(prev => (prev.includes(f.id) ? prev.filter(x => x !== f.id) : prev.concat(f.id)))}
-                          className="accent-violet-500 cursor-pointer" />
+                        <Checkbox checked={checked}
+                          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                          onCheckedChange={() => setSelected(prev => (prev.includes(f.id) ? prev.filter(x => x !== f.id) : prev.concat(f.id)))}
+                          className="cursor-pointer" />
                       </td>
                       <td className="py-2">
                         {f.display_image_id != null ? (
@@ -619,9 +620,9 @@ function AutoTagModal({ foodIds, tags, onClose, onCreateTag, onApplied, notify }
                 const skip = skipped.includes(s.food_id);
                 return (
                   <div key={s.food_id} className={`flex items-center gap-2 px-3 py-2 ${skip ? 'opacity-40' : ''}`}>
-                    <input type="checkbox" checked={!skip}
-                      onChange={() => setSkipped(prev => (skip ? prev.filter(x => x !== s.food_id) : prev.concat(s.food_id)))}
-                      className="accent-violet-500 cursor-pointer shrink-0" />
+                    <Checkbox checked={!skip}
+                      onCheckedChange={() => setSkipped(prev => (skip ? prev.filter(x => x !== s.food_id) : prev.concat(s.food_id)))}
+                      className="cursor-pointer shrink-0" />
                     <span className="text-xs text-slate-200 flex-1 min-w-0 truncate">{s.food_name}</span>
                     <span className="flex flex-wrap gap-1 justify-end shrink-0">
                       {s.tag_ids.length === 0 && <span className="text-[10px] text-slate-600">no tag</span>}

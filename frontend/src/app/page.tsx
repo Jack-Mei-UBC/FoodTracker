@@ -13,6 +13,7 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { useToast } from '../components/StatusToast';
+import { Checkbox } from '../components/ui/checkbox';
 import FoodIconPicker from '../components/FoodIconPicker';
 
 // Interfaces based on database schema
@@ -841,11 +842,11 @@ export default function Dashboard() {
             {/* Quick filters the card grid couldn't express */}
             <div className="flex items-center gap-3 shrink-0">
               <label className="flex items-center gap-1.5 text-[11px] text-slate-400 cursor-pointer select-none whitespace-nowrap">
-                <input type="checkbox" checked={onlyPriced} onChange={e => setOnlyPriced(e.target.checked)} className="accent-violet-500" />
+                <Checkbox checked={onlyPriced} onCheckedChange={c => setOnlyPriced(c === true)} />
                 Has price
               </label>
               <label className="flex items-center gap-1.5 text-[11px] text-slate-400 cursor-pointer select-none whitespace-nowrap">
-                <input type="checkbox" checked={onlySale} onChange={e => setOnlySale(e.target.checked)} className="accent-amber-500" />
+                <Checkbox checked={onlySale} onCheckedChange={c => setOnlySale(c === true)} />
                 On sale
               </label>
             </div>

@@ -12,6 +12,7 @@ import { Button } from './ui/button';
 import { Card } from './ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { Checkbox } from './ui/checkbox';
 import ScanImages from './ScanImages';
 import RawModelOutput, { ScanAttempt } from './RawModelOutput';
 
@@ -1081,9 +1082,8 @@ export default function ReviewItems({
                   <div className="flex items-center gap-2">
                     <label className="flex items-center gap-1 cursor-pointer select-none shrink-0"
                       title="Mark this as a promotional price that expires">
-                      <input type="checkbox" checked={item.isSale ?? false}
-                        onChange={e => setItemSale(idx, e.target.checked)}
-                        className="accent-rose-500" />
+                      <Checkbox checked={item.isSale ?? false}
+                        onCheckedChange={c => setItemSale(idx, c === true)} />
                       <span className={item.isSale ? 'text-rose-300 font-semibold' : 'text-slate-500'}>sale</span>
                     </label>
                     {item.isSale && (
@@ -1228,8 +1228,7 @@ export default function ReviewItems({
           </p>
           {openReviewCount > 1 && (
             <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
-              <input type="checkbox" checked={applyToAll} onChange={e => setApplyToAll(e.target.checked)}
-                className="accent-violet-500" />
+              <Checkbox checked={applyToAll} onCheckedChange={c => setApplyToAll(c === true)} />
               Apply to all {openReviewCount} open reviews
             </label>
           )}

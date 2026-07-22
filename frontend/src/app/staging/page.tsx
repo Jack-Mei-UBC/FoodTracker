@@ -13,6 +13,7 @@ import ImageCropper from '../../components/ImageCropper';
 import { Button } from '../../components/ui/button';
 import { useToast } from '../../components/StatusToast';
 import { Card } from '../../components/ui/card';
+import { Checkbox } from '../../components/ui/checkbox';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -144,8 +145,7 @@ export default function Staging() {
               Send all for processing ({jobs.length})
             </button>
             <label className="flex items-center gap-2 text-[11px] text-slate-400 cursor-pointer select-none" title="Let the model pool use paid vision models (higher accuracy, token cost) for jobs sent from this page">
-              <input type="checkbox" checked={usePaid} onChange={e => setUsePaid(e.target.checked)}
-                className="accent-violet-500" />
+              <Checkbox checked={usePaid} onCheckedChange={c => setUsePaid(c === true)} />
               Use paid models (higher accuracy)
             </label>
           </div>
