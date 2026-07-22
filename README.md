@@ -1,10 +1,34 @@
 # FoodTracker
 
+![FoodTracker](docs/banner.svg)
+
+[![smoke](https://github.com/Jack-Mei-UBC/FoodTracker/actions/workflows/smoke.yml/badge.svg)](https://github.com/Jack-Mei-UBC/FoodTracker/actions/workflows/smoke.yml)
+&nbsp;![Next.js](https://img.shields.io/badge/Next.js-14-000?logo=next.js)
+&nbsp;![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6?logo=typescript&logoColor=white)
+&nbsp;![FastAPI](https://img.shields.io/badge/FastAPI-Python%203.12-009688?logo=fastapi&logoColor=white)
+&nbsp;![Postgres](https://img.shields.io/badge/Postgres-15-4169e1?logo=postgresql&logoColor=white)
+&nbsp;![Docker](https://img.shields.io/badge/Docker-compose-2496ed?logo=docker&logoColor=white)
+&nbsp;![License](https://img.shields.io/badge/License-MIT-a78bfa)
+
 **Grocery price-intelligence + calorie tracking, built as a polyglot microservice stack — and developed with a disciplined agentic loop.**
 
 FoodTracker turns photos of receipts and shelf tags into structured price data, tracks prices across stores, and doubles as a nutrition diary (with USDA FoodData Central lookup). It's a real, running system: six containers, three languages, a human-in-the-loop OCR pipeline, and a full audit/revert trail on every price mutation.
 
 This README covers both **how the system works** and **how it's built** — the second half describes the agent loop used to develop it, which is the part I'm most deliberate about.
+
+---
+
+## Screenshots
+
+> Captured against the seeded dev stack — see [`docs/screenshots/CAPTURE.md`](docs/screenshots/CAPTURE.md) to regenerate.
+
+| Dashboard — sortable catalog, canonical per-kg prices | Price history — trend + per-serving & per-100 |
+|---|---|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Price history](docs/screenshots/price-history.png) |
+| **Inbox — OCR review, crop beside original, raw model output** | **Audit — bulk clean-up, tags, merge** |
+| ![Inbox review](docs/screenshots/inbox-review.png) | ![Audit](docs/screenshots/audit.png) |
+| **Meals — live macro & cost preview** | **Budget — spend vs. target, by store & month** |
+| ![Meals](docs/screenshots/meals.png) | ![Budget](docs/screenshots/budget.png) |
 
 ---
 
@@ -123,20 +147,29 @@ This project is built with [Claude Code](https://claude.com/claude-code) as the 
 flowchart TD
   Spec[CLAUDE.md<br/>invariants, gotchas, hand-synced contracts] --> Plan
   Plan[Agent plans a change] --> Impl[Agent implements across services]
-  Impl --> Hook{Stop hook}
-  Hook -->|smoke-test.ps1| Verify[Read-only checks vs the running stack]
+  Impl -.->|checkpoints| Agents[Subagents<br/>contract-guard · invariant-reviewer · verifier]
+  Agents -.-> Impl
+  Impl --> Hook{Stop hooks}
+  Hook -->|tsc + smoke-test.ps1| Verify[Typecheck + read-only checks vs the running stack]
   Verify -->|regression| Impl
-  Verify -->|green| Human[Human review + OCR approval]
+  Verify -->|green| Gate{Push gate}
+  Gate -->|big diff, no doc updates| DocSync[doc-sync agent rectifies the docs]
+  DocSync --> Gate
+  Gate -->|pass| Human[Human review + OCR approval]
   Human --> Spec
 ```
 
 **1. `CLAUDE.md` is the living spec.** It's not a stale doc — it encodes the invariants an agent (or a new contributor) will otherwise get wrong: the three hand-synced cross-language contracts, the "schema.sql only runs on a fresh volume" trap, the pre-ES2015 iteration constraint in the frontend build, and the architectural rules (e.g. *there are exactly two input surfaces for price and macros; reuse them, don't fork*). Every non-obvious constraint learned during development is written back here, so the next change starts from accumulated context instead of rediscovering the same landmines.
 
-**2. Every turn is verified.** A `Stop` hook (`.claude/settings.json`) runs `scripts/smoke-test.ps1` when the agent finishes a turn. The script hits the live backend and frontend with read-only checks — API contracts, the M:N join reads, diary micronutrient sums, USDA proxy, and every page returning 200. It's deliberately safe to run on a loop: it *skips* when the stack is down and only fails on a real regression, feeding the failure back to the agent to fix. No green, no done.
+**2. Every turn is verified.** Two `Stop` hooks (`.claude/settings.json`) run when the agent finishes a turn: a per-service `tsc --noEmit` for any service with uncommitted changes, then `scripts/smoke-test.ps1` — read-only checks against the live backend and frontend (API contracts, the M:N join reads, diary micronutrient sums, USDA proxy, every page returning 200). It's deliberately safe to run on a loop: it *skips* when the stack is down (loudly — "NOTHING WAS VERIFIED", with a `STRICT=1` mode that fails instead, which CI uses) and only fails on a real regression, feeding the failure back to the agent to fix. No green, no done.
 
-**3. Humans stay in the loop where it matters.** OCR is treated as an ingestion *supplement*, never an oracle: extracted items always pass through a review-and-approve step before they touch the database. The agent builds the pipeline; a person confirms the data.
+**3. Guardrails are enforced, not remembered.** A `PreToolUse` hook (`scripts/hooks/pre-bash-guard.ps1`) denies state-destroying commands outright — `docker compose down -v` (the Postgres volume *is* the price history), `docker volume rm`, force-pushes, destructive SQL — and a **doc-sync push gate** blocks pushing a large diff that touches no documentation until the docs are rectified or the bypass is used deliberately. The rules in CLAUDE.md are also wired into the harness, so an agent can't drift past them by accident.
 
-**4. Single sources of truth over copy-paste.** Recurring logic is consolidated so a change lands in one place: two shared popup components for all price/macros entry (`PriceEditor`, `MacroEditor`), one `NUTRIENT_FIELDS` array driving both schema and SQL, one fuzzy matcher, one unit-normalization table per side of the wire. Where a contract *must* be duplicated across languages, it's labeled in-file and listed in `CLAUDE.md`.
+**4. Specialized subagents are checkpoints of the loop** (`.claude/agents/`): **contract-guard** re-verifies the hand-synced cross-language contract pairs after either side changes; **invariant-reviewer** reads the branch diff against CLAUDE.md's invariants before a change is called done; **doc-sync** rectifies CLAUDE.md/README/the migration plan against the diff before a PR (it's what the push gate demands); **verifier** runs the full ladder — typecheck ×3, STRICT smoke, Playwright, and the static-export build gate — before a merge. Each is scoped to the minimum tools it needs (the reviewers are read-only).
+
+**5. Humans stay in the loop where it matters.** OCR is treated as an ingestion *supplement*, never an oracle: extracted items always pass through a review-and-approve step before they touch the database. The same rule applies to every LLM surface — meal drafts, auto-tagging, duplicate-merge suggestions are all unsaved drafts until a person approves them. The agent builds the pipeline; a person confirms the data.
+
+**6. Single sources of truth over copy-paste.** Recurring logic is consolidated so a change lands in one place: two shared popup components for all price/macros entry (`PriceEditor`, `MacroEditor`), one `NUTRIENT_FIELDS` array driving both schema and SQL, one fuzzy matcher, one unit-normalization table per side of the wire. Where a contract *must* be duplicated across languages, it's labeled in-file and listed in `CLAUDE.md`.
 
 The result is a loop where the agent can make cross-cutting changes (a new nutrient touches Postgres, Express, and two React surfaces) and immediately know whether it broke anything.
 
@@ -153,7 +186,9 @@ powershell -File scripts/smoke-test.ps1
 
 It gates on backend health, then asserts the foods/diary/goals/efficiency endpoints, the join-table reads, micronutrient aggregation, the scraper contract (unknown-store 404 + the `scrape-jobs` progress feed), the budget/receipts contract (summary shape + negative-total 400), the USDA lookup, and every page. Exit `0` = green, `2` = regression, and it no-ops when the stack isn't running.
 
-The same checks run in **CI** (`.github/workflows/smoke.yml`) via a portable bash twin, `scripts/smoke-test.sh`, so the "every change is verified" guarantee holds for outside contributors too — not just on my machine. CI boots only the services the checks need (`db`, `redis`, `backend`, `frontend`) and runs in strict mode, so a stack that fails to boot is a failing build.
+The same checks run in **CI** (`.github/workflows/smoke.yml`) via a portable bash twin, `scripts/smoke-test.sh`, so the "every change is verified" guarantee holds for outside contributors too — not just on my machine. CI boots only the services the checks need (`db`, `redis`, `backend`, `frontend`) and runs in strict mode (`STRICT=1` — a stack that fails to boot is a failing build, never a silent skip).
+
+On top of the smoke net sits a **Playwright UI test net** (`frontend/e2e/` — [its README](frontend/e2e/README.md)): route smoke for every page plus style-agnostic *interaction contracts* (modal viewport-centering and stacked-Escape ordering, dashboard search/sort/filter, the per-100 kcal basis, the expired-sale rule), seeded from a deterministic fixture set inserted through the REST API. It's deliberately **not** wired to the per-turn Stop hook (too slow) — run it with the stack up: `docker compose up -d --wait`, then `npm run seed && npm run test:e2e` from `frontend/`.
 
 ---
 
@@ -179,8 +214,9 @@ frontend/      Next.js PWA (dashboard, meals, diary, scanner, staging, inbox, sc
 worker/        BullMQ consumer: Flipp + cocowest.ca flyer scrapers + OCR job runner
 ocr-service/   FastAPI vision-LLM extraction
 db/schema.sql  Idempotent schema + seed data
-scripts/       smoke-test.ps1 (the verification loop)
-.claude/       settings.json — the Stop hook wiring the loop
+scripts/       smoke-test.ps1 + .sh twins (the verification loop), manual-ai-tests.ps1, hooks/
+.claude/       settings.json (hooks wiring the loop) + agents/ (the four subagents)
 CLAUDE.md      The living spec: invariants, gotchas, architecture
 ROADMAP.md     Candidate future features (shopping lists, weekly planner, …)
+SHADCN-MIGRATION.md  Living plan for the shadcn/ui restyle (phased, test-gated)
 ```
