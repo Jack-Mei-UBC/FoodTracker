@@ -3,6 +3,7 @@ import './globals.css'
 import Link from 'next/link'
 import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
+import { Toaster } from "@/components/ui/sonner";
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'});
 
@@ -113,6 +114,8 @@ export default function RootLayout({
         <footer data-loc="layout.footer" className="py-6 text-center text-xs text-slate-600 border-t border-white/5 bg-black/20">
           <p>© {new Date().getFullYear()} FoodTracker Inc. Premium Grocery Price Scraping & Analysis Platform.</p>
         </footer>
+
+        <Toaster />
       </body>
     </html>
   )

@@ -10,7 +10,7 @@
 // prices override it per item during inbox review, or in the price editor.
 
 import React, { useState, useEffect, useCallback } from 'react';
-import StatusToast, { useToast } from '../../components/StatusToast';
+import { useToast } from '../../components/StatusToast';
 import { Label } from '../../components/ui/label';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
@@ -31,7 +31,7 @@ export default function Settings() {
   const [savedDays, setSavedDays] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const { statusMsg, notify } = useToast();
+  const { notify } = useToast();
 
   const load = useCallback(async () => {
     try {
@@ -79,7 +79,6 @@ export default function Settings() {
 
   return (
     <div data-loc="page.settings" className="space-y-8 max-w-3xl mx-auto">
-      <StatusToast statusMsg={statusMsg} />
 
       {/* ═══ Section: Header ═══ */}
       <div data-loc="settings.header">

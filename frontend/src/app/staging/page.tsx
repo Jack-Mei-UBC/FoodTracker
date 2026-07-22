@@ -11,6 +11,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import Modal from '../../components/Modal';
 import ImageCropper from '../../components/ImageCropper';
 import { Button } from '../../components/ui/button';
+import { useToast } from '../../components/StatusToast';
 import { Card } from '../../components/ui/card';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -29,7 +30,6 @@ export default function Staging() {
   const [jobs, setJobs] = useState<StagedJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   // Crop modal state.
   const [cropJob, setCropJob] = useState<StagedJob | null>(null);
   const [cropSrc, setCropSrc] = useState<string | null>(null);
@@ -39,10 +39,7 @@ export default function Staging() {
   // accuracy, token cost) for the jobs sent from this page.
   const [usePaid, setUsePaid] = useState(false);
 
-  const notify = (text: string, type: 'success' | 'error' = 'success') => {
-    setStatusMsg({ type, text });
-    setTimeout(() => setStatusMsg(null), 5000);
-  };
+  const { notify } = useToast();
 
   const load = useCallback(async () => {
     try {
@@ -133,12 +130,6 @@ export default function Staging() {
 
   return (
     <div data-loc="page.staging" className="space-y-8 max-w-5xl mx-auto">
-      {statusMsg && (
-        <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl shadow-xl ${
-          statusMsg.type === 'success' ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950/90 text-rose-300 border border-rose-500/30'}`}>
-          <span className="text-sm font-semibold">{statusMsg.text}</span>
-        </div>
-      )}
 
       {/* ═══ Section: Header ═══ */}
       <div data-loc="staging.header" className="flex items-start justify-between gap-4">

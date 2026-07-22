@@ -5,7 +5,7 @@ import type { ScanResponse } from '../../types/scan';
 import ReviewItems, { RawItem } from '../../components/ReviewItems';
 import RawModelOutput, { ScanAttempt } from '../../components/RawModelOutput';
 import ScanImages from '../../components/ScanImages';
-import StatusToast, { useToast } from '../../components/StatusToast';
+import { useToast } from '../../components/StatusToast';
 import { scanResultToRawItems, receiptCaptureData } from '../../lib/scanResult';
 import type { GeoPoint } from '../../lib/geo';
 import { Card } from '../../components/ui/card';
@@ -69,7 +69,7 @@ export default function Inbox() {
   const [manualOverrideIds, setManualOverrideIds] = useState<Set<number>>(new Set());
   // Expanded failed rows → their on-demand detail (images + per-model attempts).
   const [failedDetails, setFailedDetails] = useState<Map<number, FailedDetail>>(new Map());
-  const { statusMsg, notify } = useToast();
+  const { notify } = useToast();
 
   const load = useCallback(async () => {
     try {
@@ -218,7 +218,6 @@ export default function Inbox() {
 
   return (
     <div data-loc="page.inbox" className="space-y-8 max-w-5xl mx-auto">
-      <StatusToast statusMsg={statusMsg} />
 
       {/* ═══ Section: Header ═══ */}
       <div data-loc="inbox.header" className="flex items-start justify-between gap-4">

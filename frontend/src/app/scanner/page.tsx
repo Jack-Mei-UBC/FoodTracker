@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import StatusToast, { useToast } from '../../components/StatusToast';
+import { useToast } from '../../components/StatusToast';
 import { Button, buttonVariants } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
@@ -24,7 +24,7 @@ export default function Scanner() {
   const [targetStoreId, setTargetStoreId] = useState<string>('1');
   const [stores, setStores] = useState<Store[]>([]);
 
-  const { statusMsg, notify } = useToast();
+  const { notify } = useToast();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -114,7 +114,6 @@ export default function Scanner() {
 
   return (
     <div data-loc="page.scanner" className="space-y-8 max-w-4xl mx-auto relative">
-      <StatusToast statusMsg={statusMsg} />
 
       {/* ═══ Section: Header ═══ */}
       <div data-loc="scanner.header" className="border-b border-white/5 pb-3">

@@ -14,7 +14,7 @@
 // the same human-in-the-loop rule as OCR and AI meal drafting.
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import StatusToast, { useToast } from '../../components/StatusToast';
+import { useToast } from '../../components/StatusToast';
 import FoodDetailModal from '../../components/FoodDetailModal';
 import Modal from '../../components/Modal';
 import { Badge } from '../../components/ui/badge';
@@ -59,7 +59,7 @@ export default function Audit() {
   const [aiOpen, setAiOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);   // manual merge of selected foods
   const [dupOpen, setDupOpen] = useState(false);        // AI "find duplicates"
-  const { statusMsg, notify } = useToast();
+  const { notify } = useToast();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -175,7 +175,6 @@ export default function Audit() {
 
   return (
     <div data-loc="page.audit" className="space-y-6 max-w-6xl mx-auto">
-      <StatusToast statusMsg={statusMsg} />
 
       {/* ═══ Section: Header ═══ */}
       <div data-loc="audit.header" className="flex items-start justify-between gap-4">

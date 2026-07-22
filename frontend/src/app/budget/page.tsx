@@ -6,7 +6,7 @@ import { Label } from '../../components/ui/label';
 import { Button } from '../../components/ui/button';
 import { Card } from '../../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import StatusToast, { useToast } from '../../components/StatusToast';
+import { useToast } from '../../components/StatusToast';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -58,7 +58,7 @@ export default function Budget() {
   const [lightboxId, setLightboxId] = useState<number | null>(null);
   const [editing, setEditing] = useState<Receipt | null>(null);
   const [adding, setAdding] = useState(false);
-  const { statusMsg, notify } = useToast();
+  const { notify } = useToast();
 
   const load = useCallback(async () => {
     try {
@@ -115,7 +115,6 @@ export default function Budget() {
 
   return (
     <div data-loc="page.budget" className="space-y-8 max-w-5xl mx-auto">
-      <StatusToast statusMsg={statusMsg} />
 
       {/* ═══ Section: Header + month nav ═══ */}
       <div data-loc="budget.header" className="flex items-center justify-between gap-4">

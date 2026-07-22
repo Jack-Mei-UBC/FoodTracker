@@ -12,6 +12,7 @@ import { Label } from '../components/ui/label';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { useToast } from '../components/StatusToast';
 import FoodIconPicker from '../components/FoodIconPicker';
 
 // Interfaces based on database schema
@@ -163,14 +164,7 @@ export default function Dashboard() {
   const [densityDraft, setDensityDraft] = useState(''); // editing selected food's density (kg/L)
   const [dragAliasId, setDragAliasId] = useState<number | null>(null);
 
-  // Feedback notifications
-  const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
-
-  // Trigger notification toast
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 4000);
-  };
+  const { notify: showToast } = useToast();
 
   // Stores + price-efficiency spreads: fetched once on mount, not paginated.
   const fetchStoresAndEfficiency = async () => {
@@ -576,16 +570,6 @@ export default function Dashboard() {
 
   return (
     <div data-loc="page.dashboard" className="space-y-8 relative">
-
-      {/* Toast Notification */}
-      {notification && (
-        <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl shadow-xl flex items-center space-x-3 transition duration-300 transform translate-y-0 ${
-          notification.type === 'success' ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950/90 text-rose-300 border border-rose-500/30'
-        }`}>
-          <div className={`w-2 h-2 rounded-full ${notification.type === 'success' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
-          <span className="text-sm font-semibold">{notification.message}</span>
-        </div>
-      )}
 
       {/* ═══ Section: Hero banner ═══ */}
       <Card data-loc="dashboard.hero" className="rounded-3xl p-6 lg:p-10 relative overflow-hidden">
