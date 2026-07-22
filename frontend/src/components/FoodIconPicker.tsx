@@ -130,15 +130,12 @@ export default function FoodIconPicker({
   };
 
   return (
-    <Modal onClose={onClose} zClass="z-60" maxWidth="max-w-lg" panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4" dataLoc="modal.food-icon-picker">
-      <div className="flex items-center justify-between">
+    <Modal onClose={onClose} maxWidth="max-w-lg" dataLoc="modal.food-icon-picker">
+      <div>
         <h3 className="text-sm font-bold text-white">
           {step === 'pick' ? 'Choose Icon' : 'Crop Icon'}
           {foodName ? <span className="text-slate-400 font-normal"> — {foodName}</span> : null}
         </h3>
-        <button onClick={onClose} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-        </button>
       </div>
 
       {error && <div className="text-xs font-semibold text-rose-300 bg-rose-950/70 border border-rose-500/30 rounded-lg px-3 py-2">{error}</div>}

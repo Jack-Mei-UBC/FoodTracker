@@ -930,7 +930,7 @@ export default function MealsPage() {
 
       {/* ═══ Section: Log-to-diary popup (data-loc="modal.meal-log") ═══ */}
       {logMeal && (
-        <Modal onClose={() => setLogMeal(null)} maxWidth="max-w-sm" panelClassName="card p-5 space-y-4" dataLoc="modal.meal-log">
+        <Modal onClose={() => setLogMeal(null)} maxWidth="max-w-sm" dataLoc="modal.meal-log">
             <h3 className="text-sm font-bold text-white">Log “{logMeal.name}” to today's diary</h3>
             <p className="text-xs text-slate-400">
               One diary entry with the meal's per-serving nutrients × portions

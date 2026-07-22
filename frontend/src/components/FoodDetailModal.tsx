@@ -146,11 +146,7 @@ export default function FoodDetailModal({
 
   return (
     <>
-      <Modal onClose={onClose} zClass="z-60" maxWidth="max-w-2xl" panelClassName="bg-[#090d1a] border border-white/10 rounded-3xl p-6 lg:p-7 space-y-5" dataLoc="modal.food-detail">
-        <button onClick={onClose} className="absolute top-4 right-4 text-slate-500 hover:text-white p-2 rounded-full hover:bg-white/5 transition">
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-        </button>
-
+      <Modal onClose={onClose} maxWidth="max-w-2xl" dataLoc="modal.food-detail">
         {error && (
           <div className="text-xs font-semibold text-rose-300 bg-rose-950/70 border border-rose-500/30 rounded-lg px-3 py-2">{error}</div>
         )}
@@ -426,15 +422,11 @@ function ShareNutritionModal({ foodId, foodName, onClose, onShared, onError }: {
   };
 
   return (
-    <Modal onClose={onClose} zClass="z-70" maxWidth="max-w-md" dataLoc="modal.share-nutrition"
-      panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-3">
-      <div className="flex items-center justify-between">
+    <Modal onClose={onClose} maxWidth="max-w-md" dataLoc="modal.share-nutrition">
+      <div>
         <h3 className="text-sm font-bold text-white">Use another food&rsquo;s nutrition
           <span className="block text-[10px] text-slate-500 font-normal">“{foodName}” will share the picked food&rsquo;s facts — editing either updates both.</span>
         </h3>
-        <button onClick={onClose} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-        </button>
       </div>
       <input type="text" value={query} onChange={e => setQuery(e.target.value)} autoFocus
         placeholder="Search foods with nutrition…"

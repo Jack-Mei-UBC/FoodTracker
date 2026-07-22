@@ -290,8 +290,7 @@ function ReceiptForm({ receipt, stores, onClose, onSaved, notify }: {
   };
 
   return (
-    <Modal onClose={onClose} dataLoc="modal.receipt-form" maxWidth="max-w-md"
-      panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
+    <Modal onClose={onClose} dataLoc="modal.receipt-form" maxWidth="max-w-md">
       <h3 className="text-sm font-bold text-white">{receipt ? 'Edit receipt' : 'Add receipt'}</h3>
       <div className="space-y-3">
         <div>

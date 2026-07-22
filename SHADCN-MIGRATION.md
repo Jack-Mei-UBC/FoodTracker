@@ -17,7 +17,7 @@ regression. Do not start Phase 3 until Phase 1's Layer 2 contracts are green.
 | **0 — smoke repair + compose split** | ✅ **shipped** | All of F1–F7 landed. Smoke suite is 50/50 green and the two twins are back in sync. |
 | **1 — UI test net** | 🟡 **partly shipped** | Layers 1 & 2 exist (29 Playwright tests, green ×3 consecutive runs). Layer 3 (visual) and the Vitest secondary are **not started**. A real **flake source was found and fixed** — Playwright artifacts were being written into the container's bind mount, triggering mid-run recompiles. |
 | **2 — shadcn prerequisites** | ✅ **shipped** | Next 15 + Tailwind 4 in; tsconfig on ES2020; `cn()` + cva/clsx/tailwind-merge installed; `shadcn init -b base -p nova` run with **Base UI**; `rsc: false` corrected by hand. `shadcn add` verified end-to-end with Button. |
-| **3 — the migration** | 🟡 **started** | Global de-customisation done: bespoke palette, glassmorphism, custom scrollbars, `pulse-glow`, `animate-slide-up` and the webfonts are **deleted**; `globals.css` is 10.2 KB → ~6.2 KB with **zero hard-coded palette values**. Component swaps (M1–M8) not started. |
+| **3 — the migration** | 🟡 **started** | Global de-customisation done (bespoke palette/glassmorphism/webfonts deleted, `globals.css` 10.2 KB → 6.2 KB). **M1 shipped**: `Modal` → Base UI Dialog, `zClass`/`backdropClass`/`panelClassName` deleted (not just frozen), 11 duplicated close buttons removed, all 16 call sites updated, 6/6 modal + 29/29 full suite green. M2–M8 not started. |
 | **4 — docs & guardrails** | ⬜ not started | Folded into each Phase 3 step. |
 
 Phase 0's findings below are kept as the **historical record of why** the fixes
@@ -442,9 +442,9 @@ components are the seam. Call sites don't move, and each diff stays reviewable.
 
 | # | Step | Why here |
 |---|---|---|
-| M1 | **`Modal.tsx` internals → Radix Dialog**, props unchanged | Highest leverage in the whole plan. 16 call sites untouched; you gain focus trap, scroll lock, and ARIA that the hand-rolled version lacks. Delete the hand-rolled `modalStack` (Radix handles stacked dismissal). **Also:** 13 of 16 call sites pass a `panelClassName` that is *byte-identical to the component's own default plus `space-y-4`* — fold that into the default and delete all 13. Bake in the close button (price-history and MacroEditor implement it differently today). Watch: Radix's own Escape/outside-click semantics replace the current ones, and `animate-slide-up` must move to Radix `data-state` animations. |
+| M1 | ✅ **SHIPPED — `Modal.tsx` internals → Base UI Dialog, props NOT frozen** | Went further than the original plan: rather than freeze `{zClass, backdropClass, panelClassName}` and fold duplicates into a default, **all three were deleted from the API**, per the "drop custom, use defaults" directive — they were the exact one-off config the directive targets. Props are now `{onClose, children, maxWidth?, dataLoc?}`. All 16 call sites updated (mechanical: delete the redundant prop; TS caught every miss). The built-in close button also replaced 11 duplicated inline-SVG "×" buttons across those same call sites — one more piece of the bulk the directive called out. `modalStack` deleted; Base UI's `Dialog.Root` scopes focus/Escape/outside-press per instance and needs no manual z-index — **verified** by the stacked-Escape test passing with zero z-index props anywhere. Gate held: all 6 modal tests + 29/29 full suite green, unmodified. |
 | M2 | **Primitives: Button, Input, Label, Badge, Card** | Adopt shadcn's stock variants **as-is** — the look changes here, deliberately, and that's the step where the app starts looking like shadcn. Delete the corresponding `@layer components` class as each one is replaced. Collapses the 23 hand-pasted input strings and 26 `.field-input` uses into `<Input>`. |
-| M3 | **Select** (native `<select>` → Radix Select) | Store pickers, unit dropdowns. Markup changes substantially — expect snapshot churn. |
+| M3 | **Select** (native `<select>` → Base UI Select) | Store pickers, unit dropdowns. Markup changes substantially — expect snapshot churn. |
 | M4 | **Tabs** | Audit Active/Archived, meals Catalog/USDA. |
 | M5 | **Toast** — `StatusToast`/`useToast` → Sonner | Keep the `useToast()` call signature so call sites don't move. |
 | M6 | **Combobox (cmdk)** | The four catalog-search pickers (`ReviewItems` match, meals ingredient picker, `ShareNutritionModal`, `NutritionSearch`). Biggest UX win, biggest rewrite — do it last among components. |
@@ -464,10 +464,11 @@ reviewed each time.
 ## Phase 4 — Documentation and guardrails ⬜ NOT STARTED
 
 - **CLAUDE.md**: rewrite the shared-class-vocabulary section (now
-  `src/components/ui` + `cva` variants); update the Modal invariant (portaling is
-  now Radix's job, but **keep the explanation** — the transform/containing-block
-  gotcha is still *why* portaling is required); delete the es5 iteration gotcha;
-  update the `data-loc` section for forwarding through shadcn components; add a
+  `src/components/ui` + `cva` variants); ~~update the Modal invariant~~ **done in
+  M1** — portaling is now Base UI's job, explanation kept since the
+  transform/containing-block gotcha is still *why* it's required; ~~delete the
+  es5 iteration gotcha~~ **done in Phase 2**; update the `data-loc` section for
+  forwarding through shadcn components; add a
   new invariant: *UI primitives live in `src/components/ui` — don't hand-roll,
   and don't paste raw utilities for anything a primitive covers.*
 - **README.md**: the verification story now includes Playwright.

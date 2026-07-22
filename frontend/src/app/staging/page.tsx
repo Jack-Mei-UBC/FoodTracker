@@ -195,15 +195,12 @@ export default function Staging() {
 
       {/* ═══ Section: Crop modal ═══ */}
       {cropJob && cropSrc && (
-        <Modal onClose={closeCrop} dataLoc="modal.staging-crop" maxWidth="max-w-xl" panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
+        <Modal onClose={closeCrop} dataLoc="modal.staging-crop" maxWidth="max-w-xl">
+          <div>
             <h3 className="text-sm font-bold text-white">
               Crop image
               <span className="text-slate-400 font-normal"> — {cropJob.original_filename ?? `job #${cropJob.id}`}</span>
             </h3>
-            <button onClick={closeCrop} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
           </div>
           <p className="text-xs text-slate-500">Zoom and drag to isolate the receipt or price tag. The crop replaces what gets read; the full original is kept and linked.</p>
           <ImageCropper

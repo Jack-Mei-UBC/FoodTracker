@@ -140,14 +140,11 @@ export default function PriceEditor({
   const field = 'w-full bg-slate-950 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:outline-hidden focus:border-violet-500';
 
   return (
-    <Modal onClose={onClose} maxWidth="max-w-md" panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4" dataLoc="modal.price-editor">
-        <div className="flex items-center justify-between">
+    <Modal onClose={onClose} maxWidth="max-w-md" dataLoc="modal.price-editor">
+        <div>
           <h3 className="text-sm font-bold text-white">
             {isEdit ? 'Edit Price' : 'Add Price'}{foodName ? <span className="text-slate-400 font-normal"> — {foodName}</span> : null}
           </h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
         </div>
 
         {error && <div className="text-xs font-semibold text-rose-300 bg-rose-950/70 border border-rose-500/30 rounded-lg px-3 py-2">{error}</div>}

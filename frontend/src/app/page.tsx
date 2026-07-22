@@ -1084,20 +1084,9 @@ export default function Dashboard() {
       {selectedFoodDetails && (
         <Modal
           onClose={() => setSelectedFoodDetails(null)}
-          zClass="z-50"
           maxWidth="max-w-2xl"
-          panelClassName="bg-[#090d1a] border border-white/10 rounded-3xl p-6 lg:p-8 space-y-6"
           dataLoc="modal.price-history"
         >
-            <button 
-              onClick={() => setSelectedFoodDetails(null)}
-              className="absolute top-4 right-4 text-slate-500 hover:text-white p-2 rounded-full hover:bg-white/5 transition"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-
             <div className="flex items-start gap-4">
               {/* Food photo — same display_image_id the dashboard row shows;
                   click opens the shared icon picker, as it does in the table. */}

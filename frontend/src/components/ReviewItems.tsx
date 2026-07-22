@@ -1160,18 +1160,14 @@ export default function ReviewItems({
           the grid sits in an `overflow-x-auto` wrapper, which makes overflow-y
           `auto` too and would clip an absolutely-positioned list. */}
       {matchFor !== null && parsedItems[matchFor] && (
-        <Modal onClose={closeMatch} dataLoc="modal.match-item" maxWidth="max-w-lg"
-          panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
+        <Modal onClose={closeMatch} dataLoc="modal.match-item" maxWidth="max-w-lg">
+          <div>
             <h3 className="text-sm font-bold text-white">
               Match to an existing item
               <span className="block text-[10px] text-slate-500 font-normal">
                 Scanned as &ldquo;{parsedItems[matchFor].name || 'Unnamed item'}&rdquo; — link it to a catalog item instead of creating a duplicate.
               </span>
             </h3>
-            <button onClick={closeMatch} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
           </div>
 
           <input type="text" value={matchQuery} onChange={e => setMatchQuery(e.target.value)}
@@ -1218,8 +1214,7 @@ export default function ReviewItems({
 
       {/* ═══ Section: Store-change confirm ═══ */}
       {pendingStore !== null && (
-        <Modal onClose={() => setPendingStore(null)} dataLoc="modal.store-change" maxWidth="max-w-md"
-          panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
+        <Modal onClose={() => setPendingStore(null)} dataLoc="modal.store-change" maxWidth="max-w-md">
           <h3 className="text-sm font-bold text-white">Change store?</h3>
           <p className="text-xs text-slate-400">
             Set the store to <span className="text-white font-semibold">{stores.find(s => String(s.id) === pendingStore)?.name ?? 'this store'}</span> for this scan.
@@ -1242,8 +1237,7 @@ export default function ReviewItems({
 
       {/* ═══ Section: Store-remove confirm ═══ */}
       {deletingStore !== null && (
-        <Modal onClose={() => !removingStore && setDeletingStore(null)} dataLoc="modal.store-remove" maxWidth="max-w-md"
-          panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
+        <Modal onClose={() => !removingStore && setDeletingStore(null)} dataLoc="modal.store-remove" maxWidth="max-w-md">
           <h3 className="text-sm font-bold text-white">Remove store?</h3>
           <p className="text-xs text-slate-400">
             Remove <span className="text-white font-semibold">{deletingStore.name}</span> from the store list. Nothing is deleted — its prices, receipts and scans are reallocated below.

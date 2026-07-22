@@ -385,15 +385,11 @@ export default function Audit() {
 
       {/* ═══ Section: Manage-tags popup ═══ */}
       {tagPanelOpen && (
-        <Modal onClose={() => setTagPanelOpen(false)} dataLoc="modal.manage-tags" maxWidth="max-w-md"
-          panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
+        <Modal onClose={() => setTagPanelOpen(false)} dataLoc="modal.manage-tags" maxWidth="max-w-md">
+          <div>
             <h3 className="text-sm font-bold text-white">Tags
               <span className="block text-[10px] text-slate-500 font-normal">labels you can apply to many items</span>
             </h3>
-            <button onClick={() => setTagPanelOpen(false)} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
           </div>
           <form onSubmit={async e => { e.preventDefault(); if (await createTag(newTagName)) setNewTagName(''); }}
             className="flex gap-2">
@@ -552,17 +548,13 @@ function AutoTagModal({ foodIds, tags, onClose, onCreateTag, onApplied, notify }
   const willApply = (suggestions ?? []).filter(s => !skipped.includes(s.food_id) && s.tag_ids.length > 0).length;
 
   return (
-    <Modal onClose={onClose} dataLoc="modal.auto-tag" maxWidth="max-w-2xl"
-      panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
-      <div className="flex items-center justify-between">
+    <Modal onClose={onClose} dataLoc="modal.auto-tag" maxWidth="max-w-2xl">
+      <div>
         <h3 className="text-sm font-bold text-white">Auto-tag {foodIds.length} item{foodIds.length !== 1 ? 's' : ''} with AI
           <span className="block text-[10px] text-slate-500 font-normal">
             The model only suggests — nothing is saved until you press Apply.
           </span>
         </h3>
-        <button onClick={onClose} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-        </button>
       </div>
 
       {/* Step 1 — which tags may the model use */}
@@ -703,15 +695,11 @@ function MergeModal({ foods, onClose, onMerged, notify }: {
   };
 
   return (
-    <Modal onClose={onClose} dataLoc="modal.merge-foods" maxWidth="max-w-lg"
-      panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
-      <div className="flex items-center justify-between">
+    <Modal onClose={onClose} dataLoc="modal.merge-foods" maxWidth="max-w-lg">
+      <div>
         <h3 className="text-sm font-bold text-white">Merge {foods.length} items into one
           <span className="block text-[10px] text-slate-500 font-normal">Pick the survivor — the others are archived and all their data moves onto it.</span>
         </h3>
-        <button onClick={onClose} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-        </button>
       </div>
       <div className="panel rounded-lg max-h-72 overflow-y-auto divide-y divide-white/5">
         {foods.map(f => (
@@ -823,17 +811,13 @@ function FindDuplicatesModal({ foods, onClose, onMerged, notify }: {
   const groupCount = (groups ?? []).filter(g => g.foods.length >= 2).length;
 
   return (
-    <Modal onClose={onClose} dataLoc="modal.find-duplicates" maxWidth="max-w-2xl"
-      panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
-      <div className="flex items-center justify-between">
+    <Modal onClose={onClose} dataLoc="modal.find-duplicates" maxWidth="max-w-2xl">
+      <div>
         <h3 className="text-sm font-bold text-white">Find duplicate items with AI
           <span className="block text-[10px] text-slate-500 font-normal">
             The model only proposes groups — nothing merges until you press Apply.
           </span>
         </h3>
-        <button onClick={onClose} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-        </button>
       </div>
 
       {groups === null ? (
