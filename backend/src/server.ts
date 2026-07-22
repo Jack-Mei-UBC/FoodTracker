@@ -1252,6 +1252,21 @@ app.get('/api/scan-jobs', async (req: Request, res: Response) => {
               CASE WHEN j.result IS NULL THEN NULL ELSE j.result->>'type' END AS result_type,
               CASE
                 WHEN j.result IS NULL THEN 0
+                -- Composite scans carry captures[] (one entry per region found —
+                -- a mixed photo's receipt AND price_tag regions both count).
+                -- Mirrors worker.ts captureItemCount; keep the two in sync.
+                WHEN jsonb_typeof(j.result->'captures') = 'array' AND jsonb_array_length(j.result->'captures') > 0 THEN (
+                  SELECT COALESCE(SUM(
+                    CASE
+                      WHEN jsonb_typeof(cap->'data'->'items') = 'array' THEN jsonb_array_length(cap->'data'->'items')
+                      WHEN cap->>'type' = 'price_tag' AND (cap->'data'->>'name') IS NOT NULL THEN 1
+                      ELSE 0
+                    END
+                  ), 0)
+                  FROM jsonb_array_elements(j.result->'captures') AS cap
+                )
+                -- Rows written before captures[] existed: fall back to the
+                -- single-type shape.
                 WHEN j.result->>'type' = 'receipt' THEN jsonb_array_length(COALESCE(j.result->'data'->'items', '[]'::jsonb))
                 -- price_tag now carries items[] (several tags per photo); rows
                 -- written before that hold ONE flat tag, which still counts as 1.
@@ -1259,6 +1274,7 @@ app.get('/api/scan-jobs', async (req: Request, res: Response) => {
                   CASE WHEN jsonb_typeof(j.result->'data'->'items') = 'array'
                        THEN jsonb_array_length(j.result->'data'->'items')
                        ELSE 1 END
+                WHEN j.result->>'type' = 'barcode' THEN jsonb_array_length(COALESCE(j.result->'data'->'items', '[]'::jsonb))
                 ELSE 0
               END AS item_count
        FROM scan_jobs j

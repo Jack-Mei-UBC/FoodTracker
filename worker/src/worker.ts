@@ -408,8 +408,27 @@ async function fetchTagVocab(): Promise<string[] | null> {
 }
 
 // How many product lines a scan result carries — drives the quality gate below.
+// Items in ONE capture's data. receipt/price_tag/barcode all carry items[];
+// price_tag additionally tolerates the pre-multi-tag flat shape (one bare tag
+// object instead of items[]), counted as 1 so a legacy row isn't rejected as
+// "0 items" by the quality gate below.
+function captureItemCount(capture: any): number {
+  if (!capture || typeof capture !== 'object') return 0;
+  const data = capture.data;
+  if (Array.isArray(data?.items)) return data.items.length;
+  if (capture.type === 'price_tag' && data?.name) return 1;
+  return 0;
+}
+
+// How many product lines a scan result carries — drives the quality gate below.
+// Sums across every capture (a mixed photo's receipt + price_tag regions both
+// count) when `captures` is present; falls back to the pre-captures single-type
+// shape for scan_jobs.result rows written before that field existed.
 function resultItemCount(body: any): number {
   if (!body || typeof body !== 'object') return 0;
+  if (Array.isArray(body.captures) && body.captures.length > 0) {
+    return body.captures.reduce((sum: number, c: any) => sum + captureItemCount(c), 0);
+  }
   if (body.type === 'receipt') return Array.isArray(body?.data?.items) ? body.data.items.length : 0;
   // price_tag carries items[] (a shelf photo can show several tags). Rows/models
   // predating that returned ONE flat tag — count it as 1 so the quality gate
@@ -418,6 +437,7 @@ function resultItemCount(body: any): number {
     if (Array.isArray(body?.data?.items)) return body.data.items.length;
     return body?.data?.name ? 1 : 0;
   }
+  if (body.type === 'barcode') return Array.isArray(body?.data?.items) ? body.data.items.length : 0;
   return 0;
 }
 

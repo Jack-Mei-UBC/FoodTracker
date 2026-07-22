@@ -24,6 +24,14 @@ export interface RawItem {
   saleEndsAt?: string | null;
   amount?: number | null;
   amountUnit?: string | null;
+  // Catalog tag names the scan matched this item against (empty when none fit
+  // or no vocabulary was supplied). Applied via POST /api/foods/apply-tags on
+  // commit, same human-in-the-loop rule as the rest of the extracted fields.
+  tags?: string[];
+  // Which capture this row came from — a mixed scan (receipt + shelf tags in
+  // one photo) groups rows by this in the review grid. Absent on rows built
+  // before composite scans existed.
+  origin?: 'receipt' | 'price_tag' | 'barcode';
 }
 
 interface ScannedProduct {
