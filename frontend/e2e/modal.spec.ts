@@ -98,6 +98,11 @@ test('Escape closes only the TOPMOST modal when stacked', async ({ page }) => {
   await history.getByRole('button', { name: /add price/i }).click();
   const editor = page.locator('[data-loc="modal.price-editor"]');
   await expect(editor).toBeVisible();
+  // Base UI's open/close transition is 100ms (dialog.tsx `duration-100`); give
+  // the focus trap + open animation a moment to fully settle before sending a
+  // key event, or a slow CI runner can catch the editor's Dialog.Root mid-open
+  // and misattribute the Escape to both stacked dialogs at once.
+  await page.waitForTimeout(150);
 
   // First Escape closes ONLY the editor.
   await page.keyboard.press('Escape');
