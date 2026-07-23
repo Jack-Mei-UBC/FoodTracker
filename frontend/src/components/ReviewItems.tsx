@@ -6,6 +6,15 @@ import { bestCatalogMatch } from '../lib/match';
 import { nearestStore, GeoPoint } from '../lib/geo';
 import FoodDetailModal from './FoodDetailModal';
 import Modal from './Modal';
+import { Badge } from './ui/badge';
+import { Label } from './ui/label';
+import { Button } from './ui/button';
+import { Card } from './ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from './ui/dropdown-menu';
+import { Checkbox } from './ui/checkbox';
+import { Command, CommandInput, CommandList, CommandEmpty, CommandItem } from './ui/command';
+import { Input } from './ui/input';
 import ScanImages from './ScanImages';
 import RawModelOutput, { ScanAttempt } from './RawModelOutput';
 
@@ -227,8 +236,6 @@ export default function ReviewItems({
   // constrained to this vocabulary server-side (ocr-service drops anything the
   // model invented) — fetched here too so the user can add one the scan missed.
   const [catalogTags, setCatalogTags] = useState<{ id: number; name: string }[]>([]);
-  // Which row's tag picker is open (null = none).
-  const [tagPickerFor, setTagPickerFor] = useState<number | null>(null);
 
   const toast = (text: string, type: 'success' | 'error' = 'success') => notify?.(text, type);
 
@@ -358,7 +365,7 @@ export default function ReviewItems({
     if (storeId != null) setTargetStoreId(storeId);
   }, [storeId]);
 
-  // The store <select> only stages the change; the confirm popup applies it, so
+  // The store Select only stages the change; the confirm popup applies it, so
   // the user can opt to push it to every open review at once.
   const requestStoreChange = (newId: string) => {
     if (newId === targetStoreId) return;
@@ -749,7 +756,7 @@ export default function ReviewItems({
   if (parsedItems.length === 0 && !manualEntry && !hasRawText && !hasAttempts) return null;
 
   return (
-    <div data-loc="component.review-items" className="card rounded-3xl p-6 space-y-6 animate-slide-up">
+    <Card data-loc="component.review-items" className="rounded-3xl p-6 space-y-6">
       {label && <div className="text-xs font-semibold text-slate-400 truncate">{label}</div>}
 
       {/* Source photo(s) alongside the extracted items — the crop that was read
@@ -762,11 +769,11 @@ export default function ReviewItems({
             No items detected. Add them manually below, check the raw model output, or re-crop this scan.
           </p>
           {onRestage && (
-            <button onClick={onRestage}
-              className="shrink-0 text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1 hover:bg-amber-500/20 transition"
+            <Button onClick={onRestage}
+              variant="outline" size="sm" className="shrink-0 text-amber-300 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20 hover:text-amber-200"
               title="Send back to Staging to re-crop the original photo and run OCR again">
               Re-crop in Staging
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -790,12 +797,14 @@ export default function ReviewItems({
         <div className="space-y-1">
           <div className="flex items-center space-x-3 bg-slate-950 border border-white/5 p-2 rounded-xl">
             <span className="text-xs text-slate-500 font-semibold uppercase pl-1">Store Bought:</span>
-            <select value={targetStoreId} onChange={e => requestStoreChange(e.target.value)}
-              className="bg-transparent text-xs text-white focus:outline-none">
-              {stores.length > 0
-                ? stores.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)
-                : <><option value="1">SuperMarket Central</option><option value="2">Organic Grocer</option><option value="3">Value Foods</option></>}
-            </select>
+            <Select value={targetStoreId} onValueChange={v => v && requestStoreChange(v)}>
+              <SelectTrigger size="sm" className="border-none bg-transparent"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {stores.length > 0
+                  ? stores.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)
+                  : <><SelectItem value="1">SuperMarket Central</SelectItem><SelectItem value="2">Organic Grocer</SelectItem><SelectItem value="3">Value Foods</SelectItem></>}
+              </SelectContent>
+            </Select>
             <button type="button" onClick={() => { setAddingStore(v => !v); setNewStoreName(''); }}
               title="Create a new store"
               className="text-xs font-bold text-violet-300 hover:text-violet-200 px-1.5">
@@ -811,14 +820,13 @@ export default function ReviewItems({
           </div>
           {addingStore && (
             <div className="flex items-center gap-2 bg-slate-950 border border-white/5 p-2 rounded-xl">
-              <input autoFocus value={newStoreName} onChange={e => setNewStoreName(e.target.value)}
+              <Input autoFocus value={newStoreName} onChange={e => setNewStoreName(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); createStore(); } }}
                 placeholder="New store name" disabled={savingStore}
-                className="flex-1 bg-transparent text-xs text-white placeholder:text-slate-600 focus:outline-none" />
-              <button type="button" onClick={createStore} disabled={savingStore || !newStoreName.trim()}
-                className="btn btn-primary rounded-lg px-3 py-1 text-[11px] disabled:opacity-50">
+                className="flex-1 border-none bg-transparent" />
+              <Button type="button" onClick={createStore} disabled={savingStore || !newStoreName.trim()} size="sm">
                 {savingStore ? 'Adding…' : 'Add'}
-              </button>
+              </Button>
             </div>
           )}
           {geoMatchedStore && (
@@ -829,22 +837,22 @@ export default function ReviewItems({
 
       {/* Receipt total + date (budget tracking) — receipt scans only */}
       {receipt && (
-        <div data-loc="review-items.receipt" className="panel p-4 flex flex-wrap items-end gap-4">
+        <div data-loc="review-items.receipt" className="bg-muted/50 border rounded-lg p-4 flex flex-wrap items-end gap-4">
           <div>
-            <label className="field-label">Receipt total ($)</label>
-            <input type="number" step="0.01" min="0" value={receiptTotal}
+            <Label>Receipt total ($)</Label>
+            <Input type="number" step="0.01" min="0" value={receiptTotal}
               onChange={e => setReceiptTotal(e.target.value)} placeholder="0.00"
-              className="field-input w-28" />
+              className="w-28" />
           </div>
           <div>
-            <label className="field-label">Purchased on</label>
-            <input type="date" value={receiptDate}
-              onChange={e => setReceiptDate(e.target.value)} className="field-input w-40" />
+            <Label>Purchased on</Label>
+            <Input type="date" value={receiptDate}
+              onChange={e => setReceiptDate(e.target.value)} className="w-40" />
           </div>
-          <p className="text-[11px] text-slate-500 flex-1 min-w-[12rem]">
+          <p className="text-[11px] text-slate-500 flex-1 min-w-48">
             Recorded as a spending row for <span className="text-slate-300">budget tracking</span> when you save. A blank total falls back to the sum of saved item prices.
           </p>
-          {receiptSaved && <span className="badge text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ recorded</span>}
+          {receiptSaved && <Badge variant="outline" className="text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ recorded</Badge>}
         </div>
       )}
 
@@ -869,19 +877,19 @@ export default function ReviewItems({
                   <div className="flex gap-3 items-start">
                     <div className="shrink-0 mt-0.5">
                       {item.reviewReason === 'new_product'
-                        ? <span className="badge text-[9px] text-violet-300 bg-violet-500/15 border-violet-500/25">NEW</span>
-                        : <span className="badge text-[9px] text-amber-300 bg-amber-500/15 border-amber-500/25">⚠ PRICE</span>}
+                        ? <Badge variant="outline" className="text-[9px] text-violet-300 bg-violet-500/15 border-violet-500/25">NEW</Badge>
+                        : <Badge variant="outline" className="text-[9px] text-amber-300 bg-amber-500/15 border-amber-500/25">⚠ PRICE</Badge>}
                     </div>
                     <div className="flex-1 space-y-1.5">
                       <input type="text" value={item.name} onChange={e => updateParsedItem(idx, 'name', e.target.value)}
                         onBlur={() => matchNameForItem(idx)}
-                        className="bg-transparent text-white font-semibold text-sm focus:outline-none border-b border-transparent focus:border-violet-500 w-full" />
+                        className="bg-transparent text-white font-semibold text-sm focus:outline-hidden border-b border-transparent focus:border-violet-500 w-full" />
                       <div className="flex items-center gap-3 text-xs">
                         <div className="flex items-center gap-1">
                           <span className="text-slate-500">$</span>
                           <input type="number" step="0.01" value={item.price}
                             onChange={e => updateParsedItem(idx, 'price', parseFloat(e.target.value) || 0)}
-                            className="bg-transparent text-white font-mono focus:outline-none border-b border-transparent focus:border-violet-500 w-16" />
+                            className="bg-transparent text-white font-mono focus:outline-hidden border-b border-transparent focus:border-violet-500 w-16" />
                         </div>
                         {item.reviewReason === 'price_anomaly' && item.existingPrice != null && (
                           <span className="text-slate-500">
@@ -903,10 +911,10 @@ export default function ReviewItems({
                       </div>
                     </div>
                     <div className="flex gap-2 shrink-0">
-                      <button onClick={() => approveItem(idx)}
-                        className="text-[11px] bg-emerald-600/80 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg font-bold transition">Approve</button>
-                      <button onClick={() => removeItem(idx)}
-                        className="text-[11px] bg-white/5 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 px-3 py-1.5 rounded-lg font-bold transition">Remove</button>
+                      <Button onClick={() => approveItem(idx)} size="sm"
+                        className="bg-emerald-600/80 hover:bg-emerald-500">Approve</Button>
+                      <Button onClick={() => removeItem(idx)} variant="outline" size="sm"
+                        className="text-slate-400 hover:bg-rose-500/20 hover:text-rose-400">Remove</Button>
                     </div>
                   </div>
                 </div>
@@ -920,16 +928,16 @@ export default function ReviewItems({
       {/* A scan is usually one shop or one flyer, so its sale rows nearly always
           share an end date — set it once here instead of per row. */}
       {parsedItems.some(it => it.isSale) && (
-        <div data-loc="review-items.sale-expiry" className="panel p-3 flex flex-wrap items-center gap-3">
+        <div data-loc="review-items.sale-expiry" className="bg-muted/50 border rounded-lg p-3 flex flex-wrap items-center gap-3">
           <span className="text-xs text-slate-400">
             <span className="text-rose-300 font-semibold">{parsedItems.filter(it => it.isSale).length}</span> sale price
             {parsedItems.filter(it => it.isSale).length !== 1 ? 's' : ''} — hidden from the dashboard once expired.
           </span>
           <div className="flex items-center gap-2 ml-auto">
-            <label className="field-label mb-0">Set all sale end dates</label>
-            <input type="date" value={bulkSaleEnd || defaultSaleEnd}
+            <Label className="mb-0">Set all sale end dates</Label>
+            <Input type="date" value={bulkSaleEnd || defaultSaleEnd}
               onChange={e => applySaleEndToAll(e.target.value)}
-              className="field-input text-xs rounded-lg py-1 w-[9rem]" />
+              className="rounded-lg py-1 w-36" />
           </div>
           {parsedItems.some(it => it.isSale && !it.saleEndsAt) && (
             <span className="text-[10px] text-slate-500 w-full">
@@ -973,7 +981,7 @@ export default function ReviewItems({
                 <td className="py-2.5 pr-4">
                   <input type="text" value={item.name} onChange={e => updateParsedItem(idx, 'name', e.target.value)}
                     onBlur={() => matchNameForItem(idx)}
-                    className="bg-transparent text-white font-semibold focus:outline-none border-b border-transparent focus:border-violet-500 w-full" />
+                    className="bg-transparent text-white font-semibold focus:outline-hidden border-b border-transparent focus:border-violet-500 w-full" />
                   {item.matchedName && (
                     <span className="text-[10px] text-sky-400 flex items-center gap-1 mt-0.5">
                       <span className="text-slate-500">matched:</span>{item.matchedName}
@@ -1009,29 +1017,27 @@ export default function ReviewItems({
                       the vocabulary server-side; the picker only offers real ones. */}
                   <div className="flex flex-wrap items-center gap-1 mt-1">
                     {(item.tags ?? []).map(t => (
-                      <button key={t} type="button" onClick={() => toggleItemTag(idx, t)}
+                      <Badge key={t} variant="outline" render={<button type="button" />} onClick={() => toggleItemTag(idx, t)}
                         title="Remove this tag"
-                        className="badge text-[9px] normal-case text-teal-300 bg-teal-500/10 border-teal-500/20 hover:bg-rose-500/10 hover:text-rose-300 hover:border-rose-500/20 transition">
+                        className="text-[9px] normal-case text-teal-300 bg-teal-500/10 border-teal-500/20 hover:bg-rose-500/10 hover:text-rose-300 hover:border-rose-500/20 transition cursor-pointer">
                         {t} ×
-                      </button>
+                      </Badge>
                     ))}
-                    <button type="button" onClick={() => setTagPickerFor(tagPickerFor === idx ? null : idx)}
-                      className="text-[10px] text-slate-500 hover:text-slate-300">
-                      + tag
-                    </button>
-                    {tagPickerFor === idx && (
-                      <div className="flex flex-wrap items-center gap-1 w-full mt-1">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger className="text-[10px] text-slate-500 hover:text-slate-300">
+                        + tag
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start">
                         {catalogTags.filter(t => !(item.tags ?? []).includes(t.name)).map(t => (
-                          <button key={t.id} type="button" onClick={() => { toggleItemTag(idx, t.name); setTagPickerFor(null); }}
-                            className="badge text-[9px] normal-case text-slate-400 bg-white/5 border-white/10 hover:text-white hover:bg-white/10">
+                          <DropdownMenuItem key={t.id} onClick={() => toggleItemTag(idx, t.name)}>
                             {t.name}
-                          </button>
+                          </DropdownMenuItem>
                         ))}
                         {catalogTags.length === 0 && (
-                          <span className="text-[10px] text-slate-600">No tags in the catalog yet.</span>
+                          <DropdownMenuItem disabled>No tags in the catalog yet.</DropdownMenuItem>
                         )}
-                      </div>
-                    )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </td>
                 <td className="py-2.5 pr-4">
@@ -1039,14 +1045,16 @@ export default function ReviewItems({
                     <span className="text-slate-500">$</span>
                     <input type="number" step="0.01" value={item.price}
                       onChange={e => updateParsedItem(idx, 'price', parseFloat(e.target.value) || 0)}
-                      className="bg-transparent text-white font-bold font-mono focus:outline-none border-b border-transparent focus:border-violet-500 w-16" />
+                      className="bg-transparent text-white font-bold font-mono focus:outline-hidden border-b border-transparent focus:border-violet-500 w-16" />
                   </div>
                 </td>
                 <td className="py-2.5 pr-4">
-                  <select value={item.category} onChange={e => updateParsedItem(idx, 'category', e.target.value)}
-                    className="bg-transparent text-violet-400 font-semibold focus:outline-none w-full">
-                    {['Fruits','Vegetables','Dairy','Bakery','Meat','Beverages','Pantry','Grocery'].map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
+                  <Select value={item.category} onValueChange={v => v && updateParsedItem(idx, 'category', v)}>
+                    <SelectTrigger size="sm" className="w-full border-none bg-transparent text-violet-400 font-semibold"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {['Fruits','Vegetables','Dairy','Bakery','Meat','Beverages','Pantry','Grocery'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </td>
                 <td className="py-2.5 pr-4">
                   <div className="flex items-center space-x-1">
@@ -1055,11 +1063,13 @@ export default function ReviewItems({
                       onChange={e => setAmountFromInput(idx, e.target.value)}
                       onBlur={() => commitAmountInput(idx)}
                       title="Type a number with a unit (e.g. 600g, 2lb) to auto-fill both fields"
-                      className="bg-transparent text-white font-mono focus:outline-none border-b border-transparent focus:border-violet-500 w-16" />
-                    <select value={item.amountUnit ?? 'each'} onChange={e => updateParsedItem(idx, 'amountUnit', e.target.value)}
-                      className="bg-transparent text-slate-400 focus:outline-none">
-                      {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-                    </select>
+                      className="bg-transparent text-white font-mono focus:outline-hidden border-b border-transparent focus:border-violet-500 w-16" />
+                    <Select value={item.amountUnit ?? 'each'} onValueChange={v => v && updateParsedItem(idx, 'amountUnit', v)}>
+                      <SelectTrigger size="sm" className="border-none bg-transparent text-slate-400"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {UNIT_OPTIONS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </td>
                 <td className="py-2.5 pr-4">
@@ -1074,26 +1084,25 @@ export default function ReviewItems({
                   <div className="flex items-center gap-2">
                     <label className="flex items-center gap-1 cursor-pointer select-none shrink-0"
                       title="Mark this as a promotional price that expires">
-                      <input type="checkbox" checked={item.isSale ?? false}
-                        onChange={e => setItemSale(idx, e.target.checked)}
-                        className="accent-rose-500" />
+                      <Checkbox checked={item.isSale ?? false}
+                        onCheckedChange={c => setItemSale(idx, c === true)} />
                       <span className={item.isSale ? 'text-rose-300 font-semibold' : 'text-slate-500'}>sale</span>
                     </label>
                     {item.isSale && (
                       <input type="date" value={effectiveSaleEnd(item)}
                         onChange={e => updateParsedItem(idx, 'saleEndsAt', e.target.value || null)}
                         title={item.saleEndsAt ? 'Sale end date read from the scan (editable)' : `Not printed on the scan — defaulting to ${defaultSaleDays} days`}
-                        className={`bg-transparent font-mono focus:outline-none border-b border-transparent focus:border-violet-500 w-[7.5rem] ${
+                        className={`bg-transparent font-mono focus:outline-hidden border-b border-transparent focus:border-violet-500 w-30 ${
                           item.saleEndsAt ? 'text-white' : 'text-slate-400 italic'}`} />
                     )}
                   </div>
                 </td>
                 <td className="py-2.5 text-center">
                   {!item.needsReview
-                    ? <span className="badge text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ OK</span>
+                    ? <Badge variant="outline" className="text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ OK</Badge>
                     : item.approved
-                    ? <span className="badge text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ Approved</span>
-                    : <button onClick={() => approveItem(idx)} className="badge text-[9px] text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20 transition">Approve</button>}
+                    ? <Badge variant="outline" className="text-[9px] text-emerald-400 bg-emerald-500/10 border-emerald-500/20">✓ Approved</Badge>
+                    : <Badge variant="outline" render={<button type="button" />} onClick={() => approveItem(idx)} className="text-[9px] text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20 transition cursor-pointer">Approve</Badge>}
                 </td>
                 <td className="py-2.5 text-center">
                   <button onClick={() => removeItem(idx)} title="Remove this item" aria-label="Remove item"
@@ -1115,43 +1124,46 @@ export default function ReviewItems({
         <div className="flex items-center gap-2 flex-1 min-w-0">
           {/* Search the catalog and add an existing food to log a price against. */}
           <div className="relative flex-1 max-w-xs">
-            <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+            <Input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
               placeholder="Search existing items to add…"
-              className="field-input w-full text-xs rounded-xl" />
+              className="w-full rounded-xl" />
             {searchQuery.trim() !== '' && (
-              <div className="absolute bottom-full mb-1 w-full max-h-56 overflow-y-auto bg-slate-900 border border-white/10 rounded-lg shadow-xl z-20">
-                {searchResults.length === 0
-                  ? <div className="px-3 py-2 text-[11px] text-slate-500">No matches — use &ldquo;Add Item&rdquo; to create it.</div>
-                  : searchResults.map(f => (
-                    <button key={f.id} type="button" onClick={() => addExistingFood(f)}
-                      className="w-full text-left px-3 py-2 text-xs text-white hover:bg-white/5 flex items-center justify-between gap-2 transition">
+              <Command shouldFilter={false} className="absolute bottom-full mb-1 w-full rounded-lg border border-white/10 shadow-xl z-20">
+                <CommandList className="max-h-56">
+                  {searchResults.length === 0 ? (
+                    <CommandEmpty className="text-[11px] text-slate-500 px-3 py-2 text-left">
+                      No matches — use &ldquo;Add Item&rdquo; to create it.
+                    </CommandEmpty>
+                  ) : searchResults.map(f => (
+                    <CommandItem key={f.id} value={String(f.id)} onSelect={() => addExistingFood(f)} className="justify-between">
                       <span className="truncate">{f.name}</span>
                       <span className="text-[10px] text-slate-500 shrink-0">{f.category}</span>
-                    </button>
+                    </CommandItem>
                   ))}
-              </div>
+                </CommandList>
+              </Command>
             )}
           </div>
-          <button onClick={addItem}
-            className="flex items-center gap-1.5 text-xs font-semibold text-violet-300 hover:text-violet-200 bg-violet-500/10 border border-violet-500/20 rounded-xl px-4 py-2.5 transition shrink-0">
+          <Button onClick={addItem}
+            variant="outline" className="gap-1.5 rounded-xl text-violet-300 bg-violet-500/10 border-violet-500/20 hover:bg-violet-500/20 hover:text-violet-200 shrink-0">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
             Add Item
-          </button>
+          </Button>
         </div>
         <div className="flex gap-3">
-        <button onClick={() => { setParsedItems([]); onDiscard?.(); }}
-          className="bg-white/5 border border-white/5 rounded-xl px-5 py-2.5 text-xs text-white font-semibold hover:bg-white/10 transition">
+        <Button onClick={() => { setParsedItems([]); onDiscard?.(); }}
+          variant="secondary" className="rounded-xl">
           Discard All
-        </button>
-        <button onClick={commit} disabled={pendingReviewCount > 0 || committing || parsedItems.length === 0}
-          className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white rounded-xl px-6 py-2.5 text-xs font-semibold hover:shadow-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
+        </Button>
+        <Button onClick={commit} disabled={pendingReviewCount > 0 || committing || parsedItems.length === 0}
+          className="rounded-xl"
           title={pendingReviewCount > 0 ? 'Approve all flagged items first' : ''}>
           {committing ? 'Saving...' : pendingReviewCount > 0
             ? `Approve ${pendingReviewCount} Item${pendingReviewCount > 1 ? 's' : ''} First`
             : 'Save & Log Prices'}
-        </button>
+        </Button>
         </div>
       </div>
 
@@ -1160,53 +1172,52 @@ export default function ReviewItems({
           the grid sits in an `overflow-x-auto` wrapper, which makes overflow-y
           `auto` too and would clip an absolutely-positioned list. */}
       {matchFor !== null && parsedItems[matchFor] && (
-        <Modal onClose={closeMatch} dataLoc="modal.match-item" maxWidth="max-w-lg"
-          panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
+        <Modal onClose={closeMatch} dataLoc="modal.match-item" maxWidth="max-w-lg">
+          <div>
             <h3 className="text-sm font-bold text-white">
               Match to an existing item
               <span className="block text-[10px] text-slate-500 font-normal">
                 Scanned as &ldquo;{parsedItems[matchFor].name || 'Unnamed item'}&rdquo; — link it to a catalog item instead of creating a duplicate.
               </span>
             </h3>
-            <button onClick={closeMatch} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
           </div>
 
-          <input type="text" value={matchQuery} onChange={e => setMatchQuery(e.target.value)}
-            placeholder="Search the catalog by name or barcode…" autoFocus
-            className="field-input w-full text-xs rounded-lg" />
-
-          <div className="panel rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
-            {matchQuery.trim() === '' ? (
-              <p className="text-[11px] text-slate-500 px-3 py-2">Type to search your catalog.</p>
-            ) : matchResults.length === 0 ? (
-              <p className="text-[11px] text-slate-500 px-3 py-2">No catalog match — create it as a new item instead.</p>
-            ) : matchResults.map(f => {
-              const latest = f.latest_prices?.[0]?.price;
-              return (
-                <button key={f.id} type="button" onClick={() => matchItemTo(matchFor, f)}
-                  className="w-full text-left px-3 py-2 hover:bg-white/5 transition flex items-center justify-between gap-2">
-                  <span className="min-w-0">
-                    <span className="block text-xs text-white truncate">{f.name}</span>
-                    {f.barcode && <span className="block text-[10px] font-mono text-slate-600">{f.barcode}</span>}
-                  </span>
-                  <span className="shrink-0 text-right">
-                    <span className="block text-[10px] text-slate-500">{f.category}</span>
-                    {latest != null && <span className="block text-[10px] font-mono text-emerald-400">${Number(latest).toFixed(2)}</span>}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+          <Command shouldFilter={false} className="border rounded-lg">
+            <CommandInput value={matchQuery} onValueChange={setMatchQuery}
+              placeholder="Search the catalog by name or barcode…" autoFocus />
+            <CommandList>
+              {matchQuery.trim() === '' ? (
+                <p className="text-[11px] text-slate-500 px-3 py-2">Type to search your catalog.</p>
+              ) : (
+                <CommandEmpty className="text-[11px] text-slate-500 px-3 py-2 text-left">
+                  No catalog match — create it as a new item instead.
+                </CommandEmpty>
+              )}
+              {matchQuery.trim() !== '' && matchResults.map(f => {
+                const latest = f.latest_prices?.[0]?.price;
+                return (
+                  <CommandItem key={f.id} value={String(f.id)} onSelect={() => matchItemTo(matchFor, f)}
+                    className="justify-between">
+                    <span className="min-w-0">
+                      <span className="block text-xs text-white truncate">{f.name}</span>
+                      {f.barcode && <span className="block text-[10px] font-mono text-slate-600">{f.barcode}</span>}
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block text-[10px] text-slate-500">{f.category}</span>
+                      {latest != null && <span className="block text-[10px] font-mono text-emerald-400">${Number(latest).toFixed(2)}</span>}
+                    </span>
+                  </CommandItem>
+                );
+              })}
+            </CommandList>
+          </Command>
 
           <div className="flex justify-between gap-2 pt-1">
-            <button onClick={() => unmatchItem(matchFor)} className="btn btn-secondary rounded-lg px-4 py-2 text-xs"
+            <Button onClick={() => unmatchItem(matchFor)} variant="secondary" size="sm"
               title="Ignore any match and create this as a brand-new catalog item">
               Create as a new item
-            </button>
-            <button onClick={closeMatch} className="btn btn-secondary rounded-lg px-4 py-2 text-xs">Cancel</button>
+            </Button>
+            <Button onClick={closeMatch} variant="secondary" size="sm">Cancel</Button>
           </div>
         </Modal>
       )}
@@ -1218,32 +1229,29 @@ export default function ReviewItems({
 
       {/* ═══ Section: Store-change confirm ═══ */}
       {pendingStore !== null && (
-        <Modal onClose={() => setPendingStore(null)} dataLoc="modal.store-change" maxWidth="max-w-md"
-          panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
+        <Modal onClose={() => setPendingStore(null)} dataLoc="modal.store-change" maxWidth="max-w-md">
           <h3 className="text-sm font-bold text-white">Change store?</h3>
           <p className="text-xs text-slate-400">
             Set the store to <span className="text-white font-semibold">{stores.find(s => String(s.id) === pendingStore)?.name ?? 'this store'}</span> for this scan.
           </p>
           {openReviewCount > 1 && (
             <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer select-none">
-              <input type="checkbox" checked={applyToAll} onChange={e => setApplyToAll(e.target.checked)}
-                className="accent-violet-500" />
+              <Checkbox checked={applyToAll} onCheckedChange={c => setApplyToAll(c === true)} />
               Apply to all {openReviewCount} open reviews
             </label>
           )}
           <div className="flex justify-end gap-2 pt-1">
-            <button onClick={() => setPendingStore(null)} className="btn btn-secondary rounded-lg px-4 py-2 text-xs">Cancel</button>
-            <button onClick={confirmStoreChange} className="btn btn-primary rounded-lg px-4 py-2 text-xs">
+            <Button onClick={() => setPendingStore(null)} variant="secondary" size="sm">Cancel</Button>
+            <Button onClick={confirmStoreChange} size="sm">
               {applyToAll && openReviewCount > 1 ? 'Change all' : 'Change'}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
 
       {/* ═══ Section: Store-remove confirm ═══ */}
       {deletingStore !== null && (
-        <Modal onClose={() => !removingStore && setDeletingStore(null)} dataLoc="modal.store-remove" maxWidth="max-w-md"
-          panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
+        <Modal onClose={() => !removingStore && setDeletingStore(null)} dataLoc="modal.store-remove" maxWidth="max-w-md">
           <h3 className="text-sm font-bold text-white">Remove store?</h3>
           <p className="text-xs text-slate-400">
             Remove <span className="text-white font-semibold">{deletingStore.name}</span> from the store list. Nothing is deleted — its prices, receipts and scans are reallocated below.
@@ -1258,21 +1266,23 @@ export default function ReviewItems({
             ].filter(([n]) => (n as number) > 0)
              .map(([n, label]) => `${n} ${label}${(n as number) === 1 ? '' : 's'}`);
             return (
-              <p className="text-[11px] text-slate-400 panel p-2">
+              <p className="text-[11px] text-slate-400 bg-muted/50 border rounded-lg p-2">
                 {parts.length === 0 ? 'Nothing references this store.' : `References: ${parts.join(', ')}.`}
               </p>
             );
           })()}
 
           <div className="space-y-1">
-            <label className="field-label">Move its items to</label>
-            <select value={reassignTo} onChange={e => setReassignTo(e.target.value)} disabled={removingStore}
-              className="field-input w-full">
-              <option value="">Leave unassigned (no store)</option>
-              {stores.filter(s => s.id !== deletingStore.id).map(s => (
-                <option key={s.id} value={String(s.id)}>{s.name}</option>
-              ))}
-            </select>
+            <Label>Move its items to</Label>
+            <Select value={reassignTo} onValueChange={v => setReassignTo(v ?? '')} disabled={removingStore}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Leave unassigned (no store)</SelectItem>
+                {stores.filter(s => s.id !== deletingStore.id).map(s => (
+                  <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <p className="text-[10px] text-slate-500">
               {reassignTo === ''
                 ? 'Items keep their history but will have no store attached.'
@@ -1281,14 +1291,13 @@ export default function ReviewItems({
           </div>
 
           <div className="flex justify-end gap-2 pt-1">
-            <button onClick={() => setDeletingStore(null)} disabled={removingStore} className="btn btn-secondary rounded-lg px-4 py-2 text-xs disabled:opacity-50">Cancel</button>
-            <button onClick={deleteStore} disabled={removingStore}
-              className="btn btn-primary rounded-lg px-4 py-2 text-xs bg-rose-600 hover:bg-rose-500 disabled:opacity-50">
+            <Button onClick={() => setDeletingStore(null)} disabled={removingStore} variant="secondary" size="sm">Cancel</Button>
+            <Button onClick={deleteStore} disabled={removingStore} variant="destructive" size="sm">
               {removingStore ? 'Removing…' : 'Remove'}
-            </button>
+            </Button>
           </div>
         </Modal>
       )}
-    </div>
+    </Card>
   );
 }

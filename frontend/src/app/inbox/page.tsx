@@ -5,9 +5,12 @@ import type { ScanResponse } from '../../types/scan';
 import ReviewItems, { RawItem } from '../../components/ReviewItems';
 import RawModelOutput, { ScanAttempt } from '../../components/RawModelOutput';
 import ScanImages from '../../components/ScanImages';
-import StatusToast, { useToast } from '../../components/StatusToast';
+import { useToast } from '../../components/StatusToast';
 import { scanResultToRawItems, receiptCaptureData } from '../../lib/scanResult';
 import type { GeoPoint } from '../../lib/geo';
+import { Card } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -68,7 +71,7 @@ export default function Inbox() {
   const [manualOverrideIds, setManualOverrideIds] = useState<Set<number>>(new Set());
   // Expanded failed rows → their on-demand detail (images + per-model attempts).
   const [failedDetails, setFailedDetails] = useState<Map<number, FailedDetail>>(new Map());
-  const { statusMsg, notify } = useToast();
+  const { notify } = useToast();
 
   const load = useCallback(async () => {
     try {
@@ -217,7 +220,6 @@ export default function Inbox() {
 
   return (
     <div data-loc="page.inbox" className="space-y-8 max-w-5xl mx-auto">
-      <StatusToast statusMsg={statusMsg} />
 
       {/* ═══ Section: Header ═══ */}
       <div data-loc="inbox.header" className="flex items-start justify-between gap-4">
@@ -226,15 +228,15 @@ export default function Inbox() {
           <p className="text-sm text-slate-400 mt-1">Images processed in the background. Review finished scans — individually or all at once — with the source photo shown alongside.</p>
         </div>
         {openableCount > 0 && (
-          <button onClick={reviewAll}
-            className="shrink-0 text-xs font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-2 hover:bg-emerald-500/20 transition">
+          <Button onClick={reviewAll}
+            variant="outline" size="sm" className="shrink-0 rounded-xl text-emerald-300 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20 hover:text-emerald-200">
             Review all ({openableCount})
-          </button>
+          </Button>
         )}
       </div>
 
       {/* ═══ Section: Job list ═══ */}
-      <div data-loc="inbox.job-list" className="card rounded-3xl p-6 space-y-2">
+      <Card data-loc="inbox.job-list" className="rounded-3xl p-6 space-y-2">
         {jobs.length === 0 && <p className="text-slate-600 text-sm py-6 text-center">Inbox empty. Queue an image from the Scanner.</p>}
         {jobs.map(job => {
           const isOpen = openReviews.some(r => r.jobId === job.id);
@@ -246,7 +248,7 @@ export default function Inbox() {
             <div key={job.id} className="bg-slate-900/50 border border-white/5 rounded-xl px-4 py-3 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3 text-sm min-w-0">
-                  <span className={`badge text-[9px] ${STATUS_STYLES[job.status] ?? STATUS_STYLES.queued}`}>{job.status}</span>
+                  <Badge variant="outline" className={`text-[9px] ${STATUS_STYLES[job.status] ?? STATUS_STYLES.queued}`}>{job.status}</Badge>
                   <span className="text-white font-medium truncate">{job.original_filename ?? `job #${job.id}`}</span>
                   {job.status === 'done' && <span className="text-slate-500 text-xs">{job.result_type} · {job.item_count} item{job.item_count !== 1 ? 's' : ''}</span>}
                   {job.status === 'failed' && <span className="text-rose-400 text-xs truncate max-w-[220px]">{job.error}</span>}
@@ -254,26 +256,26 @@ export default function Inbox() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   {job.status === 'done' && (
-                    <button onClick={() => (isOpen ? closeReview(job.id) : openJob(job))}
-                      className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-1 transition">
+                    <Button onClick={() => (isOpen ? closeReview(job.id) : openJob(job))}
+                      variant="outline" size="sm" className="text-emerald-400 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20 hover:text-emerald-300">
                       {isOpen ? 'Close' : 'Review'}
-                    </button>
+                    </Button>
                   )}
                   {job.status === 'failed' && (
                     <>
-                      <button onClick={() => toggleFailed(job)}
-                        className="text-[11px] font-bold text-slate-400 hover:text-white bg-white/5 border border-white/10 rounded-lg px-3 py-1 transition">
+                      <Button onClick={() => toggleFailed(job)}
+                        variant="outline" size="sm">
                         {failedDetail ? 'Hide details' : 'Details'}
-                      </button>
-                      <button onClick={() => retry(job.id)} className="text-[11px] font-bold text-amber-400 hover:text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1 transition">Retry</button>
+                      </Button>
+                      <Button onClick={() => retry(job.id)} variant="outline" size="sm" className="text-amber-400 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20 hover:text-amber-300">Retry</Button>
                     </>
                   )}
                   {canRestage && (
-                    <button onClick={() => restage(job.id)}
+                    <Button onClick={() => restage(job.id)}
                       title="Send back to Staging to re-crop the original photo and run OCR again"
-                      className="text-[11px] font-bold text-violet-300 hover:text-violet-200 bg-violet-500/10 border border-violet-500/20 rounded-lg px-3 py-1 transition">
+                      variant="outline" size="sm" className="text-violet-300 bg-violet-500/10 border-violet-500/20 hover:bg-violet-500/20 hover:text-violet-200">
                       Re-crop
-                    </button>
+                    </Button>
                   )}
                   <button onClick={() => discard(job.id)} className="text-[11px] text-slate-500 hover:text-rose-400 px-2 transition">Discard</button>
                 </div>
@@ -293,14 +295,14 @@ export default function Inbox() {
             </div>
           );
         })}
-      </div>
+      </Card>
 
       {/* ═══ Section: Review panels — one per opened job, each with its source photo ═══ */}
       <div data-loc="inbox.review-panels" className="space-y-8">
       {openReviews.map(review => (
         <div key={review.jobId} className="relative">
           {review.result.type === 'unknown' && !manualOverrideIds.has(review.jobId) ? (
-            <div className="card rounded-3xl p-6 text-sm text-slate-400 space-y-4">
+            <Card className="rounded-3xl p-6 text-sm text-slate-400 space-y-4">
               <div className="text-xs font-semibold text-slate-400">{review.filename}</div>
               <ScanImages imageId={review.imageId} originalImageId={review.originalImageId} />
               <p>Not recognized as a receipt or price tag: <span className="text-slate-300">{review.result.data.reason}</span></p>
@@ -309,19 +311,19 @@ export default function Inbox() {
               <RawModelOutput rawText={review.result.raw_text ?? null} attempts={review.attempts}
                 scanJobId={review.jobId} defaultOpen notify={notify} />
               <div className="flex flex-wrap gap-2">
-                <button onClick={() => setManualOverrideIds(prev => new Set(prev).add(review.jobId))}
-                  className="text-[11px] font-bold text-violet-300 bg-violet-500/10 border border-violet-500/20 rounded-lg px-3 py-1 hover:bg-violet-500/20 transition">
+                <Button onClick={() => setManualOverrideIds(prev => new Set(prev).add(review.jobId))}
+                  variant="outline" size="sm" className="text-violet-300 bg-violet-500/10 border-violet-500/20 hover:bg-violet-500/20 hover:text-violet-200">
                   Enter Items Manually
-                </button>
-                <button onClick={() => restage(review.jobId)}
+                </Button>
+                <Button onClick={() => restage(review.jobId)}
                   title="Send back to Staging to re-crop the original photo and run OCR again"
-                  className="text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-1 hover:bg-amber-500/20 transition">
+                  variant="outline" size="sm" className="text-amber-300 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20 hover:text-amber-200">
                   Re-crop in Staging
-                </button>
-                <button onClick={() => discard(review.jobId)} className="text-[11px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-1">Discard</button>
-                <button onClick={() => closeReview(review.jobId)} className="text-[11px] text-slate-400 hover:text-white px-3 py-1">Close</button>
+                </Button>
+                <Button onClick={() => discard(review.jobId)} variant="outline" size="sm" className="text-rose-400 bg-rose-500/10 border-rose-500/20">Discard</Button>
+                <Button onClick={() => closeReview(review.jobId)} variant="ghost" size="sm">Close</Button>
               </div>
-            </div>
+            </Card>
           ) : (
             <ReviewItems
               items={review.rawItems}

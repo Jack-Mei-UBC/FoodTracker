@@ -10,6 +10,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Modal from '../../components/Modal';
 import ImageCropper from '../../components/ImageCropper';
+import { Button } from '../../components/ui/button';
+import { useToast } from '../../components/StatusToast';
+import { Card } from '../../components/ui/card';
+import { Checkbox } from '../../components/ui/checkbox';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -27,7 +31,6 @@ export default function Staging() {
   const [jobs, setJobs] = useState<StagedJob[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   // Crop modal state.
   const [cropJob, setCropJob] = useState<StagedJob | null>(null);
   const [cropSrc, setCropSrc] = useState<string | null>(null);
@@ -37,10 +40,7 @@ export default function Staging() {
   // accuracy, token cost) for the jobs sent from this page.
   const [usePaid, setUsePaid] = useState(false);
 
-  const notify = (text: string, type: 'success' | 'error' = 'success') => {
-    setStatusMsg({ type, text });
-    setTimeout(() => setStatusMsg(null), 5000);
-  };
+  const { notify } = useToast();
 
   const load = useCallback(async () => {
     try {
@@ -131,12 +131,6 @@ export default function Staging() {
 
   return (
     <div data-loc="page.staging" className="space-y-8 max-w-5xl mx-auto">
-      {statusMsg && (
-        <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl shadow-xl ${
-          statusMsg.type === 'success' ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950/90 text-rose-300 border border-rose-500/30'}`}>
-          <span className="text-sm font-semibold">{statusMsg.text}</span>
-        </div>
-      )}
 
       {/* ═══ Section: Header ═══ */}
       <div data-loc="staging.header" className="flex items-start justify-between gap-4">
@@ -146,13 +140,12 @@ export default function Staging() {
         </div>
         {jobs.length > 0 && (
           <div className="shrink-0 flex flex-col items-end gap-2">
-            <button onClick={() => sendForProcessing()} disabled={busy}
-              className="text-xs font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 rounded-xl px-4 py-2 hover:bg-emerald-500/20 transition disabled:opacity-50">
+            <Button onClick={() => sendForProcessing()} disabled={busy}
+              variant="outline" size="sm" className="rounded-xl text-emerald-300 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20 hover:text-emerald-200">
               Send all for processing ({jobs.length})
-            </button>
+            </Button>
             <label className="flex items-center gap-2 text-[11px] text-slate-400 cursor-pointer select-none" title="Let the model pool use paid vision models (higher accuracy, token cost) for jobs sent from this page">
-              <input type="checkbox" checked={usePaid} onChange={e => setUsePaid(e.target.checked)}
-                className="accent-violet-500" />
+              <Checkbox checked={usePaid} onCheckedChange={c => setUsePaid(c === true)} />
               Use paid models (higher accuracy)
             </label>
           </div>
@@ -160,7 +153,7 @@ export default function Staging() {
       </div>
 
       {/* ═══ Section: Staged grid ═══ */}
-      <div data-loc="staging.grid" className="card rounded-3xl p-6">
+      <Card data-loc="staging.grid" className="rounded-3xl p-6">
         {loading ? (
           <p className="text-slate-600 text-sm py-6 text-center">Loading…</p>
         ) : jobs.length === 0 ? (
@@ -168,7 +161,7 @@ export default function Staging() {
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
             {jobs.map(job => (
-              <div key={job.id} className="panel p-3 space-y-2 flex flex-col">
+              <div key={job.id} className="bg-muted/50 border rounded-lg p-3 space-y-2 flex flex-col">
                 <div className="aspect-square rounded-lg overflow-hidden bg-slate-950 border border-white/5 flex items-center justify-center">
                   {job.image_id != null ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -180,10 +173,10 @@ export default function Staging() {
                   <div className="text-[10px] text-slate-500 truncate">{job.store_name ?? 'No store'} · {fmtDate(job.created_at)}</div>
                 </div>
                 <div className="flex items-center gap-1.5 mt-auto">
-                  <button onClick={() => openCrop(job)} disabled={busy}
-                    className="btn btn-secondary flex-1 rounded-lg py-1.5 text-[11px]">Crop</button>
-                  <button onClick={() => sendForProcessing([job.id])} disabled={busy}
-                    className="btn btn-primary flex-1 rounded-lg py-1.5 text-[11px]">Process</button>
+                  <Button onClick={() => openCrop(job)} disabled={busy}
+                    variant="secondary" size="sm" className="flex-1">Crop</Button>
+                  <Button onClick={() => sendForProcessing([job.id])} disabled={busy}
+                    size="sm" className="flex-1">Process</Button>
                   <button onClick={() => discard(job.id)} disabled={busy}
                     className="text-[11px] text-slate-500 hover:text-rose-400 px-1.5 transition" title="Discard">✕</button>
                 </div>
@@ -191,19 +184,16 @@ export default function Staging() {
             ))}
           </div>
         )}
-      </div>
+      </Card>
 
       {/* ═══ Section: Crop modal ═══ */}
       {cropJob && cropSrc && (
-        <Modal onClose={closeCrop} dataLoc="modal.staging-crop" maxWidth="max-w-xl" panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
+        <Modal onClose={closeCrop} dataLoc="modal.staging-crop" maxWidth="max-w-xl">
+          <div>
             <h3 className="text-sm font-bold text-white">
               Crop image
               <span className="text-slate-400 font-normal"> — {cropJob.original_filename ?? `job #${cropJob.id}`}</span>
             </h3>
-            <button onClick={closeCrop} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
           </div>
           <p className="text-xs text-slate-500">Zoom and drag to isolate the receipt or price tag. The crop replaces what gets read; the full original is kept and linked.</p>
           <ImageCropper

@@ -2,7 +2,10 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import Link from 'next/link';
-import StatusToast, { useToast } from '../../components/StatusToast';
+import { useToast } from '../../components/StatusToast';
+import { Button, buttonVariants } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 
 // Scanner is now a pure INTAKE surface: every capture is staged for the
 // background queue (there is no synchronous "scan now" path anymore — see
@@ -21,7 +24,7 @@ export default function Scanner() {
   const [targetStoreId, setTargetStoreId] = useState<string>('1');
   const [stores, setStores] = useState<Store[]>([]);
 
-  const { statusMsg, notify } = useToast();
+  const { notify } = useToast();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -111,7 +114,6 @@ export default function Scanner() {
 
   return (
     <div data-loc="page.scanner" className="space-y-8 max-w-4xl mx-auto relative">
-      <StatusToast statusMsg={statusMsg} />
 
       {/* ═══ Section: Header ═══ */}
       <div data-loc="scanner.header" className="border-b border-white/5 pb-3">
@@ -122,7 +124,7 @@ export default function Scanner() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
 
         {/* ═══ Section: Uploader ═══ */}
-        <div data-loc="scanner.uploader" className="md:col-span-2 card rounded-3xl p-6 space-y-4">
+        <Card data-loc="scanner.uploader" className="md:col-span-2 rounded-3xl p-6 space-y-4">
           <h2 className="text-lg font-bold text-white">Add captures to Staging</h2>
 
           <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" multiple className="hidden" />
@@ -137,7 +139,7 @@ export default function Scanner() {
               const files = Array.from(e.dataTransfer.files ?? []);
               if (files.length > 0) stageImages(files);
             }}
-            className={`w-full aspect-[4/3] rounded-2xl border-2 border-dashed border-white/10 hover:border-violet-500/50 flex flex-col items-center justify-center p-4 cursor-pointer bg-slate-950 transition overflow-hidden ${queuing ? 'opacity-60 pointer-events-none' : ''}`}
+            className={`w-full aspect-4/3 rounded-2xl border-2 border-dashed border-white/10 hover:border-violet-500/50 flex flex-col items-center justify-center p-4 cursor-pointer bg-slate-950 transition overflow-hidden ${queuing ? 'opacity-60 pointer-events-none' : ''}`}
           >
             <svg className="w-8 h-8 text-slate-600 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -149,28 +151,30 @@ export default function Scanner() {
           {/* Store selector (prefills the review; applies to all staged images) */}
           <div className="flex items-center justify-between bg-slate-950 border border-white/5 p-2 rounded-xl">
             <span className="text-[10px] text-slate-500 font-semibold uppercase pl-1">Store</span>
-            <select value={targetStoreId} onChange={e => setTargetStoreId(e.target.value)}
-              className="bg-transparent text-xs text-white focus:outline-none">
-              {stores.length > 0
-                ? stores.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)
-                : <><option value="1">SuperMarket Central</option><option value="2">Organic Grocer</option><option value="3">Value Foods</option></>}
-            </select>
+            <Select value={targetStoreId} onValueChange={v => v && setTargetStoreId(v)}>
+              <SelectTrigger size="sm" className="border-none bg-transparent"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {stores.length > 0
+                  ? stores.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)
+                  : <><SelectItem value="1">SuperMarket Central</SelectItem><SelectItem value="2">Organic Grocer</SelectItem><SelectItem value="3">Value Foods</SelectItem></>}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <button onClick={() => { if (!queuing) fileInputRef.current?.click(); }} disabled={queuing}
-              className="btn btn-primary rounded-xl py-3 text-sm font-semibold disabled:opacity-50">
+            <Button onClick={() => { if (!queuing) fileInputRef.current?.click(); }} disabled={queuing}
+              size="lg">
               {queuing ? 'Adding…' : 'Choose images'}
-            </button>
-            <button onClick={pasteFromClipboard} disabled={queuing}
-              className="btn btn-secondary rounded-xl py-3 text-sm font-semibold disabled:opacity-50">
+            </Button>
+            <Button onClick={pasteFromClipboard} disabled={queuing}
+              variant="secondary" size="lg">
               Paste from clipboard
-            </button>
+            </Button>
           </div>
-        </div>
+        </Card>
 
         {/* ═══ Section: Next steps ═══ */}
-        <div data-loc="scanner.next-steps" className="md:col-span-1 card rounded-3xl p-6 space-y-4">
+        <Card data-loc="scanner.next-steps" className="md:col-span-1 rounded-3xl p-6 space-y-4">
           <h2 className="text-sm font-bold text-white">What happens next</h2>
           <ol className="space-y-3 text-xs text-slate-400">
             <li className="flex gap-2"><span className="text-violet-400 font-bold">1.</span><span>Images land in <span className="text-white font-semibold">Staging</span>.</span></li>
@@ -183,10 +187,10 @@ export default function Scanner() {
             </div>
           )}
           <div className="flex flex-col gap-2 pt-1">
-            <Link href="/staging" className="btn btn-primary rounded-xl py-2.5 text-xs font-semibold text-center">Go to Staging →</Link>
-            <Link href="/inbox" className="btn btn-secondary rounded-xl py-2.5 text-xs font-semibold text-center">Open Inbox</Link>
+            <Link href="/staging" className={buttonVariants({ className: 'w-full' })}>Go to Staging →</Link>
+            <Link href="/inbox" className={buttonVariants({ variant: 'secondary', className: 'w-full' })}>Open Inbox</Link>
           </div>
-        </div>
+        </Card>
       </div>
     </div>
   );

@@ -2,7 +2,13 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Modal from '../../components/Modal';
-import StatusToast, { useToast } from '../../components/StatusToast';
+import { Label } from '../../components/ui/label';
+import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { Input } from '../../components/ui/input';
+import { useToast } from '../../components/StatusToast';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -54,7 +60,7 @@ export default function Budget() {
   const [lightboxId, setLightboxId] = useState<number | null>(null);
   const [editing, setEditing] = useState<Receipt | null>(null);
   const [adding, setAdding] = useState(false);
-  const { statusMsg, notify } = useToast();
+  const { notify } = useToast();
 
   const load = useCallback(async () => {
     try {
@@ -111,7 +117,6 @@ export default function Budget() {
 
   return (
     <div data-loc="page.budget" className="space-y-8 max-w-5xl mx-auto">
-      <StatusToast statusMsg={statusMsg} />
 
       {/* ═══ Section: Header + month nav ═══ */}
       <div data-loc="budget.header" className="flex items-center justify-between gap-4">
@@ -120,15 +125,15 @@ export default function Budget() {
           <p className="text-sm text-slate-400 mt-1">Every committed receipt scan records its store and total here. Track spend against a monthly budget.</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button onClick={() => setMonth(m => shiftMonth(m, -1))} className="btn btn-secondary rounded-lg px-3 py-2 text-xs">←</button>
+          <Button onClick={() => setMonth(m => shiftMonth(m, -1))} variant="secondary" size="sm">←</Button>
           <span className="text-sm font-semibold text-white w-36 text-center">{monthLabel(month)}</span>
-          <button onClick={() => setMonth(m => shiftMonth(m, 1))} disabled={month >= nowMonth()}
-            className="btn btn-secondary rounded-lg px-3 py-2 text-xs disabled:opacity-40">→</button>
+          <Button onClick={() => setMonth(m => shiftMonth(m, 1))} disabled={month >= nowMonth()}
+            variant="secondary" size="sm">→</Button>
         </div>
       </div>
 
       {/* ═══ Section: Spend vs. budget ═══ */}
-      <div data-loc="budget.summary" className="card rounded-3xl p-6 space-y-5">
+      <Card data-loc="budget.summary" className="rounded-3xl p-6 space-y-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="field-label">Spent this month</div>
@@ -145,31 +150,31 @@ export default function Budget() {
                 <div className="text-xs text-slate-500 mt-1">of {money(budget)} budget</div>
               </>
             ) : (
-              <div className="text-xs text-slate-500 max-w-[12rem]">No monthly budget set — set one to track remaining spend.</div>
+              <div className="text-xs text-slate-500 max-w-48">No monthly budget set — set one to track remaining spend.</div>
             )}
           </div>
         </div>
 
         {budget != null && (
           <div className="w-full h-3 bg-slate-800 rounded-full overflow-hidden">
-            <div className={`h-full bg-gradient-to-r ${barColor} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
+            <div className={`h-full bg-linear-to-r ${barColor} rounded-full transition-all duration-500`} style={{ width: `${pct}%` }} />
           </div>
         )}
 
         <div className="flex items-end gap-2 border-t border-white/5 pt-4">
           <div>
-            <label className="field-label">Monthly budget ($)</label>
-            <input type="number" step="0.01" min="0" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
-              placeholder="none" className="field-input w-40" />
+            <Label>Monthly budget ($)</Label>
+            <Input type="number" step="0.01" min="0" value={budgetInput} onChange={e => setBudgetInput(e.target.value)}
+              placeholder="none" className="w-40" />
           </div>
-          <button onClick={saveBudget} className="btn btn-primary rounded-lg px-4 py-2.5 text-xs">Save budget</button>
+          <Button onClick={saveBudget}>Save budget</Button>
         </div>
-      </div>
+      </Card>
 
       {/* ═══ Section: Breakdowns ═══ */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* By store (this month) */}
-        <div data-loc="budget.by-store" className="card rounded-3xl p-6 space-y-3">
+        <Card data-loc="budget.by-store" className="rounded-3xl p-6 space-y-3">
           <h2 className="text-sm font-bold text-white">By store · {monthLabel(month)}</h2>
           {(summary?.by_store.length ?? 0) === 0 && <p className="text-xs text-slate-600 py-4 text-center">No spending recorded this month.</p>}
           {summary?.by_store.map(s => (
@@ -179,14 +184,14 @@ export default function Budget() {
                 <span className="font-mono text-white">{money(s.spent)}</span>
               </div>
               <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-400 rounded-full" style={{ width: `${(s.spent / maxStore) * 100}%` }} />
+                <div className="h-full bg-linear-to-r from-violet-500 to-indigo-400 rounded-full" style={{ width: `${(s.spent / maxStore) * 100}%` }} />
               </div>
             </div>
           ))}
-        </div>
+        </Card>
 
         {/* By month (last 12) */}
-        <div data-loc="budget.by-month" className="card rounded-3xl p-6 space-y-3">
+        <Card data-loc="budget.by-month" className="rounded-3xl p-6 space-y-3">
           <h2 className="text-sm font-bold text-white">Last 12 months</h2>
           {(summary?.by_month.length ?? 0) === 0 && <p className="text-xs text-slate-600 py-4 text-center">No spending recorded yet.</p>}
           <div className="flex items-end justify-between gap-1 h-32">
@@ -201,19 +206,19 @@ export default function Budget() {
               </button>
             ))}
           </div>
-        </div>
+        </Card>
       </div>
 
       {/* ═══ Section: Receipts list ═══ */}
-      <div data-loc="budget.receipts" className="card rounded-3xl p-6 space-y-3">
+      <Card data-loc="budget.receipts" className="rounded-3xl p-6 space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-bold text-white">Receipts · {monthLabel(month)}</h2>
-          <button onClick={() => setAdding(true)} className="btn btn-primary rounded-xl px-4 py-2 text-xs">+ Add receipt</button>
+          <Button onClick={() => setAdding(true)} size="sm">+ Add receipt</Button>
         </div>
         {receipts.length === 0 && <p className="text-slate-600 text-sm py-6 text-center">No receipts this month. Scan one, or add it manually.</p>}
         <div className="space-y-2">
           {receipts.map(r => (
-            <div key={r.id} className="panel p-3 flex items-center gap-3">
+            <div key={r.id} className="bg-muted/50 border rounded-lg p-3 flex items-center gap-3">
               {r.image_id != null ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={`${API_BASE_URL}/api/images/${r.image_id}`} alt="receipt" onClick={() => setLightboxId(r.image_id)}
@@ -224,7 +229,7 @@ export default function Budget() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-semibold text-white truncate">{r.store_name || 'Unknown store'}</span>
-                  <span className={`badge text-[9px] ${r.source === 'scan' ? 'text-sky-300 bg-sky-500/10 border-sky-500/20' : 'text-slate-400 bg-slate-500/10 border-slate-500/20'}`}>{r.source}</span>
+                  <Badge variant="outline" className={`text-[9px] ${r.source === 'scan' ? 'text-sky-300 bg-sky-500/10 border-sky-500/20' : 'text-slate-400 bg-slate-500/10 border-slate-500/20'}`}>{r.source}</Badge>
                 </div>
                 <div className="text-xs text-slate-500">{r.purchased_on}{r.item_count ? ` · ${r.item_count} item${r.item_count !== 1 ? 's' : ''}` : ''}{r.notes ? ` · ${r.notes}` : ''}</div>
               </div>
@@ -236,7 +241,7 @@ export default function Budget() {
             </div>
           ))}
         </div>
-      </div>
+      </Card>
 
       {/* Manual add / edit popup */}
       {(adding || editing) && (
@@ -251,7 +256,7 @@ export default function Budget() {
 
       {/* Image lightbox */}
       {lightboxId != null && (
-        <div className="fixed inset-0 z-[60] bg-black/80 flex items-center justify-center p-6 cursor-zoom-out" onClick={() => setLightboxId(null)}>
+        <div className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-6 cursor-zoom-out" onClick={() => setLightboxId(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={`${API_BASE_URL}/api/images/${lightboxId}`} alt="receipt" className="max-h-full max-w-full rounded-xl" />
         </div>
@@ -290,35 +295,37 @@ function ReceiptForm({ receipt, stores, onClose, onSaved, notify }: {
   };
 
   return (
-    <Modal onClose={onClose} dataLoc="modal.receipt-form" maxWidth="max-w-md"
-      panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
+    <Modal onClose={onClose} dataLoc="modal.receipt-form" maxWidth="max-w-md">
       <h3 className="text-sm font-bold text-white">{receipt ? 'Edit receipt' : 'Add receipt'}</h3>
       <div className="space-y-3">
         <div>
-          <label className="field-label">Store</label>
-          <select value={storeId} onChange={e => setStoreId(e.target.value)} className="field-input w-full">
-            <option value="">— none —</option>
-            {stores.map(s => <option key={s.id} value={String(s.id)}>{s.name}</option>)}
-          </select>
+          <Label>Store</Label>
+          <Select value={storeId} onValueChange={v => setStoreId(v ?? '')}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">— none —</SelectItem>
+              {stores.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="field-label">Total ($)</label>
-            <input type="number" step="0.01" min="0" value={total} onChange={e => setTotal(e.target.value)} placeholder="0.00" className="field-input w-full" />
+            <Label>Total ($)</Label>
+            <Input type="number" step="0.01" min="0" value={total} onChange={e => setTotal(e.target.value)} placeholder="0.00" className="w-full" />
           </div>
           <div>
-            <label className="field-label">Purchased on</label>
-            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="field-input w-full" />
+            <Label>Purchased on</Label>
+            <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full" />
           </div>
         </div>
         <div>
-          <label className="field-label">Notes</label>
-          <input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="optional" className="field-input w-full" />
+          <Label>Notes</Label>
+          <Input type="text" value={notes} onChange={e => setNotes(e.target.value)} placeholder="optional" className="w-full" />
         </div>
       </div>
       <div className="flex justify-end gap-2 pt-1">
-        <button onClick={onClose} className="btn btn-secondary rounded-lg px-4 py-2 text-xs">Cancel</button>
-        <button onClick={save} disabled={saving} className="btn btn-primary rounded-lg px-4 py-2 text-xs">{saving ? 'Saving…' : 'Save'}</button>
+        <Button onClick={onClose} variant="secondary" size="sm">Cancel</Button>
+        <Button onClick={save} disabled={saving} size="sm">{saving ? 'Saving…' : 'Save'}</Button>
       </div>
     </Modal>
   );

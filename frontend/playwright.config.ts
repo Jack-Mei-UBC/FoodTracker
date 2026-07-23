@@ -23,6 +23,15 @@ export default defineConfig({
   // see CLAUDE.md), so a spec at the repo root couldn't resolve
   // `@playwright/test` from frontend/node_modules.
   testDir: './e2e',
+  // Artifacts (traces, screenshots) MUST land outside `frontend/`, because the
+  // dev container bind-mounts `./frontend:/usr/src/app` and runs the Next
+  // watcher with CHOKIDAR_USEPOLLING=true. Writing them under frontend/ makes
+  // the watcher see new files mid-run, recompile, and stall in-flight tests —
+  // which showed up as *random* failures that always passed in isolation. The
+  // first failure wrote a trace, which triggered a recompile, which caused the
+  // next failure: a self-amplifying flake. `..` is the worktree root, which is
+  // not mounted into the container.
+  outputDir: '../.playwright-artifacts/test-results',
   // The stack is shared mutable state, so parallel specs can race on it.
   // Correctness over speed: this suite is small.
   fullyParallel: false,

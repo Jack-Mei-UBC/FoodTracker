@@ -76,13 +76,39 @@ check_code() { # name expected actual
   [ "$3" = "$2" ] && pass "$1" || failc "$1 (got $3)"
 }
 
+# --- Frontend source: drift guard for retired pasted-utility classes -------
+# .btn/.btn-primary/.btn-secondary, .panel, .badge, and .field-input were fully
+# retired by the shadcn/ui migration's Phase 3 page sweep (SHADCN-MIGRATION.md)
+# — every call site now uses the real component (Button/Card+bg-muted/Badge/
+# Input). Pure static-file check, so it runs even when the stack is down,
+# unlike everything below the health gate — and it's a real regression (not a
+# STRICT-only concern), so it feeds into $fail like any other assertion.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+FRONTEND_SRC="$SCRIPT_DIR/../frontend/src"
+if [ -d "$FRONTEND_SRC" ]; then
+  drift_hits=""
+  for cls in btn btn-primary btn-secondary panel badge field-input; do
+    while IFS= read -r f; do
+      drift_hits="${drift_hits}${f#"$FRONTEND_SRC"/}: .$cls\n"
+    done < <(grep -lE "className\s*=\s*[\"'\`][^\"'\`]*\b${cls}\b" -r --include='*.tsx' --include='*.ts' "$FRONTEND_SRC" 2>/dev/null)
+  done
+  if [ -z "$drift_hits" ]; then
+    pass "no retired pasted-utility classes (.btn*/.panel/.badge/.field-input) in frontend/src"
+  else
+    failc "no retired pasted-utility classes (.btn*/.panel/.badge/.field-input) in frontend/src"
+    printf "%b" "$drift_hits" | sed '/^$/d' | while IFS= read -r line; do echo "         $line"; done
+  fi
+fi
+
 echo "FoodTracker smoke tests"
 echo "backend $API"
 
 # Gate on backend health.
 if ! curl -fsS "$API/api/health" >/dev/null 2>&1; then
   if [ "$STRICT" = "1" ]; then echo "backend not reachable at $API — FAIL (STRICT)"; exit 2; fi
-  echo "backend not reachable at $API — skipping"; exit 0
+  echo "backend not reachable at $API — skipping"
+  if [ "$fail" -ne 0 ]; then exit 2; fi
+  exit 0
 fi
 
 # --- Catalog shape (independent of whether the catalog has rows) -------------

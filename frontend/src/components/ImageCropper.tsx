@@ -14,6 +14,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import Cropper, { Area } from 'react-easy-crop';
+import { Button } from './ui/button';
 import { cropImageToBlob } from '../lib/crop';
 
 // How far the crop can zoom in (react-easy-crop defaults to 3× — too shallow for
@@ -126,22 +127,22 @@ export default function ImageCropper({
 
       <div className="flex gap-2">
         {onBack && (
-          <button onClick={onBack} disabled={disabled} className="btn btn-secondary rounded-lg px-4 py-2">
+          <Button onClick={onBack} disabled={disabled} variant="secondary">
             Back
-          </button>
+          </Button>
         )}
         {onSkip && (
-          <button onClick={onSkip} disabled={disabled} className="btn btn-secondary rounded-lg px-4 py-2">
+          <Button onClick={onSkip} disabled={disabled} variant="secondary">
             Use original
-          </button>
+          </Button>
         )}
-        <button
+        <Button
           onClick={handlePrimary}
           disabled={disabled || !croppedArea}
-          className="btn btn-primary flex-1 rounded-lg py-2"
+          className="flex-1"
         >
           {disabled ? busyLabel : primaryLabel}
-        </button>
+        </Button>
       </div>
     </div>
   );

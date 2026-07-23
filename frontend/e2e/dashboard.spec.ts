@@ -130,3 +130,34 @@ test('all seeded fixtures are reachable in the catalog', async ({ page }) => {
   }
   expect(missing).toEqual([]);
 });
+
+test('the On sale checkbox filters down to actively-discounted foods', async ({ page }) => {
+  // Phase 3 M8 replaced the native <input type="checkbox"> with Base UI's
+  // Checkbox, which renders a <span> (not a labelable element) plus a
+  // visually-hidden native <input> for exactly this purpose. Clicking the
+  // *label text* — not the checkbox element itself — must still toggle it,
+  // the same as it did with a real <input>.
+  await page.goto('/');
+  await search(page).fill('Fixture');
+  const before = await rows(page).count();
+
+  await page.getByText('On sale', { exact: true }).click();
+  const after = await rows(page).count();
+
+  expect(after).toBeGreaterThan(0);
+  expect(after).toBeLessThan(before);
+  await expect(rows(page).first()).toContainText(DRUMSTICKS.name);
+});
+
+test('the Add Food category Select opens, lists options, and picks one', async ({ page }) => {
+  // Phase 3 M3 replaced the native <select> here with Base UI's Select, which
+  // portals its listbox to <body> — this guards that the portal wiring and
+  // value/onValueChange plumbing actually work, not just that the page renders.
+  await page.goto('/');
+  const trigger = page.locator('form:has(input[placeholder="Add product (e.g. Fresh Gala Apples)"]) [role="combobox"]');
+  await trigger.click();
+  const option = page.getByRole('option', { name: 'Meat', exact: true });
+  await expect(option).toBeVisible();
+  await option.click();
+  await expect(trigger).toContainText('Meat');
+});

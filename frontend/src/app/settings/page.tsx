@@ -10,7 +10,11 @@
 // prices override it per item during inbox review, or in the price editor.
 
 import React, { useState, useEffect, useCallback } from 'react';
-import StatusToast, { useToast } from '../../components/StatusToast';
+import { useToast } from '../../components/StatusToast';
+import { Label } from '../../components/ui/label';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Card } from '../../components/ui/card';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -28,7 +32,7 @@ export default function Settings() {
   const [savedDays, setSavedDays] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const { statusMsg, notify } = useToast();
+  const { notify } = useToast();
 
   const load = useCallback(async () => {
     try {
@@ -76,7 +80,6 @@ export default function Settings() {
 
   return (
     <div data-loc="page.settings" className="space-y-8 max-w-3xl mx-auto">
-      <StatusToast statusMsg={statusMsg} />
 
       {/* ═══ Section: Header ═══ */}
       <div data-loc="settings.header">
@@ -85,7 +88,7 @@ export default function Settings() {
       </div>
 
       {/* ═══ Section: Default sale duration ═══ */}
-      <div data-loc="settings.sale-duration" className="card rounded-3xl p-6 space-y-5">
+      <Card data-loc="settings.sale-duration" className="rounded-3xl p-6 space-y-5">
         <div>
           <h2 className="text-lg font-bold text-white">Default sale duration</h2>
           <p className="text-xs text-slate-400 mt-1 leading-relaxed">
@@ -102,28 +105,27 @@ export default function Settings() {
           <>
             <div className="flex flex-wrap gap-2">
               {PRESETS.map(p => (
-                <button key={p.days} onClick={() => { setDays(String(p.days)); save(p.days); }}
+                <Button key={p.days} onClick={() => { setDays(String(p.days)); save(p.days); }}
                   disabled={saving}
                   title={p.hint}
-                  className={`btn rounded-xl px-4 py-2 text-xs ${savedDays === p.days ? 'btn-primary' : 'btn-secondary'}`}>
+                  variant={savedDays === p.days ? 'default' : 'secondary'}>
                   {p.label}
-                </button>
+                </Button>
               ))}
             </div>
 
-            <div className="panel p-4 space-y-3">
+            <div className="bg-muted/50 border rounded-lg p-4 space-y-3">
               <div className="flex flex-wrap items-end gap-3">
                 <div>
-                  <label className="field-label" htmlFor="sale-days">Custom duration (days)</label>
-                  <input id="sale-days" type="number" min={1} max={365} value={days}
+                  <Label htmlFor="sale-days">Custom duration (days)</Label>
+                  <Input id="sale-days" type="number" min={1} max={365} value={days}
                     onChange={e => setDays(e.target.value)}
                     onKeyDown={e => { if (e.key === 'Enter') save(); }}
-                    className="field-input w-32" />
+                    className="w-32" />
                 </div>
-                <button onClick={() => save()} disabled={saving || !dirty}
-                  className="btn btn-primary rounded-xl px-5 py-2 text-xs">
+                <Button onClick={() => save()} disabled={saving || !dirty}>
                   {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
-                </button>
+                </Button>
               </div>
               {preview && (
                 <p className="text-xs text-slate-400">
@@ -134,7 +136,7 @@ export default function Settings() {
             </div>
           </>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

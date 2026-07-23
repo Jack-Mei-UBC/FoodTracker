@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { Card } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -132,9 +134,9 @@ function ScrapesInner() {
       {/* ═══ Section: Job list ═══ */}
       <div data-loc="scrapes.job-list" className="space-y-3">
         {jobs.length === 0 && (
-          <div className="card rounded-3xl p-8 text-center text-slate-600 text-sm">
+          <Card className="rounded-3xl p-8 text-center text-slate-600 text-sm">
             No scrapes yet. Dispatch one from the <span className="text-violet-400 font-semibold">Dashboard</span>.
-          </div>
+          </Card>
         )}
 
         {jobs.map(job => {
@@ -142,14 +144,14 @@ function ScrapesInner() {
           const items = details[job.id] || [];
           const open = expanded.has(job.id);
           return (
-            <div key={job.id} className="card overflow-hidden">
+            <Card key={job.id} className="overflow-hidden">
               {/* Header row */}
-              <button onClick={() => toggle(job.id)} className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-white/[0.02] transition">
+              <button onClick={() => toggle(job.id)} className="w-full flex items-center justify-between gap-3 px-5 py-4 text-left hover:bg-white/2 transition">
                 <div className="flex items-center gap-3 min-w-0">
-                  <span className={`badge text-[9px] shrink-0 ${STATUS_STYLES[job.status] ?? STATUS_STYLES.queued}`}>{job.status}</span>
-                  <span className={`badge text-[9px] shrink-0 ${job.source === 'cocowest' ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20' : 'text-violet-300 bg-violet-500/10 border-violet-500/20'}`}>
+                  <Badge variant="outline" className={`text-[9px] shrink-0 ${STATUS_STYLES[job.status] ?? STATUS_STYLES.queued}`}>{job.status}</Badge>
+                  <Badge variant="outline" className={`text-[9px] shrink-0 ${job.source === 'cocowest' ? 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20' : 'text-violet-300 bg-violet-500/10 border-violet-500/20'}`}>
                     {job.source === 'cocowest' ? 'Costco' : 'Flipp'}
-                  </span>
+                  </Badge>
                   <span className="text-white font-semibold truncate">{job.store_name ?? `Store #${job.store_id}`}</span>
                   <span className="text-slate-500 text-xs shrink-0">{modeLabel(job)}</span>
                   {job.postal_code && <span className="text-slate-600 text-[11px] font-mono shrink-0 hidden sm:inline">{job.postal_code}</span>}
@@ -176,7 +178,7 @@ function ScrapesInner() {
                 <div className="h-1.5 w-full rounded-full bg-slate-800 overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-500 ${
-                      job.status === 'failed' ? 'bg-rose-500' : job.status === 'done' ? 'bg-emerald-500' : 'bg-gradient-to-r from-violet-500 to-indigo-500'
+                      job.status === 'failed' ? 'bg-rose-500' : job.status === 'done' ? 'bg-emerald-500' : 'bg-linear-to-r from-violet-500 to-indigo-500'
                     }`}
                     style={{ width: `${pct}%` }}
                   />
@@ -210,8 +212,8 @@ function ScrapesInner() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-semibold text-white truncate">{it.food_name}</span>
-                            {it.is_new_food && <span className="text-[8px] font-bold uppercase text-sky-300 bg-sky-500/10 border border-sky-500/20 rounded px-1.5 py-0.5 shrink-0">new</span>}
-                            {it.is_sale && <span className="text-[8px] font-bold uppercase text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded px-1.5 py-0.5 shrink-0">sale</span>}
+                            {it.is_new_food && <span className="text-[8px] font-bold uppercase text-sky-300 bg-sky-500/10 border border-sky-500/20 rounded-sm px-1.5 py-0.5 shrink-0">new</span>}
+                            {it.is_sale && <span className="text-[8px] font-bold uppercase text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-sm px-1.5 py-0.5 shrink-0">sale</span>}
                           </div>
                           {it.flyer_name && it.flyer_name !== it.food_name && (
                             <p className="text-[11px] text-slate-500 truncate">{it.flyer_name}</p>
@@ -237,14 +239,14 @@ function ScrapesInner() {
                   )}
                 </div>
               )}
-            </div>
+            </Card>
           );
         })}
       </div>
 
       {/* ═══ Section: Image lightbox (hand-rolled, not via Modal — see CLAUDE.md) ═══ */}
       {lightbox != null && (
-        <div data-loc="scrapes.lightbox" className="fixed inset-0 z-[80] bg-black/85 backdrop-blur-sm flex items-center justify-center p-6" onClick={() => setLightbox(null)}>
+        <div data-loc="scrapes.lightbox" className="fixed inset-0 z-80 bg-black/85 backdrop-blur-xs flex items-center justify-center p-6" onClick={() => setLightbox(null)}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={`${API_BASE_URL}/api/images/${lightbox}`} alt="flyer" className="max-h-[85vh] max-w-[85vw] rounded-2xl border border-white/10 shadow-2xl" onClick={e => e.stopPropagation()} />
           <button onClick={() => setLightbox(null)} className="absolute top-5 right-5 text-slate-300 hover:text-white p-2 rounded-full bg-white/5 hover:bg-white/10 transition">

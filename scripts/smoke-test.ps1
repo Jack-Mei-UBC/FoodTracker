@@ -37,6 +37,42 @@ if (Test-Path $marker) {
 }
 Set-Content -Path $marker -Value (Get-Date).Ticks -ErrorAction SilentlyContinue
 
+$script:failures = @()
+function Check($name, [bool]$ok) {
+    if ($ok) { Write-Host "  [PASS] $name" }
+    else { Write-Host "  [FAIL] $name"; $script:failures += $name }
+}
+
+# --- Frontend source: drift guard for retired pasted-utility classes -------
+# .btn/.btn-primary/.btn-secondary, .panel, .badge, and .field-input were fully
+# retired by the shadcn/ui migration's Phase 3 page sweep (SHADCN-MIGRATION.md)
+# - every call site now uses the real component (Button/Card+bg-muted/Badge/
+# Input). This is a pure static-file check, so it runs even when the stack is
+# down, unlike everything below the health gate, and it's a real regression
+# (not a STRICT-only concern) - a retired class reappearing means someone
+# pasted the old utility instead of reaching for the component.
+function Test-RetiredClassDrift {
+    $retiredClasses = @('btn', 'btn-primary', 'btn-secondary', 'panel', 'badge', 'field-input')
+    $frontendSrc = Join-Path $PSScriptRoot '..\frontend\src'
+    if (-not (Test-Path $frontendSrc)) { return @() }
+    $hits = @()
+    $files = Get-ChildItem -Path $frontendSrc -Recurse -Include *.tsx, *.ts -File
+    foreach ($f in $files) {
+        $content = Get-Content -Path $f.FullName -Raw
+        foreach ($cls in $retiredClasses) {
+            $pattern = "className\s*=\s*[`"'``][^`"'``]*\b$([regex]::Escape($cls))\b"
+            if ($content -match $pattern) {
+                $rel = $f.FullName.Substring((Get-Item $frontendSrc).FullName.Length + 1)
+                $hits += "${rel}: .$cls"
+            }
+        }
+    }
+    return $hits
+}
+$driftHits = Test-RetiredClassDrift
+Check "no retired pasted-utility classes (.btn*/.panel/.badge/.field-input) in frontend/src" ($driftHits.Count -eq 0)
+if ($driftHits.Count -gt 0) { foreach ($hit in $driftHits) { Write-Host "         $hit" } }
+
 function Get-Json($url) { return Invoke-RestMethod -Uri $url -TimeoutSec 20 }
 
 # Gate on backend health. Default: skip (exit 0) when the stack is down — but
@@ -47,20 +83,17 @@ try {
     $health = Get-Json "$API/api/health"
     if ($health.status -ne 'healthy') {
         if ($strict) { Write-Host "smoke: backend unhealthy - FAIL (STRICT)"; exit 2 }
-        Write-Host "smoke: !! backend unhealthy - NOTHING WAS VERIFIED (skipping) !!"
+        Write-Host "smoke: !! backend unhealthy - NOTHING WAS VERIFIED beyond the drift guard (skipping) !!"
+        if ($script:failures.Count -gt 0) { exit 2 }
         exit 0
     }
 } catch {
     if ($strict) { Write-Host "smoke: backend not reachable at $API - FAIL (STRICT)"; exit 2 }
-    Write-Host "smoke: !! backend not reachable at $API - NOTHING WAS VERIFIED (skipping) !!"
+    Write-Host "smoke: !! backend not reachable at $API - NOTHING WAS VERIFIED beyond the drift guard (skipping) !!"
+    if ($script:failures.Count -gt 0) { exit 2 }
     exit 0
 }
 
-$script:failures = @()
-function Check($name, [bool]$ok) {
-    if ($ok) { Write-Host "  [PASS] $name" }
-    else { Write-Host "  [FAIL] $name"; $script:failures += $name }
-}
 function Skip($name) { Write-Host "  [SKIP] $name" }
 function HasProp($obj, $name) { return ($null -ne $obj) -and ($obj.PSObject.Properties.Name -contains $name) }
 

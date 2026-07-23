@@ -3,6 +3,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { formatUnitPrice } from '../../lib/units';
 import PriceEditor from '../../components/PriceEditor';
+import { Card } from '../../components/ui/card';
+import { useToast } from '../../components/StatusToast';
+import { Checkbox } from '../../components/ui/checkbox';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -58,12 +63,7 @@ export default function History() {
   const [stores, setStores] = useState<Store[]>([]);
   const [includeDeleted, setIncludeDeleted] = useState(true);
   const [editingLog, setEditingLog] = useState<PriceLog | null>(null);
-  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  const notify = (text: string, type: 'success' | 'error' = 'success') => {
-    setStatusMsg({ type, text });
-    setTimeout(() => setStatusMsg(null), 4000);
-  };
+  const { notify } = useToast();
 
   const load = useCallback(async () => {
     try {
@@ -114,15 +114,6 @@ export default function History() {
 
   return (
     <div data-loc="page.history" className="space-y-8 max-w-6xl mx-auto">
-      {statusMsg && (
-        <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl shadow-xl ${
-          statusMsg.type === 'success'
-            ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/30'
-            : 'bg-rose-950/90 text-rose-300 border border-rose-500/30'
-        }`}>
-          <span className="text-sm font-semibold">{statusMsg.text}</span>
-        </div>
-      )}
 
       {/* ═══ Section: Header ═══ */}
       <div data-loc="history.header" className="flex items-center justify-between">
@@ -131,13 +122,13 @@ export default function History() {
           <p className="text-sm text-slate-400 mt-1">Every logged price. Edit or delete entries — all changes are revertible below.</p>
         </div>
         <label className="flex items-center gap-2 text-xs text-slate-400 cursor-pointer">
-          <input type="checkbox" checked={includeDeleted} onChange={e => setIncludeDeleted(e.target.checked)} className="accent-violet-500" />
+          <Checkbox checked={includeDeleted} onCheckedChange={c => setIncludeDeleted(c === true)} />
           Show deleted
         </label>
       </div>
 
       {/* ═══ Section: Price log table ═══ */}
-      <div data-loc="history.price-table" className="card rounded-3xl p-6 overflow-x-auto">
+      <Card data-loc="history.price-table" className="rounded-3xl p-6 overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
             <tr className="border-b border-white/5 text-slate-500">
@@ -173,9 +164,9 @@ export default function History() {
                     {formatUnitPrice(Number(log.price), log.amount ? Number(log.amount) : null, log.amount_unit) ?? '—'}
                   </td>
                   <td className="py-2.5 pr-4">
-                    <span className={`badge text-[9px] ${SOURCE_COLORS[log.source] ?? SOURCE_COLORS.manual}`}>
+                    <Badge variant="outline" className={`text-[9px] ${SOURCE_COLORS[log.source] ?? SOURCE_COLORS.manual}`}>
                       {log.source}
-                    </span>
+                    </Badge>
                   </td>
                   <td className="py-2.5 pr-4">
                     {log.image_id ? (
@@ -207,10 +198,10 @@ export default function History() {
             })}
           </tbody>
         </table>
-      </div>
+      </Card>
 
       {/* ═══ Section: Change history / revert feed ═══ */}
-      <div data-loc="history.audit-log" className="card rounded-3xl p-6 space-y-4">
+      <Card data-loc="history.audit-log" className="rounded-3xl p-6 space-y-4">
         <h2 className="text-lg font-bold text-white">Change History</h2>
         <p className="text-xs text-slate-400">Every edit, delete, and revert. Revert any change to undo it.</p>
         <div className="space-y-2 max-h-[420px] overflow-y-auto">
@@ -233,15 +224,15 @@ export default function History() {
               ) : a.action === 'revert' ? (
                 <span className="text-[10px] text-slate-600">—</span>
               ) : (
-                <button onClick={() => revert(a.id)}
-                  className="text-[11px] font-bold text-sky-400 hover:text-sky-300 bg-sky-500/10 border border-sky-500/20 rounded-lg px-3 py-1 transition">
+                <Button onClick={() => revert(a.id)}
+                  variant="outline" size="sm" className="text-sky-400 bg-sky-500/10 border-sky-500/20 hover:bg-sky-500/20 hover:text-sky-300">
                   Revert
-                </button>
+                </Button>
               )}
             </div>
           ))}
         </div>
-      </div>
+      </Card>
 
       {/* Shared price editor popup */}
       {editingLog && (

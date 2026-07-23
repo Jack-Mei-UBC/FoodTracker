@@ -8,6 +8,15 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Modal from '../../components/Modal';
 import FoodDetailModal from '../../components/FoodDetailModal';
+import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
+import { useToast } from '../../components/StatusToast';
+import { Command, CommandList, CommandItem } from '../../components/ui/command';
+import { Input } from '../../components/ui/input';
+import { Badge } from '../../components/ui/badge';
+import { Textarea } from '../../components/ui/textarea';
 import NutritionSearch, { SavedFood } from '../../components/NutritionSearch';
 import { UNIT_OPTIONS, parseAmountInput, normalizeUnit } from '../../lib/units';
 import { scaleNutrients, isServingUnit, NutritionFacts } from '../../lib/nutrition';
@@ -155,11 +164,7 @@ export default function MealsPage() {
   const [aiQuery, setAiQuery] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 4000);
-  };
+  const { notify: showToast } = useToast();
 
   const fetchMeals = async () => {
     try {
@@ -473,46 +478,37 @@ export default function MealsPage() {
     }
   };
 
-  const inputCls = "bg-slate-950 border border-white/10 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition";
-
   return (
-    <div data-loc="page.meals" className="space-y-8 animate-slide-up relative">
-      {notification && (
-        <div className={`fixed bottom-5 right-5 z-50 p-4 rounded-xl shadow-xl flex items-center space-x-3 ${
-          notification.type === 'success' ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-500/30' : 'bg-rose-950/90 text-rose-300 border border-rose-500/30'
-        }`}>
-          <div className={`w-2 h-2 rounded-full ${notification.type === 'success' ? 'bg-emerald-400' : 'bg-rose-400'}`} />
-          <span className="text-sm font-semibold">{notification.message}</span>
-        </div>
-      )}
+    <div data-loc="page.meals" className="space-y-8 relative">
 
       {/* ═══ Section: Header ═══ */}
       <div data-loc="meals.header" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-100 to-emerald-300 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-extrabold tracking-tight bg-linear-to-r from-white via-slate-100 to-emerald-300 bg-clip-text text-transparent">
             Meal Plans
           </h1>
           <p className="text-sm text-slate-400 mt-1">Recipes with live macros and cost from your latest tracked prices.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <Button
             onClick={() => { setAiOpen(!aiOpen); setBuilderOpen(false); }}
-            className="px-4 py-2 rounded-xl bg-violet-600/20 border border-violet-500/30 text-violet-300 text-sm font-semibold hover:bg-violet-600/30 transition"
+            variant="outline"
+            className="rounded-xl text-violet-300 bg-violet-600/20 border-violet-500/30 hover:bg-violet-600/30 hover:text-violet-200"
           >
             ✨ Generate with AI
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={openCreate}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold hover:shadow-lg hover:shadow-emerald-500/20 active:scale-[0.98] transition"
+            className="rounded-xl"
           >
             + New Meal
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* ═══ Section: AI generation panel ═══ */}
       {aiOpen && (
-        <div data-loc="meals.ai-panel" className="card p-5 space-y-4">
+        <Card data-loc="meals.ai-panel" className="p-5 space-y-4">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-violet-400 animate-pulse" />
             <h2 className="text-sm font-bold text-white">Draft a meal from your fridge</h2>
@@ -522,29 +518,30 @@ export default function MealsPage() {
             targets, and the model proposes a meal. Nothing is saved until you review it in the builder.
           </p>
 
-          <input
+          <Input
             type="text"
             value={aiQuery}
             onChange={e => setAiQuery(e.target.value)}
             placeholder="Filter foods…"
-            className={`w-full sm:w-64 ${inputCls}`}
+            className="w-full sm:w-64 rounded-xl focus-visible:border-emerald-500"
           />
           <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
             {aiCandidates.map(f => {
               const selected = aiFoodIds.indexOf(f.id) !== -1;
               return (
-                <button
+                <Badge
                   key={f.id}
-                  type="button"
+                  render={<button type="button" />}
                   onClick={() => toggleAiFood(f.id)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
+                  variant="outline"
+                  className={`cursor-pointer text-xs font-semibold ${
                     selected
                       ? 'bg-violet-600/30 border-violet-400/50 text-violet-200'
                       : 'bg-slate-950/60 border-white/10 text-slate-400 hover:text-white hover:bg-white/5'
                   }`}
                 >
                   {selected ? '✓ ' : ''}{f.name}
-                </button>
+                </Badge>
               );
             })}
             {aiCandidates.length === 0 && (
@@ -556,36 +553,36 @@ export default function MealsPage() {
             {([['calories', 'kcal'], ['protein_g', 'Protein g'], ['carbs_g', 'Carbs g'], ['fat_g', 'Fat g']] as const).map(pair => (
               <div key={pair[0]}>
                 <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">{pair[1]}</label>
-                <input
+                <Input
                   type="number" step="any" min="0"
                   value={aiTargets[pair[0]]}
                   onChange={e => setAiTargets({ ...aiTargets, [pair[0]]: e.target.value })}
-                  className={`w-20 text-right font-mono ${inputCls}`}
+                  className="w-20 text-right font-mono rounded-xl focus-visible:border-emerald-500"
                 />
               </div>
             ))}
-            <input
+            <Input
               type="text"
               value={aiNotes}
               onChange={e => setAiNotes(e.target.value)}
               placeholder="Extra instructions (e.g. high-protein dinner, no dairy)…"
-              className={`flex-1 min-w-48 ${inputCls}`}
+              className="flex-1 min-w-48 rounded-xl focus-visible:border-emerald-500"
             />
-            <button
+            <Button
               onClick={generate}
               disabled={isGenerating}
-              className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold transition disabled:opacity-50"
+              className="rounded-xl"
             >
               {isGenerating ? 'Generating…' : 'Generate draft'}
-            </button>
+            </Button>
           </div>
           <p className="text-[10px] text-slate-500">Targets are per serving of the meal, prefilled as ⅓ of your daily goals.</p>
-        </div>
+        </Card>
       )}
 
       {/* ═══ Section: Builder ═══ */}
       {builderOpen && (
-        <div data-loc="meals.builder" className="card p-5 space-y-4">
+        <Card data-loc="meals.builder" className="p-5 space-y-4">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             <h2 className="text-sm font-bold text-white">{editMealId ? 'Edit Meal' : 'New Meal'}</h2>
@@ -598,20 +595,20 @@ export default function MealsPage() {
           )}
 
           <div className="flex flex-col sm:flex-row gap-3">
-            <input
+            <Input
               type="text"
               value={name}
               onChange={e => setName(e.target.value)}
               placeholder="Meal name (e.g. Chicken & Rice Bowl)"
-              className={`flex-1 ${inputCls}`}
+              className="flex-1 rounded-xl focus-visible:border-emerald-500"
             />
             <div className="flex items-center gap-2">
               <label className="text-xs text-slate-400 whitespace-nowrap">Makes</label>
-              <input
+              <Input
                 type="number" step="any" min="0.25"
                 value={servings}
                 onChange={e => setServings(e.target.value)}
-                className={`w-20 text-right font-mono ${inputCls}`}
+                className="w-20 text-right font-mono rounded-xl focus-visible:border-emerald-500"
               />
               <span className="text-xs text-slate-400">servings</span>
             </div>
@@ -620,37 +617,27 @@ export default function MealsPage() {
           {/* Ingredient search — from the catalog, or from USDA. The USDA tab is
               save-on-pick: nothing is added to the catalog until you press "Add to
               meal" on a specific result (a recipe ingredient must reference a food). */}
-          <div className="space-y-2">
-            <div className="flex gap-1 text-[11px] font-semibold">
-              <button type="button" onClick={() => setIngredientSource('catalog')}
-                className={`px-3 py-1 rounded-lg border transition ${ingredientSource === 'catalog' ? 'text-violet-200 bg-violet-500/15 border-violet-500/30' : 'text-slate-400 border-white/10 hover:bg-white/5'}`}>
-                Catalog
-              </button>
-              <button type="button" onClick={() => setIngredientSource('usda')}
-                className={`px-3 py-1 rounded-lg border transition ${ingredientSource === 'usda' ? 'text-sky-200 bg-sky-500/15 border-sky-500/30' : 'text-slate-400 border-white/10 hover:bg-white/5'}`}>
-                USDA database
-              </button>
-            </div>
+          <Tabs value={ingredientSource} onValueChange={v => v && setIngredientSource(v as 'catalog' | 'usda')} className="space-y-2">
+            <TabsList>
+              <TabsTrigger value="catalog">Catalog</TabsTrigger>
+              <TabsTrigger value="usda">USDA database</TabsTrigger>
+            </TabsList>
 
-            {ingredientSource === 'catalog' ? (
+            <TabsContent value="catalog">
               <div className="relative">
-                <input
+                <Input
                   type="text"
                   value={query}
                   onChange={e => { setQuery(e.target.value); setShowSuggestions(true); }}
                   onFocus={() => setShowSuggestions(true)}
                   placeholder="Add an ingredient from the catalog…"
-                  className={`w-full ${inputCls}`}
+                  className="w-full rounded-xl focus-visible:border-emerald-500"
                 />
                 {showSuggestions && query.trim() && (
-                  <div className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto overflow-x-hidden scrolling-touch bg-[#0b101f] border border-white/10 rounded-xl shadow-2xl">
-                    {suggestions.map(f => (
-                      <div key={f.id} className="flex items-center hover:bg-white/5 transition">
-                        <button
-                          type="button"
-                          onClick={() => addRow(f)}
-                          className="flex-1 min-w-0 text-left px-3 py-2 text-xs text-slate-200 flex justify-between items-center gap-2"
-                        >
+                  <Command shouldFilter={false} className="absolute z-20 mt-1 w-full rounded-xl border border-white/10 shadow-2xl">
+                    <CommandList className="max-h-64">
+                      {suggestions.map(f => (
+                        <CommandItem key={f.id} value={String(f.id)} onSelect={() => addRow(f)} className="justify-between">
                           <span className="truncate">{f.name} <span className="text-slate-500">· {f.category}</span></span>
                           <span className="flex items-center gap-2 shrink-0">
                             {f.nutrition ? (
@@ -659,30 +646,31 @@ export default function MealsPage() {
                               <span className="text-[10px] text-amber-500">no facts</span>
                             )}
                             {!(f.latest_prices ?? []).length && <span className="text-[10px] text-slate-600">no price</span>}
+                            {/* Add facts/price to this food before adding it as an ingredient */}
+                            <button
+                              type="button"
+                              onClick={e => { e.stopPropagation(); setDetailFoodId(f.id); }}
+                              title="Edit this food's prices, names & nutrition facts"
+                              className="text-slate-500 hover:text-violet-300 transition"
+                            >
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                            </button>
                           </span>
-                        </button>
-                        {/* Add facts/price to this food before adding it as an ingredient */}
-                        <button
-                          type="button"
-                          onClick={() => setDetailFoodId(f.id)}
-                          title="Edit this food's prices, names & nutrition facts"
-                          className="shrink-0 px-2.5 py-2 text-slate-500 hover:text-violet-300 transition"
-                        >
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                        </button>
-                      </div>
-                    ))}
-                    {suggestions.length === 0 && (
-                      <p className="px-3 py-2 text-xs text-slate-500">No catalog match — try the USDA database tab, or add the food from the Dashboard.</p>
-                    )}
-                  </div>
+                        </CommandItem>
+                      ))}
+                      {suggestions.length === 0 && (
+                        <p className="px-3 py-2 text-xs text-slate-500">No catalog match — try the USDA database tab, or add the food from the Dashboard.</p>
+                      )}
+                    </CommandList>
+                  </Command>
                 )}
               </div>
-            ) : (
+            </TabsContent>
+            <TabsContent value="usda">
               <NutritionSearch category="USDA" pickLabel="Add to meal"
                 onSaved={registerSavedFood} onPick={addSavedFoodToMeal} notify={showToast} />
-            )}
-          </div>
+            </TabsContent>
+          </Tabs>
 
           {/* Ingredient rows */}
           {rows.length > 0 && (
@@ -692,9 +680,9 @@ export default function MealsPage() {
                 const rowPreview = builderPreview.perRow[i];
                 const price = (food?.latest_prices ?? []).find(p => p.unit_price != null);
                 return (
-                  <div key={`${row.food_id}-${i}`} className="panel flex flex-wrap items-center gap-2 p-2.5 text-xs">
+                  <div key={`${row.food_id}-${i}`} className="bg-muted/50 border rounded-lg flex flex-wrap items-center gap-2 p-2.5 text-xs">
                     <span className="font-semibold text-slate-200 flex-1 min-w-32 truncate">{row.food_name}</span>
-                    <input
+                    <Input
                       type="text" inputMode="text"
                       value={row.amount}
                       onChange={e => {
@@ -705,19 +693,22 @@ export default function MealsPage() {
                         setRows(next);
                       }}
                       title="Type a number with a unit (e.g. 600g, 2lb) to auto-fill both fields"
-                      className="w-16 bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white text-right font-mono focus:outline-none focus:border-emerald-500"
+                      className="w-16 text-right font-mono focus-visible:border-emerald-500"
                     />
-                    <select
+                    <Select
                       value={row.unit}
-                      onChange={e => {
+                      onValueChange={v => {
+                        if (!v) return;
                         const next = rows.slice();
-                        next[i] = { ...row, unit: e.target.value };
+                        next[i] = { ...row, unit: v };
                         setRows(next);
                       }}
-                      className="bg-slate-950 border border-white/10 rounded-lg px-1.5 py-1 text-white focus:outline-none"
                     >
-                      {INGREDIENT_UNITS.map(u => <option key={u} value={u}>{u}</option>)}
-                    </select>
+                      <SelectTrigger size="sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {INGREDIENT_UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                     <span className="font-mono text-slate-400 w-20 text-right">
                       {rowPreview?.scaled ? `${fmtKcal(rowPreview.scaled.calories)} kcal` : <span className="text-amber-500/80">no facts</span>}
                     </span>
@@ -749,7 +740,7 @@ export default function MealsPage() {
 
           {/* Live totals */}
           {rows.length > 0 && (
-            <div className="panel p-3 flex flex-wrap gap-x-6 gap-y-1 text-xs font-mono">
+            <div className="bg-muted/50 border rounded-lg p-3 flex flex-wrap gap-x-6 gap-y-1 text-xs font-mono">
               <span className="text-slate-300">
                 Meal: <span className="font-bold text-white">{fmtKcal(builderPreview.calories)} kcal</span>
                 <span className="text-slate-500"> · P {Math.round(builderPreview.protein)} C {Math.round(builderPreview.carbs)} F {Math.round(builderPreview.fat)}</span>
@@ -765,47 +756,47 @@ export default function MealsPage() {
             </div>
           )}
 
-          <textarea
+          <Textarea
             value={notes}
             onChange={e => setNotes(e.target.value)}
             placeholder="Notes / method (optional)…"
             rows={2}
-            className={`w-full ${inputCls}`}
+            className="w-full rounded-xl focus-visible:border-emerald-500"
           />
 
           <div className="flex gap-2">
-            <button
+            <Button
               onClick={saveMeal}
               disabled={isSaving}
-              className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition disabled:opacity-50"
+              className="rounded-xl"
             >
               {isSaving ? 'Saving…' : editMealId ? 'Save changes' : 'Save meal'}
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={resetBuilder}
-              className="btn btn-secondary px-5 py-2"
+              variant="secondary"
             >
               Cancel
-            </button>
+            </Button>
           </div>
-        </div>
+        </Card>
       )}
 
       {/* ═══ Section: Meal list ═══ */}
       {isLoading ? (
         <div className="text-center text-slate-500 py-12">Loading meals…</div>
       ) : meals.length === 0 ? (
-        <div className="text-center py-16 card">
+        <Card className="text-center py-16">
           <p className="text-slate-400 font-semibold">No meals yet.</p>
           <p className="text-xs text-slate-600 mt-1">Build one from your catalog foods, or let the AI draft one from your fridge.</p>
-        </div>
+        </Card>
       ) : (
         <div data-loc="meals.list" className="space-y-3">
           {meals.map(meal => {
             const ps = meal.per_serving;
             const expanded = expandedId === meal.id;
             return (
-              <div key={meal.id} className="card overflow-hidden">
+              <Card key={meal.id} className="overflow-hidden">
                 <div className="p-4 flex flex-wrap items-center gap-3">
                   <button onClick={() => toggleExpand(meal)} className="flex-1 min-w-48 text-left group">
                     <span className="font-bold text-white group-hover:text-emerald-300 transition flex items-center gap-2">
@@ -829,12 +820,13 @@ export default function MealsPage() {
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    <button
+                    <Button
                       onClick={() => { setLogMeal(meal); setLogPortions('1'); }}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-600/20 border border-emerald-500/30 text-emerald-300 text-xs font-semibold hover:bg-emerald-600/30 transition"
+                      variant="outline" size="sm"
+                      className="text-emerald-300 bg-emerald-600/20 border-emerald-500/30 hover:bg-emerald-600/30 hover:text-emerald-200"
                     >
                       Log to diary
-                    </button>
+                    </Button>
                     <button onClick={() => openEdit(meal)} title="Edit" className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition">
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                     </button>
@@ -922,7 +914,7 @@ export default function MealsPage() {
                     )}
                   </div>
                 )}
-              </div>
+              </Card>
             );
           })}
         </div>
@@ -930,7 +922,7 @@ export default function MealsPage() {
 
       {/* ═══ Section: Log-to-diary popup (data-loc="modal.meal-log") ═══ */}
       {logMeal && (
-        <Modal onClose={() => setLogMeal(null)} maxWidth="max-w-sm" panelClassName="card p-5 space-y-4" dataLoc="modal.meal-log">
+        <Modal onClose={() => setLogMeal(null)} maxWidth="max-w-sm" dataLoc="modal.meal-log">
             <h3 className="text-sm font-bold text-white">Log “{logMeal.name}” to today's diary</h3>
             <p className="text-xs text-slate-400">
               One diary entry with the meal's per-serving nutrients × portions
@@ -939,34 +931,38 @@ export default function MealsPage() {
             <div className="flex items-center gap-3">
               <div className="flex-1">
                 <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Meal</label>
-                <select value={logSlot} onChange={e => setLogSlot(e.target.value)} className={`w-full ${inputCls}`}>
-                  {MEAL_SLOTS.map(s => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-                </select>
+                <Select value={logSlot} onValueChange={v => v && setLogSlot(v)}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {MEAL_SLOTS.map(s => <SelectItem key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">Portions</label>
-                <input
+                <Input
                   type="number" step="any" min="0.25"
                   value={logPortions}
                   onChange={e => setLogPortions(e.target.value)}
-                  className={`w-24 text-right font-mono ${inputCls}`}
+                  className="w-24 text-right font-mono rounded-xl focus-visible:border-emerald-500"
                 />
               </div>
             </div>
             <div className="flex gap-2">
-              <button
+              <Button
                 onClick={submitLog}
                 disabled={isLogging}
-                className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl py-2 text-sm font-semibold transition disabled:opacity-50"
+                className="flex-1 rounded-xl"
               >
                 {isLogging ? 'Logging…' : 'Log it'}
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => setLogMeal(null)}
-                className="btn btn-secondary flex-1 py-2"
+                variant="secondary"
+                className="flex-1"
               >
                 Cancel
-              </button>
+              </Button>
             </div>
         </Modal>
       )}

@@ -8,6 +8,10 @@
 
 import React, { useState } from 'react';
 import Modal from './Modal';
+import { Button } from './ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Input } from './ui/input';
+import { Command, CommandList, CommandItem } from './ui/command';
 import { UNIT_OPTIONS, parseAmountInput } from '../lib/units';
 import { NutritionFacts, MACRO_META, MICRO_META } from '../lib/nutrition';
 
@@ -116,63 +120,64 @@ export default function MacroEditor({
     }
   };
 
-  const num = 'bg-slate-950 border border-white/10 rounded-lg px-2 py-1 text-white text-right font-mono focus:outline-none focus:border-emerald-500';
+  const num = 'text-right font-mono focus-visible:border-emerald-500';
 
   return (
-    <Modal onClose={onClose} maxWidth="max-w-lg" panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4" dataLoc="modal.macro-editor">
-        <div className="flex items-center justify-between">
+    <Modal onClose={onClose} maxWidth="max-w-lg" dataLoc="modal.macro-editor">
+        <div>
           <h3 className="text-sm font-bold text-white">
             Nutrition Facts{foodName ? <span className="text-slate-400 font-normal"> — {foodName}</span> : null}
             <span className="block text-[10px] text-slate-500 font-normal">per serving · feeds the Food Diary</span>
           </h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
         </div>
 
         {error && <div className="text-xs font-semibold text-rose-300 bg-rose-950/70 border border-rose-500/30 rounded-lg px-3 py-2">{error}</div>}
 
         {/* USDA lookup — prefills the form; nothing saves until Save. */}
         <div className="flex gap-2 items-center">
-          <input
+          <Input
             type="text" value={fdcQuery}
             onChange={e => setFdcQuery(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); searchUsda(); } }}
             placeholder="Search USDA (name or barcode)…"
-            className="flex-1 bg-slate-950 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500"
+            className="flex-1 focus-visible:border-sky-500"
           />
-          <button type="button" onClick={searchUsda} disabled={fdcSearching}
-            className="px-3 py-1.5 rounded-lg bg-sky-600/20 border border-sky-500/30 text-sky-300 text-xs font-semibold hover:bg-sky-600/30 transition disabled:opacity-50">
+          <Button type="button" onClick={searchUsda} disabled={fdcSearching} variant="outline" size="sm"
+            className="text-sky-300 bg-sky-600/20 border-sky-500/30 hover:bg-sky-600/30 hover:text-sky-200">
             {fdcSearching ? 'Searching…' : 'Search USDA'}
-          </button>
+          </Button>
         </div>
         {fdcResults !== null && (
-          <div className="panel rounded-lg max-h-40 overflow-y-auto space-y-1 p-1">
-            {fdcResults.length === 0 ? (
-              <p className="text-[11px] text-slate-500 px-2 py-1.5">No USDA matches with calorie data.</p>
-            ) : fdcResults.map((c: any) => (
-              <button key={c.fdc_id} type="button" onClick={() => applyCandidate(c)}
-                className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-white/5 transition text-xs">
-                <span className="text-slate-200">{c.description}</span>
-                {c.brand && <span className="text-slate-500"> · {c.brand}</span>}
-                <span className="block text-[10px] font-mono text-emerald-400">
-                  {Math.round(c.calories)} kcal / {c.serving_size} {c.serving_unit}{c.serving_text ? ` (${c.serving_text})` : ''}
-                  <span className="text-slate-600"> · {c.data_type}</span>
-                </span>
-              </button>
-            ))}
-          </div>
+          <Command shouldFilter={false} className="border rounded-lg max-h-40">
+            <CommandList>
+              {fdcResults.length === 0 ? (
+                <p className="text-[11px] text-slate-500 px-2 py-1.5">No USDA matches with calorie data.</p>
+              ) : fdcResults.map((c: any) => (
+                <CommandItem key={c.fdc_id} value={String(c.fdc_id)} onSelect={() => applyCandidate(c)}>
+                  <span className="text-slate-200">{c.description}</span>
+                  {c.brand && <span className="text-slate-500"> · {c.brand}</span>}
+                  <span className="block text-[10px] font-mono text-emerald-400">
+                    {Math.round(c.calories)} kcal / {c.serving_size} {c.serving_unit}{c.serving_text ? ` (${c.serving_text})` : ''}
+                    <span className="text-slate-600"> · {c.data_type}</span>
+                  </span>
+                </CommandItem>
+              ))}
+            </CommandList>
+          </Command>
         )}
 
         {/* Serving + calories */}
         <div className="flex flex-wrap gap-2 items-center text-xs">
           <label className="text-slate-400">Serving</label>
-          <input type="text" inputMode="text" placeholder="e.g. 170g" value={draft.serving_size} onChange={e => onServing(e.target.value)} title="Type a number with a unit (e.g. 170g, 1cup) to auto-fill both fields" className={`${num} w-20`} />
-          <select value={draft.serving_unit} onChange={e => setDraft({ ...draft, serving_unit: e.target.value })} className="bg-slate-950 border border-white/10 rounded-lg px-1.5 py-1 text-white focus:outline-none">
-            {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-          </select>
+          <Input type="text" inputMode="text" placeholder="e.g. 170g" value={draft.serving_size} onChange={e => onServing(e.target.value)} title="Type a number with a unit (e.g. 170g, 1cup) to auto-fill both fields" className={`${num} w-20`} />
+          <Select value={draft.serving_unit} onValueChange={v => v && setDraft({ ...draft, serving_unit: v })}>
+            <SelectTrigger size="sm"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {UNIT_OPTIONS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <label className="text-slate-400 ml-2">Calories</label>
-          <input type="number" step="any" min="0" value={draft.calories} onChange={e => setDraft({ ...draft, calories: e.target.value })} className={`${num} w-20`} />
+          <Input type="number" step="any" min="0" value={draft.calories} onChange={e => setDraft({ ...draft, calories: e.target.value })} className={`${num} w-20`} />
           <span className="text-slate-500">kcal</span>
         </div>
 
@@ -181,7 +186,7 @@ export default function MacroEditor({
           {MACRO_META.map(m => (
             <React.Fragment key={m.field}>
               <label className="text-slate-400">{m.label}</label>
-              <input type="number" step="any" min="0" value={draft[m.field]} onChange={e => setDraft({ ...draft, [m.field]: e.target.value })} placeholder={m.unit} className={`${num} w-16 placeholder-slate-700`} />
+              <Input type="number" step="any" min="0" value={draft[m.field]} onChange={e => setDraft({ ...draft, [m.field]: e.target.value })} placeholder={m.unit} className={`${num} w-16 placeholder-slate-700`} />
             </React.Fragment>
           ))}
         </div>
@@ -197,7 +202,7 @@ export default function MacroEditor({
               <div key={m.field} className="flex items-center justify-between gap-1.5">
                 <label className="text-slate-400 truncate">{m.label}</label>
                 <div className="flex items-center gap-1 shrink-0">
-                  <input type="number" step="any" min="0" value={draft[m.field]} onChange={e => setDraft({ ...draft, [m.field]: e.target.value })} className={`${num} w-14`} />
+                  <Input type="number" step="any" min="0" value={draft[m.field]} onChange={e => setDraft({ ...draft, [m.field]: e.target.value })} className={`${num} w-14`} />
                   <span className="text-slate-600 w-6">{m.unit}</span>
                 </div>
               </div>
@@ -206,10 +211,10 @@ export default function MacroEditor({
         )}
 
         <div className="flex gap-2 pt-1">
-          <button onClick={save} disabled={busy} className="flex-1 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg py-2 text-sm font-semibold hover:shadow-lg transition disabled:opacity-50">
+          <Button onClick={save} disabled={busy} className="flex-1">
             {busy ? 'Saving…' : 'Save Facts'}
-          </button>
-          <button onClick={onClose} disabled={busy} className="btn btn-secondary rounded-lg px-4 py-2">Cancel</button>
+          </Button>
+          <Button onClick={onClose} disabled={busy} variant="secondary">Cancel</Button>
         </div>
     </Modal>
   );

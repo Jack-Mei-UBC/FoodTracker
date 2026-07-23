@@ -1,0 +1,178 @@
+# Fully isolated dev stack for this worktree, so it can run ALONSIDE the stack
+# in the main worktree without colliding: distinct container names, distinct
+# host ports, and — via `-p shadcn-migration` — distinct volumes/network
+# (Compose namespaces named volumes by project automatically).
+#
+#   docker compose -p shadcn-migration -f docker-compose.worktree.yml \
+#     up -d --build --wait
+#
+# Deliberately a STANDALONE file, not an overlay on docker-compose.yml /
+# docker-compose.override.yml. Compose replaces (not merges) list-type keys —
+# `ports`, `environment` (list form), `volumes` — when a later file redeclares
+# them for the same service, so stacking three files here would mean silently
+# dropping base env vars the moment this file touched `ports:`. A full copy
+# with the port/name changes applied is more verbose but has zero merge-order
+# ambiguity. Keep it hand-synced with docker-compose.yml + .override.yml if
+# those change (same convention as the smoke-test.sh/.ps1 pair).
+#
+# Host port map (main worktree -> this one):
+#   5432->5433  6379->6380  4000->4001  3000->3001  8000->8001 (loopback-only)
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: shadcn-migration-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: foodtracker
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/schema.sql:/docker-entrypoint-initdb.d/schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d foodtracker"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: shadcn-migration-redis
+    restart: always
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: dev
+    container_name: shadcn-migration-backend
+    restart: always
+    ports:
+      - "4001:4000"
+    environment:
+      - NODE_ENV=development
+      - PORT=4000
+      - DATABASE_URL=postgresql://postgres:password@db:5432/foodtracker
+      - REDIS_URL=redis://redis:6379
+      - UPLOAD_DIR=/data/uploads
+      - FDC_API_KEY=${FDC_API_KEY}
+      - FLIPP_POSTAL_CODE=${FLIPP_POSTAL_CODE:-V5A3J2}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - FREE_TEXT_MODELS=${FREE_TEXT_MODELS:-}
+      - PAID_TEXT_MODELS=${PAID_TEXT_MODELS:-}
+      - USE_PAID_MODELS=${USE_PAID_MODELS:-false}
+      - MEAL_MODEL=${MEAL_MODEL:-google/gemini-2.5-flash}
+      - TAG_MODEL=${TAG_MODEL:-}
+      - MERGE_MODEL=${MERGE_MODEL:-}
+    volumes:
+      - ./backend:/usr/src/app
+      - /usr/src/app/node_modules
+      - uploads:/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 15s
+
+  worker:
+    build:
+      context: ./worker
+      dockerfile: Dockerfile
+      target: dev
+    container_name: shadcn-migration-worker
+    restart: always
+    environment:
+      - NODE_ENV=development
+      - DATABASE_URL=postgresql://postgres:password@db:5432/foodtracker
+      - REDIS_URL=redis://redis:6379
+      - OCR_SERVICE_URL=http://ocr-service:8000
+      - FREE_IMAGE_MODELS=${FREE_IMAGE_MODELS:-}
+      - PAID_IMAGE_MODELS=${PAID_IMAGE_MODELS:-}
+      - USE_PAID_MODELS=${USE_PAID_MODELS:-false}
+      - OCR_MODEL=${OCR_MODEL:-nvidia/nemotron-nano-12b-v2-vl:free}
+      - OCR_MAX_ATTEMPTS=${OCR_MAX_ATTEMPTS:-3}
+      - BACKEND_URL=http://backend:4000
+    volumes:
+      - ./worker:/usr/src/app
+      - /usr/src/app/node_modules
+      - uploads:/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+
+  ocr-service:
+    build:
+      context: ./ocr-service
+      dockerfile: Dockerfile
+    container_name: shadcn-migration-ocr
+    restart: always
+    ports:
+      - "127.0.0.1:8001:8000"
+    environment:
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OCR_MODEL=${OCR_MODEL:-nvidia/nemotron-nano-12b-v2-vl:free}
+    volumes:
+      - ./ocr-service/app:/app/app
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: dev
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:4001
+    container_name: shadcn-migration-frontend
+    restart: always
+    ports:
+      - "3001:3000"
+    environment:
+      - NODE_ENV=development
+      - NEXT_PUBLIC_API_URL=http://localhost:4001
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    volumes:
+      - ./frontend:/usr/src/app
+      - /usr/src/app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
+      start_period: 15s
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads:

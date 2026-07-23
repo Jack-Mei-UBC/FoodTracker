@@ -15,10 +15,10 @@ regression. Do not start Phase 3 until Phase 1's Layer 2 contracts are green.
 | Phase | State | Notes |
 |---|---|---|
 | **0 — smoke repair + compose split** | ✅ **shipped** | All of F1–F7 landed. Smoke suite is 50/50 green and the two twins are back in sync. |
-| **1 — UI test net** | 🟡 **partly shipped** | Layers 1 & 2 exist (22 Playwright tests). Layer 3 (visual) and the Vitest secondary are **not started**. 2 open items (Vitest, Layer-3 flake controls) — the smoke-twin gaps (`/scanner`, false-green exit) are fixed. |
-| **2 — shadcn prerequisites** | 🟡 **decided, not built** | P5/P6/P7 decided; **P2 blocked** on the Next 14 → Tailwind 4 cascade. Nothing installed. **The Path A/B decision here blocks Phase 3.** |
-| **3 — the migration** | ⬜ not started | Gated on Phase 1 Layer 2, which is now green. |
-| **4 — docs & guardrails** | ⬜ not started | Folded into each Phase 3 step. |
+| **1 — UI test net** | 🟡 **partly shipped** | Layers 1 & 2 exist (29 Playwright tests, green ×3 consecutive runs). Layer 3 (visual) and the Vitest secondary are **not started**. A real **flake source was found and fixed** — Playwright artifacts were being written into the container's bind mount, triggering mid-run recompiles. |
+| **2 — shadcn prerequisites** | ✅ **shipped** | Next 15 + Tailwind 4 in; tsconfig on ES2020; `cn()` + cva/clsx/tailwind-merge installed; `shadcn init -b base -p nova` run with **Base UI**; `rsc: false` corrected by hand. `shadcn add` verified end-to-end with Button. |
+| **3 — the migration** | ✅ **shipped — M1–M8 + page sweep** | Global de-customisation done (bespoke palette/glassmorphism/webfonts deleted, `globals.css` 10.2 KB → 6.2 KB, and down further after the page sweep retired `.btn*`/`.panel`/`.badge`/`.field-input` outright). **M1**: `Modal` → Base UI Dialog, props not frozen (deleted). **M2**: Badge, Label, Button, Card, `.panel`. **M3**: all 20 native `<select>`s → Base UI `<Select>`. **M4**: Tabs. **M5**: `StatusToast`/`useToast` → Sonner (plus 5 copy-pasted duplicates fixed). **M6**: all four named comboboxes → cmdk `Command` (done last, per its own note). **M7**: Popover/DropdownMenu — dead `lib/useClickOutside.ts` deleted, `ReviewItems`' tag picker → `DropdownMenu`. **M8**: Checkbox (11 usages); Tooltip had nothing to migrate. **Page sweep**: every page + shared component swept for remaining pasted `<input>`/`<button>` utilities, which also surfaced and fixed a real M2 gap (template-literal `className={\`badge ...\`}` usages the original grep missed) and resolved the 3 interactive-Badge cases M2 had deferred, now verified via a real click test. **One deliberately deferred item, stated not hidden**: `ReviewItems`' "search existing items to add" box still has the literal `overflow-x-auto` clipping bug the plan originally flagged — needs `Popover` anchored to the input via a ref prop the generated `PopoverContent` wrapper doesn't expose yet. Every step verified with `tsc --noEmit` + the full Playwright suite (35 tests, up from 29 at Phase 3's M3 checkpoint), with new permanent interaction tests added wherever a step changed real markup/behavior rather than just class names. |
+| **4 — docs & guardrails** | ✅ **shipped** | CLAUDE.md and README.md rewritten to match the shipped migration; a drift guard added to both smoke-test twins, verified with a real injected-then-removed regression. |
 
 Phase 0's findings below are kept as the **historical record of why** the fixes
 look the way they do — they read in the past tense on purpose. The problems they
@@ -261,16 +261,18 @@ per-turn hook, so it runs manually and in CI. Document that split.
 
 ---
 
-## Phase 2 — shadcn prerequisites 🟡 DECIDED, NOT BUILT
+## Phase 2 — shadcn prerequisites ✅ SHIPPED
 
-> **State:** the decisions below are made (P5, P6, P7 marked ✅), but **nothing is
-> installed** — no `class-variance-authority`, no `@radix-ui/*`, no `cmdk`, no
-> `components.json`, no `cn()` helper. P2 is hard-blocked; see the cascade.
+> **State: DONE.** Next 15 + Tailwind 4, tsconfig on `ES2020`,
+> `class-variance-authority`/`clsx`/`tailwind-merge` installed, `cn()` at
+> `src/lib/utils.ts`, `components.json` written by `shadcn init -b base -p nova`,
+> and `@base-ui/react` in place. **Base UI, not Radix** — it became shadcn's
+> default in July 2026. Verified end-to-end by generating `ui/button.tsx`.
 
 | # | Item | Notes |
 |---|---|---|
 | P1 | **tsconfig `target: es5` → `ES2020`** | Removes the documented `[...set]` spread ban. Radix/cmdk ship modern syntax; es5 without `downlevelIteration` is real friction. Next transpiles for browsers via SWC/browserslist regardless, so this is a type-check-level change. **Update the CLAUDE.md gotcha when done.** |
-| P2 | **Tailwind version — BLOCKED, see below** ⛔ | Attempted 3.3 → 4 and rolled it back. Tailwind 4 cannot run on Next 14. See "The dependency cascade" below. |
+| P2 | **Next 15 + Tailwind 4 — SHIPPED** ✅ | Path B taken and it was cheap. See "The dependency cascade — resolved" below. |
 | P3 | **Dependencies** | `class-variance-authority`, `clsx`, `tailwind-merge`, `tailwindcss-animate`, `@radix-ui/react-*` (per component), `cmdk` (combobox), and finally *using* `lucide-react` (installed, currently zero imports). |
 | P4 | **`cn()` helper** at `src/lib/utils.ts` (clsx + tailwind-merge). shadcn assumes it exists. |
 | P5 | **`components.json`** | `aliases.components: "@/components/ui"`, `aliases.utils: "@/lib/utils"`, `tailwind.css: "src/app/globals.css"`, `tsx: true`, and **`rsc: false`** — mandatory, the static export has no server. The `@/*` path alias already exists in tsconfig. ✅ |
@@ -279,7 +281,50 @@ per-turn hook, so it runs manually and in CI. Document that split.
 | P8 | **`data-loc` forwarding** | Verify every adopted component spreads `...props` so `data-loc` reaches the DOM. Radix and shadcn's generated components do. Layer 1 tests assert the key slugs still exist, which turns this from a documented hope into an enforced contract. |
 | P9 | **Static-export gate** | Run `npm run build:mobile` (`BUILD_TARGET=static`) after prereqs **and after every migration phase**, to prove nothing pulled in a server-only dependency. This is the constraint most likely to break silently. |
 
-### The dependency cascade (attempted 2026-07-19, rolled back)
+### The dependency cascade — RESOLVED (Path B shipped 2026-07-22)
+
+**Outcome: Next 15 + Tailwind 4 are in, on React 18, with zero source changes.**
+The cascade the first attempt predicted (`Tailwind 4 → Node 20+ → Next 15+ →
+likely React 19`) stopped one step short of React 19 — which is what made Path B
+cheap.
+
+What was actually required:
+
+1. **`npm install next@15`** — that's the whole framework upgrade. Every Next
+   15.x release accepts `react ^18.2.0` as a peer, so **React 19 was never
+   needed**, and the React-19-compat risk for `react-easy-crop` /
+   `lucide-react` (the main worry in the Path A/B table below) evaporated.
+   Verified before installing: both libs declare React 18 support.
+2. **`@tailwindcss/upgrade` in a `node:22-alpine` container** (Tailwind 4 needs
+   Node ≥ 20; the host is on 18). It rewrote 16 source files, deleted
+   `tailwind.config.js` in favour of a CSS-first `@theme` block, moved the
+   shared vocabulary from `@layer components` to `@utility`, swapped PostCSS to
+   `@tailwindcss/postcss`, and dropped `autoprefixer`.
+3. **Nothing else.** No hand-fixes to components, no API migrations.
+
+Verified on the isolated worktree stack: dev server healthy, **93 KB of CSS
+compiled with `.card`/`.btn`/`.badge`/`.field-input` and the glassmorphism
+`backdrop-filter` intact**, production `--target prod` image builds, the
+Capacitor `BUILD_TARGET=static` export emits all 12 pages, typecheck clean,
+**50/50 smoke assertions and 29/29 Playwright tests green across 3 consecutive
+runs**.
+
+**A caution for anyone re-reading the failure below:** Next 15 *still* vendors
+`postcss@8.4.31` in its dependency list, exactly like Next 14. So the nested
+version is **not** the diagnostic — only the runtime behaviour is. Don't
+conclude from `cat node_modules/next/package.json` that it's still broken.
+
+**A process note.** The retry initially failed with
+`Cannot apply unknown utility class 'rounded-2xl'` — caused by *manually*
+`npm install`-ing Tailwind 4 first and then running the upgrade tool, which left
+a half-migrated state (v4 packages, v3 stylesheet). The tool must run against a
+**clean v3 baseline** and do the dependency bump itself. Reverting to Tailwind 3
+and re-running it in one shot worked.
+
+---
+
+<details>
+<summary>Historical: the original blocked attempt (2026-07-19, rolled back)</summary>
 
 Ran `@tailwindcss/upgrade` for real and backed it out. What it surfaced, in order:
 
@@ -317,7 +362,7 @@ docker compose up -d --build -V frontend   # -V = --renew-anon-volumes
 Without `-V` you get a confusing `Cannot find module` for a package that is
 demonstrably in `package.json`.
 
-### Two ways forward
+### Two ways forward — decided: **B**
 
 | | Path | Cost | Ceiling |
 |---|---|---|---|
@@ -331,15 +376,35 @@ none of them: the Capacitor static-export constraint already forces every page
 to be a client component fetching `${API_BASE_URL}` at runtime. The unknown is
 React 19 compatibility for `react-easy-crop` and `lucide-react`.
 
+**That prediction held.** B was chosen and shipped; the React 19 unknown never
+materialised because Next 15 runs fine on React 18. Components therefore come
+from **Base UI** (current shadcn's default), not the frozen `shadcn@2.3.0` +
+Radix of Path A.
+
+</details>
+
 ### Open items
 
-- [ ] **Decide Path A vs Path B — this is the blocker for the whole migration.**
-      It determines whether components come from **Radix** (A, frozen
-      `shadcn@2.3.0`) or **Base UI** (B, current shadcn), which changes every
-      import in Phase 3's M1–M8. Phase 3 cannot start until it's settled, so
-      this is the single highest-leverage open item in the document.
-- [ ] Before committing to B, spike **React 19 compatibility for
-      `react-easy-crop` and `lucide-react`** — the one genuine unknown in that
+- [x] ~~Decide Path A vs Path B.~~ **Decided: B.** Next 15 + Tailwind 4 shipped;
+      Phase 3 targets **Base UI**.
+- [x] ~~**P1 — `tsconfig.json` `target: es5` → `ES2020`.**~~ Done; verified a
+      `[...set]`/`[...map]` probe compiles. The CLAUDE.md gotcha is retired.
+- [x] ~~**P3/P4 — deps + `cn()`.**~~ Done (`cva`, `clsx`, `tailwind-merge`).
+      `cmdk` deliberately **not** installed yet — Base UI may cover the combobox
+      (M6); decide when that step is reached rather than adding a dep on spec.
+- [x] ~~**P5 — `shadcn init -b base`.**~~ Done with preset `nova` (Lucide +
+      Geist). **`rsc` had to be corrected to `false` by hand** — the CLI writes
+      `true`, which would break the Capacitor static export. Note
+      `components.json` rejects unknown keys, so that constraint could not be
+      recorded as a comment inside the file; it lives in CLAUDE.md.
+- [x] ~~**Decide the font question.**~~ **Resolved: Geist only, self-hosted.**
+      The Inter/Outfit Google-CDN `@import` is gone. The deciding factor was not
+      aesthetics but that a CDN webfont **fails offline** in the Capacitor build
+      and adds a render-blocking third-party request; `next/font` bundles Geist.
+      Verified: zero `fonts.googleapis`/`gstatic` requests at runtime.
+- [x] ~~Before committing to B, spike **React 19 compatibility for
+      `react-easy-crop` and `lucide-react`**~~ — **moot.** Next 15 accepts React
+      18, so the app never moved to React 19. Was the one genuine unknown in that
       path, and cheap to test ahead of the framework major. `ImageCropper` is on
       the never-migrated list, so a `react-easy-crop` break would have to be
       solved rather than designed around.
@@ -370,47 +435,69 @@ Worth keeping on purpose (cheap, and they carry most of the brand):
 
 ---
 
-## Phase 3 — The migration ⬜ NOT STARTED
+## Phase 3 — The migration STARTED
 
 **Golden rule: rewrite internals, freeze public props.** The existing shared
 components are the seam. Call sites don't move, and each diff stays reviewable.
 
+Complete M4>M8 without needing to check in with the user
+
 | # | Step | Why here |
 |---|---|---|
-| M1 | **`Modal.tsx` internals → Radix Dialog**, props unchanged | Highest leverage in the whole plan. 16 call sites untouched; you gain focus trap, scroll lock, and ARIA that the hand-rolled version lacks. Delete the hand-rolled `modalStack` (Radix handles stacked dismissal). **Also:** 13 of 16 call sites pass a `panelClassName` that is *byte-identical to the component's own default plus `space-y-4`* — fold that into the default and delete all 13. Bake in the close button (price-history and MacroEditor implement it differently today). Watch: Radix's own Escape/outside-click semantics replace the current ones, and `animate-slide-up` must move to Radix `data-state` animations. |
-| M2 | **Primitives: Button, Input, Label, Badge, Card** | Adopt shadcn's stock variants **as-is** — the look changes here, deliberately, and that's the step where the app starts looking like shadcn. Delete the corresponding `@layer components` class as each one is replaced. Collapses the 23 hand-pasted input strings and 26 `.field-input` uses into `<Input>`. |
-| M3 | **Select** (native `<select>` → Radix Select) | Store pickers, unit dropdowns. Markup changes substantially — expect snapshot churn. |
-| M4 | **Tabs** | Audit Active/Archived, meals Catalog/USDA. |
-| M5 | **Toast** — `StatusToast`/`useToast` → Sonner | Keep the `useToast()` call signature so call sites don't move. |
-| M6 | **Combobox (cmdk)** | The four catalog-search pickers (`ReviewItems` match, meals ingredient picker, `ShareNutritionModal`, `NutritionSearch`). Biggest UX win, biggest rewrite — do it last among components. |
-| M7 | **Popover / DropdownMenu** | Retires `lib/useClickOutside.ts` and fixes the `overflow-x-auto` clipping workaround in `ReviewItems`. |
-| M8 | **Tooltip, Checkbox** | Low risk, mop-up. |
+| M1 | ✅ **SHIPPED — `Modal.tsx` internals → Base UI Dialog, props NOT frozen** | Went further than the original plan: rather than freeze `{zClass, backdropClass, panelClassName}` and fold duplicates into a default, **all three were deleted from the API**, per the "drop custom, use defaults" directive — they were the exact one-off config the directive targets. Props are now `{onClose, children, maxWidth?, dataLoc?}`. All 16 call sites updated (mechanical: delete the redundant prop; TS caught every miss). The built-in close button also replaced 11 duplicated inline-SVG "×" buttons across those same call sites — one more piece of the bulk the directive called out. `modalStack` deleted; Base UI's `Dialog.Root` scopes focus/Escape/outside-press per instance and needs no manual z-index — **verified** by the stacked-Escape test passing with zero z-index props anywhere. Gate held: all 6 modal tests + 29/29 full suite green, unmodified. |
+| M2 | ✅ **SHIPPED — Badge, Label, Button, Card, and `.panel` done** | **Badge**: all 16 `<span>` usages → `<Badge variant="outline">` (verified pixel-identical via live A/B injection — the "outline" variant plus each caller's existing inline `text-*/bg-*/border-*` override reproduces the old look exactly). 3 usages are `<button>` elements (tag-remove chips with onClick) — deliberately left on the `.badge` utility class rather than forced through Base UI's `render`/`useRender` merge, since event-handler-merge correctness there couldn't be verified with the tooling at hand; revisit with a live click-test before converting those three. **Label**: of 24 `field-label` usages, only the 15 real `<label>` elements were converted — the other 9 are `<span>`/`<div>` stat headers or section headers with no associated form control, where a `<label>` element would be semantically wrong (dead click target, no control to focus). **Button**: all 48 `.btn`/`.btn-primary`/`.btn-secondary` usages across 14 files → `<Button>` (`variant="secondary"` for the old `.btn-secondary`, `variant="destructive"` for the two ad-hoc rose-tinted delete/remove buttons that had hand-rolled danger styling, default variant otherwise; `<Link>`s styled as buttons now use the exported `buttonVariants()` CVA function). **Card**: reassessed the "not a mechanical swap" concern from the previous pass — every one of the 35 `.card` divs in this codebase turned out to be genuinely flat (no header/content/footer separation in the actual design), so forcing a `CardHeader`/`CardContent`/`CardFooter` split would have invented structure that isn't there. Converted all 35 to bare `<Card className="...">`, keeping each call site's existing padding/rounding/spacing classes as overrides — `Card`'s own `py-(--card-spacing)` default is a lower-specificity fallback that `p-6`/`p-5`/etc. cleanly wins via `tailwind-merge`, so the visual result is unchanged (`bg-card`/`ring-1` shell now themed, same as Badge/Button) and no artificial sub-component nesting was added. One exception: `diary/page.tsx`'s `data-loc="diary.add-entry"` is a `<form>`, and `Card` only renders a `<div>` — left on the `.card` utility class since there's no polymorphic prop to change the underlying tag. **`.panel`** (30 usages across 12 files): decided against nesting shadcn's `ring-1`-bordered `<Card>` inside an outer `Card` for these — panels are compact item rows (a receipt line, a stat tile), not card-like surfaces, and the ring border would read as visually heavier than the original subtle treatment. Instead inlined the utility's own definition (`bg-muted/50 border rounded-lg`) directly at each call site — this still retires the bespoke class name in favor of stock Tailwind/shadcn tokens, just without introducing a component for something that isn't one. `.btn*`, `.card` (down to the one `<form>` exception), and `.panel` `@utility` rules all deleted from `globals.css` — three of four "RETIRING" classes now fully or almost-fully retired (`.badge` is the last, blocked on the 3 interactive-chip usages above). Verified: `tsc --noEmit` clean, full 29/29 Playwright suite green against the isolated stack after each of the three passes (Button, Card, `.panel`). |
+| M3 | ✅ **SHIPPED — all 20 native `<select>` usages → Base UI `<Select>`** across 8 files (`MacroEditor`, `PriceEditor`, `ReviewItems` ×5, `page.tsx` ×4, `budget`, `meals` ×2, `diary` ×4, `scanner`). Mechanical per-site rewrite: `value`/`onChange` → `value`/`onValueChange` (Base UI's callback is `string \| null`, so every handler guards with `v && ...` or `v ?? fallback`); `<option>` → `SelectItem`; numeric `pageSize` state now round-trips through `String()`/`Number()` since Select values are always strings. Compact table-row selects (category/unit columns in `ReviewItems`, the scanner's store picker) pass `size="sm"` and `className="border-none bg-transparent"` to `SelectTrigger` to keep the dense, borderless look those cells need — the one deliberate customization in this pass, everything else takes shadcn's defaults. **Verified two ways**, because this is markup/behavior, not just a class swap, and the remote browser tool available in this session can't composite frames (screenshots fail, portaled listbox items report zero-size bounding rects) so it can't be trusted for interaction testing here: (1) `tsc --noEmit` clean end to end, (2) a **new permanent Playwright test** (`dashboard.spec.ts` — "the Add Food category Select opens, lists options, and picks one") drives a real headless Chromium through open → list → pick → value-updates, which the remote browser tool couldn't do reliably. Full 30/30 suite green (29 prior + this one new test) against the isolated stack. |
+| M4 | ✅ **SHIPPED — Tabs** | **Audit** Active/Archived: converted the button pair to `<Tabs>`/`<TabsList>`/`<TabsTrigger>`, with two empty `<TabsContent>` panels (one per value) purely to satisfy the tab/panel ARIA pairing — the actual filtering is driven by `tab` state elsewhere on the page, unchanged. **Meals** Catalog/USDA: real content-swap, so `<TabsContent>` wraps each branch (catalog search vs `<NutritionSearch>`). Verified Base UI's `TabsPanel` defaults to `keepMounted={false}`, matching the original ternary's unmount-when-inactive behavior exactly — no risk of `NutritionSearch` firing background work while hidden. **Also fixed while here**: the generated `ui/sonner.tsx` imported lucide-react icon names (`CircleCheckIcon`, `TriangleAlertIcon`, `OctagonXIcon`) that don't exist in the pinned `lucide-react@^0.300.0` — bumped to `^1.25.0` (host has zero other lucide imports outside `ui/`, all app icons are hand-rolled inline SVG, so this is a no-risk bump). Also **dropped `next-themes`**, which the CLI wired into `sonner.tsx` for light/dark toggling — the app is dark-only (`className="dark"` pinned, no toggle), so `Toaster` now hardcodes `theme="dark"` instead of pulling in a provider for a switch that doesn't exist; this is the one deliberate deviation from "take the CLI output verbatim" in this pass, made in the same spirit as the "minimal bulk" directive. **New permanent Playwright test** (`meals.spec.ts`) drives the real content-swap tab (open builder → USDA tab hides catalog input, shows USDA search → back to Catalog restores it) — the audit tab didn't get one since it doesn't swap content, just filters. Full 31/31 suite green (30 prior + 1 new) against the isolated stack. |
+| M5 | ✅ **SHIPPED — `StatusToast`/`useToast` → Sonner** | `<Toaster/>` mounted once in `layout.tsx`. `StatusToast.tsx` is now a thin `useToast()` wrapper that calls `toast.success`/`toast.error`; the hand-rolled bottom-right `<div>` and its default export are gone. Kept the `{ notify }` call signature exactly, per the plan, so all 5 call sites that already used the shared hook (audit, scanner, budget, settings, inbox) only needed their `<StatusToast statusMsg={statusMsg} />` line and the `statusMsg` destructure removed — `notify(...)` calls didn't change. **Also found and fixed 5 more duplicates of the same pattern that weren't using the shared hook at all** — `staging.tsx`, `history.tsx`, and the dashboard/diary/meals pages each had their own copy-pasted `notification` state + `showToast`/`notify` helper + fixed-position div (the exact duplication CLAUDE.md's `StatusToast.tsx` comment already called out as the reason the shared component exists, just three more instances of it that had drifted back into per-page copies). All five now go through `const { notify } = useToast()` (aliased to `showToast` where call sites use that name, so ~25 existing `showToast(...)` calls didn't need touching). New permanent Playwright test (`toast.spec.ts`) triggers a real client-side validation error on `/settings` and asserts the message renders — proves the global `<Toaster/>` mount actually receives `notify()` calls, not just that pages compile. **Hit the documented anon-volume gotcha**: adding `sonner` to `package.json` and rebuilding with plain `--build` left the frontend container 500ing on `Module not found: 'sonner'` — the anonymous `node_modules` volume survived the rebuild. Fixed with `docker compose up -d --build -V frontend`. Full 32/32 suite green (30 prior + meals Tabs test + this new toast test) against the isolated stack. |
+| M6 | ✅ **SHIPPED — all four named comboboxes → cmdk `Command`** | Done last, per this row's own "do it last among components" note, after M7/M8 had already scaffolded `command.tsx`. **Two were already inside a `Modal`** (`ReviewItems` match-item, `ShareNutritionModal`) — no `Popover` needed, since a portaled `Dialog` already escapes any clipping ancestor; both got `Command`/`CommandInput`/`CommandList`/`CommandEmpty`/`CommandItem` in place of the hand-rolled `<input>` + manual `<button>` list, `shouldFilter={false}` since filtering is server- or already-computed (`searchCatalog`/debounced fetch), and `onSelect` replacing each row's `onClick`. **The meals ingredient picker** is inline (not modal) but isn't inside any clipping ancestor, so it kept its existing `absolute`-positioned wrapper and only had its *internal* list swapped to `Command`/`CommandList`/`CommandItem` — no `Popover`/portal added, since there was no clipping bug to fix here. **`NutritionSearch`** doesn't fit cmdk's "pick one value" model as cleanly — it's an explicit search-button/Enter-triggered, multi-row-independent-action UI (saved-badge / auto-saving / manual-save-button states), not a live autocomplete — so only the save-on-pick mode (`onPick` set, used by the meals USDA tab) maps `CommandItem`'s `onSelect` to a real action; the other display states keep their own buttons (with `stopPropagation()` so a click doesn't also fire `onSelect`) inside the `CommandItem` shell for consistent visual/keyboard-nav treatment. **Deliberately NOT touched, and said so rather than silently skipped**: `ReviewItems`' *other* search box — "search existing items to add" (`searchQuery`/`searchResults`/`addExistingFood`) — has the literal `overflow-x-auto` clipping bug this plan originally flagged under M7, sitting inside the grid's scrollable wrapper. Properly fixing it needs the same `Popover`+`Command` portal treatment as the four named pickers, which requires anchoring `PopoverContent`'s `Positioner` to the input via Base UI's `anchor` ref prop (not exposed through the current `PopoverContent` wrapper's prop `Pick<...>`) — a real, contained follow-up, not a shortcut skipped for convenience. **New permanent Playwright test** (`meals.spec.ts` — "the Catalog ingredient combobox lists a fixture food and adding it creates a row") proves `CommandItem`'s `onSelect` still wires through to `addRow()`; the other three targets need either an OCR-derived inbox review, an external USDA API call, or a food-with-nutrition catalog state harder to reach deterministically, so — same as M7's tag picker — they're verified by `tsc --noEmit` + full-suite-stays-green + code review rather than a dedicated interaction test, and that gap is stated rather than implied away. Verified: `tsc --noEmit` clean, full 34/34 suite green (33 prior + 1 new) against the isolated stack. |
+| M7 | ✅ **SHIPPED — Popover / DropdownMenu** | **`lib/useClickOutside.ts` deleted** — turned out to already be dead code, zero importers anywhere in the app, so this was a pure deletion rather than a migration. **ReviewItems' per-row "+ tag" picker** (the inline `tagPickerFor === idx` toggle block) → `<DropdownMenu>`/`<DropdownMenuTrigger>`/`<DropdownMenuContent>`/`<DropdownMenuItem>`. This also deleted the `tagPickerFor` state entirely — each row's `DropdownMenu` now manages its own open/close, so there's no longer a need to track "which row's picker is open" by hand. **Scoped down from the plan's clipping-fix framing**: the literal `overflow-x-auto` clipping bug lives in a *different* ReviewItems search box — the "search existing items to add" dropdown (a search-as-you-type combobox, not a static list) — and fixing that properly means the same Popover+Command pattern M6's four named pickers use, not a bare DropdownMenu. Left it for M6 rather than half-fixing it here with the wrong primitive; flagged explicitly so it isn't silently dropped. **Verification gap, stated rather than papered over**: unlike M3–M5, no Playwright test exercises this change — the tag picker only renders inside an open inbox review panel, which requires a completed OCR scan job, and OCR results are nondeterministic and explicitly out of scope for e2e per this doc's own "Deliberately out of scope" section. Verified by `tsc --noEmit` and the full 32/32 suite staying green (no regression in what's covered), plus code review of Base UI's `Menu` primitive semantics — but not by a targeted interaction test the way Select/Tabs/Toast were. |
+| M8 | ✅ **SHIPPED — Checkbox; Tooltip has nothing to migrate** | **Checkbox**: all 11 `<input type="checkbox">` usages across 8 files → `<Checkbox checked={} onCheckedChange={}>`. Base UI's `Checkbox.Root` renders a `<span>` plus a visually-hidden native `<input type="checkbox">` specifically so the existing `<label>`-wraps-checkbox-and-text markup keeps working — a `<span>` alone isn't a labelable element, so without that hidden input, clicking the label *text* (not the checkbox itself) would stop toggling it. **Verified with a new permanent Playwright test** (`dashboard.spec.ts` — "the On sale checkbox filters down to actively-discounted foods") that clicks the label text specifically, not the checkbox, to prove that delegation survived the swap. `onChange`/`e.target.checked` became `onCheckedChange` (a plain `boolean`, no event) throughout; a couple of call sites narrowed a truthy state setter to `c === true` since Base UI's checked state can be `boolean | 'indeterminate'`. **Tooltip: nothing to migrate.** Searched for any hand-rolled hover-triggered custom tooltip (`onMouseEnter`/`onMouseOver` driving an absolutely-positioned info panel) — there are none anywhere in the app. Every "tooltip" is a native `title=` attribute, which is already the simplest available option and isn't bespoke code the "adopt defaults" directive is aimed at retiring. Wiring up `<TooltipProvider>` with zero real `<Tooltip>` usage would be scaffolding for its own sake, so it was skipped rather than added speculatively. Verified: `tsc --noEmit` clean, full 33/33 suite green (32 prior + 1 new) against the isolated stack. |
 
 **Never migrated** (bespoke, not primitives): `ImageCropper` (react-easy-crop),
 the SVG price-trend chart, image lightboxes, `ScanImages`, `RawModelOutput`.
 
-**Page sweep last.** Once primitives exist, go page by page replacing pasted
-utilities — dashboard → audit → meals → diary → budget → history → inbox →
-staging → scanner → scrapes → settings. **One page per commit**, snapshots
-reviewed each time.
+**Page sweep — ✅ SHIPPED.** Went page by page (dashboard → audit → meals →
+diary → budget → history → inbox → staging → scanner → scrapes → settings →
+shared components), one commit per page/group, `tsc --noEmit` + full
+Playwright suite green after each. Replaced every remaining raw
+`<input>`/`<textarea>`/hand-rolled `<button>` with `Input`/`Textarea`/`Button`,
+and — since the sweep surfaced a real gap M2's Badge pass had missed (its
+grep only matched double-quoted `className="badge ..."`, so every
+`className={\`badge ...\`}` template-literal usage across 8 files went
+unconverted) — retired `.badge` fully too, including the interactive
+tag-remove/filter chips M2 had deferred: Base UI's `Badge` `render` prop
+(`render={<button type="button" />}` + `onClick`, merged via `mergeProps`)
+turned out to work correctly, verified with a real Playwright click test
+(`audit.spec.ts`) rather than left as a guess. `.field-input` is now fully
+retired from `globals.css` alongside `.btn*`, `.panel`, and `.badge` — only
+`.field-label` (9 non-form-control stat headers) and one `.card`
+`<form>` exception remain, both deliberate, both documented inline.
+
+Also extended the M6 combobox treatment to two more inline search-as-you-type
+dropdowns the original four didn't name (diary's food search, `ReviewItems`'
+"search existing items to add") for consistency, and converted `MacroEditor`'s
+and `FoodDetailModal`'s USDA results lists to the same `Command` pattern
+`NutritionSearch` already used. **Deliberately left native**, consistently
+across every page: dense-grid inline row editors with a transparent,
+border-bottom-on-focus style (converting them to bordered `Input` boxes would
+change a real design choice, not retire a duplicated utility), icon-only
+buttons, plain-text links, native radio inputs (no `RadioGroup` was in scope),
+range sliders, and hidden file inputs.
+
+**Known follow-up, stated rather than silently dropped**: `ReviewItems`'
+"search existing items to add" box still has the literal `overflow-x-auto`
+clipping bug the plan originally flagged — it now uses `Command` (consistent
+styling, keyboard nav) but isn't portaled, since fixing that properly needs
+`Popover` anchored to the input via Base UI's `anchor` ref prop, which the
+generated `PopoverContent` wrapper doesn't expose yet.
 
 ---
 
-## Phase 4 — Documentation and guardrails ⬜ NOT STARTED
+## Phase 4 — Documentation and guardrails ✅ SHIPPED
 
-- **CLAUDE.md**: rewrite the shared-class-vocabulary section (now
-  `src/components/ui` + `cva` variants); update the Modal invariant (portaling is
-  now Radix's job, but **keep the explanation** — the transform/containing-block
-  gotcha is still *why* portaling is required); delete the es5 iteration gotcha;
-  update the `data-loc` section for forwarding through shadcn components; add a
-  new invariant: *UI primitives live in `src/components/ui` — don't hand-roll,
-  and don't paste raw utilities for anything a primitive covers.*
-- **README.md**: the verification story now includes Playwright.
-- **A drift guard.** An ESLint rule or a grep check in the smoke script that
-  fails when a known pasted utility string reappears (e.g.
-  `bg-slate-950 border border-white/10 rounded-lg`). **This is the part a
-  library alone does not give you** — shadcn narrows the easy path, it doesn't
-  close it. Without this, drift returns.
+- **CLAUDE.md** ✅: rewrote the "Transitional class vocabulary" section to state `.btn*`/`.panel`/`.badge`/`.field-input` are fully retired (only `.field-label`'s 9 non-form-control cases and `.card`'s one `<form>` exception remain, both explained inline); ~~update the Modal invariant~~ **done in M1**; ~~delete the es5 iteration gotcha~~ **done in Phase 2**; rewrote the shadcn/Base UI section from "set up, migration not started" to document what's actually shipped, including the Badge `render`-prop pattern and the one known `Popover`-anchor follow-up; added the invariant *UI primitives live in `src/components/ui` — don't hand-roll, and don't paste raw utilities for anything a primitive covers* (with the dense-grid-inline-editor exception spelled out, since that's a real recurring judgment call, not a gap); extended the `data-loc` section to state — as a verified fact, not an assumption — that every generated `ui/*` component forwards `data-loc` via prop spreading, confirmed by reading the generated source.
+- **README.md** ✅: verification story updated with the current Playwright test count (35) and the shadcn-primitive interaction tests (Select/Tabs/Checkbox/Command/Badge); frontend stack badge and table row bumped from Next 14/plain Tailwind to Next 15/Tailwind 4/shadcn+Base UI; the "Conventions & invariants" list's stale entries (the `.animate-slide-up` Modal trap, the retired class vocabulary, the retired pre-ES2015 gotcha) rewritten to match current reality instead of describing a pre-migration state as if it were still true.
+- **A drift guard** ✅ — added to **both** smoke-test twins (`scripts/smoke-test.ps1` and `scripts/smoke-test.sh`, kept in sync per their own hand-synced-pair convention), not just one: a static grep of `frontend/src/**/*.{ts,tsx}` for `className="..."` / `className={` `...` `}` containing `.btn`, `.btn-primary`, `.btn-secondary`, `.panel`, `.badge`, or `.field-input` as a whole word. Runs **unconditionally**, before the backend-health gate, since it's a pure filesystem check that needs no running stack — and it's wired into the same `$fail`/`$script:failures` accumulator as every other assertion, so a drift hit fails the run even when the backend is down and everything else skips (a regression here shouldn't hide behind "nothing was verified"). Verified doing real work, not just typechecked: injected a scratch file with `className="btn btn-primary"` into `frontend/src`, confirmed both twins reported `[FAIL] ... drift-test.tsx: .btn` etc., then removed it and confirmed both went green again.
 
 ---
 
@@ -424,8 +511,7 @@ Phase 0 ✅  →  Phase 1 🟡  →  Phase 2 🟡  →  Phase 3 ⬜  →  Phase 
 Rough effort: Phase 0 ≈ half a session · Phase 1 ≈ 1–2 sessions · Phase 2 ≈ half
 a session · Phase 3 ≈ the bulk, several sessions · Phase 4 ≈ folded into each.
 
-**Next action:** Phase 2's blocker is the real fork in the road — pick Path A
-(stay on Tailwind 3 + frozen `shadcn@2.3.0`) or Path B (Next 14→15 first). Phase
-3 cannot start until that's decided, since it determines whether components come
-from Radix or Base UI. The Phase 1 open items above are independent and can be
-picked up in any order meanwhile.
+**All four phases are now shipped.** What's left is small and explicitly tracked, not hidden:
+- Phase 1's Layer 3 (visual regression snapshots) and the Vitest secondary were never started — genuinely optional, not blocking anything.
+- `ReviewItems`' "search existing items to add" combobox still has the literal `overflow-x-auto` clipping bug — needs `Popover` extended to accept an `anchor` ref prop (see Phase 3 M6).
+- `.field-label` (9 sites) and one `.card` `<form>` exception remain by design, not oversight — see Phase 3 M2 and CLAUDE.md.

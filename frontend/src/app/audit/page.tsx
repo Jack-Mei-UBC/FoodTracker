@@ -14,10 +14,16 @@
 // the same human-in-the-loop rule as OCR and AI meal drafting.
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import StatusToast, { useToast } from '../../components/StatusToast';
+import { useToast } from '../../components/StatusToast';
 import FoodDetailModal from '../../components/FoodDetailModal';
 import Modal from '../../components/Modal';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
+import { Card } from '../../components/ui/card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
+import { Checkbox } from '../../components/ui/checkbox';
 import { NutritionFacts, formatCaloriesPer100 } from '../../lib/nutrition';
+import { Input } from '../../components/ui/input';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
@@ -55,7 +61,7 @@ export default function Audit() {
   const [aiOpen, setAiOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);   // manual merge of selected foods
   const [dupOpen, setDupOpen] = useState(false);        // AI "find duplicates"
-  const { statusMsg, notify } = useToast();
+  const { notify } = useToast();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -171,7 +177,6 @@ export default function Audit() {
 
   return (
     <div data-loc="page.audit" className="space-y-6 max-w-6xl mx-auto">
-      <StatusToast statusMsg={statusMsg} />
 
       {/* ═══ Section: Header ═══ */}
       <div data-loc="audit.header" className="flex items-start justify-between gap-4">
@@ -184,38 +189,37 @@ export default function Audit() {
           </p>
         </div>
         <div className="shrink-0 flex items-center gap-2">
-          <button onClick={() => setDupOpen(true)} disabled={tab === 'archived'}
+          <Button onClick={() => setDupOpen(true)} disabled={tab === 'archived'}
             title="Let an LLM find likely-duplicate items across the catalog — you review before anything merges"
-            className="btn btn-secondary rounded-xl px-4 py-2 text-xs disabled:opacity-50">✨ Find duplicates</button>
-          <button onClick={() => setTagPanelOpen(true)}
-            className="btn btn-secondary rounded-xl px-4 py-2 text-xs">Manage tags</button>
+            variant="secondary" size="sm">✨ Find duplicates</Button>
+          <Button onClick={() => setTagPanelOpen(true)}
+            variant="secondary" size="sm">Manage tags</Button>
         </div>
       </div>
 
       {/* ═══ Section: Filters ═══ */}
-      <div data-loc="audit.filters" className="card rounded-3xl p-5 space-y-4">
+      <Card data-loc="audit.filters" className="rounded-3xl p-5 space-y-4">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex gap-1 text-[11px] font-semibold">
-            {(['active', 'archived'] as const).map(t => (
-              <button key={t} onClick={() => { setTab(t); setCat('All'); setTagFilter(null); }}
-                className={`px-3 py-1.5 rounded-lg border transition capitalize ${
-                  tab === t ? 'text-violet-200 bg-violet-500/15 border-violet-500/30' : 'text-slate-400 border-white/10 hover:bg-white/5'}`}>
-                {t}
-              </button>
-            ))}
-          </div>
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Search name or barcode…" className="field-input flex-1 min-w-48 text-xs rounded-xl" />
+          <Tabs value={tab} onValueChange={v => { if (!v) return; setTab(v as 'active' | 'archived'); setCat('All'); setTagFilter(null); }}>
+            <TabsList>
+              <TabsTrigger value="active" className="capitalize">active</TabsTrigger>
+              <TabsTrigger value="archived" className="capitalize">archived</TabsTrigger>
+            </TabsList>
+            <TabsContent value="active" />
+            <TabsContent value="archived" />
+          </Tabs>
+          <Input type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search name or barcode…" className="flex-1 min-w-48 rounded-xl" />
           <span className="text-xs text-slate-500">{filtered.length} item{filtered.length !== 1 ? 's' : ''}</span>
         </div>
 
         <div className="flex flex-wrap gap-1.5">
           {['All'].concat(categories).map(c => (
-            <button key={c} onClick={() => setCat(c)}
-              className={`badge text-[10px] transition ${
+            <Badge key={c} variant="outline" render={<button type="button" />} onClick={() => setCat(c)}
+              className={`text-[10px] transition cursor-pointer ${
                 cat === c ? 'text-violet-200 bg-violet-500/20 border-violet-500/40' : 'text-slate-400 bg-white/5 border-white/10 hover:bg-white/10'}`}>
               {c}{c !== 'All' && <span className="text-slate-500"> {foods.filter(f => f.category === c).length}</span>}
-            </button>
+            </Badge>
           ))}
         </div>
 
@@ -223,52 +227,52 @@ export default function Audit() {
           <div className="flex flex-wrap gap-1.5 items-center border-t border-white/5 pt-3">
             <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mr-1">Tags</span>
             {tags.map(t => (
-              <button key={t.id} onClick={() => setTagFilter(tagFilter === t.id ? null : t.id)}
-                className={`badge text-[10px] transition ${
+              <Badge key={t.id} variant="outline" render={<button type="button" />} onClick={() => setTagFilter(tagFilter === t.id ? null : t.id)}
+                className={`text-[10px] transition cursor-pointer ${
                   tagFilter === t.id ? 'text-sky-200 bg-sky-500/20 border-sky-500/40' : 'text-sky-300/70 bg-sky-500/5 border-sky-500/20 hover:bg-sky-500/10'}`}>
                 {t.name}<span className="text-slate-500"> {t.food_count ?? 0}</span>
-              </button>
+              </Badge>
             ))}
           </div>
         )}
-      </div>
+      </Card>
 
       {/* ═══ Section: Bulk action bar ═══ */}
       {selected.length > 0 && (
-        <div data-loc="audit.bulk-bar" className="card rounded-2xl p-4 space-y-3 sticky top-20 z-30 border-violet-500/30">
+        <Card data-loc="audit.bulk-bar" className="rounded-2xl p-4 space-y-3 sticky top-20 z-30 border-violet-500/30">
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm font-bold text-white">{selected.length} selected</span>
             <button onClick={() => setSelected([])} className="text-[11px] text-slate-400 hover:text-white">Clear</button>
             <div className="flex-1" />
-            <button onClick={() => setAiOpen(true)} disabled={busy || tab === 'archived'}
+            <Button onClick={() => setAiOpen(true)} disabled={busy || tab === 'archived'}
               title="Let an LLM propose tags for the selected items — you review before anything is applied"
-              className="text-xs font-bold text-violet-200 bg-violet-500/15 border border-violet-500/30 rounded-lg px-4 py-2 hover:bg-violet-500/25 transition disabled:opacity-50">
+              variant="outline" size="sm" className="text-violet-200 bg-violet-500/15 border-violet-500/30 hover:bg-violet-500/25 hover:text-violet-100">
               ✨ Auto-tag with AI
-            </button>
+            </Button>
             {tab === 'active' && (
-              <button onClick={() => setMergeOpen(true)} disabled={busy || selected.length < 2}
+              <Button onClick={() => setMergeOpen(true)} disabled={busy || selected.length < 2}
                 title="Merge the selected items into one — keeps all their prices, names, nutrition and tags"
-                className="text-xs font-bold text-amber-200 bg-amber-500/15 border border-amber-500/30 rounded-lg px-4 py-2 hover:bg-amber-500/25 transition disabled:opacity-50">
+                variant="outline" size="sm" className="text-amber-200 bg-amber-500/15 border-amber-500/30 hover:bg-amber-500/25 hover:text-amber-100">
                 Merge {selected.length}
-              </button>
+              </Button>
             )}
-            <input type="text" list="audit-categories" value={newCategory} onChange={e => setNewCategory(e.target.value)}
-              placeholder="Set category (e.g. Non-food)" className="field-input w-44 text-xs rounded-lg" />
+            <Input type="text" list="audit-categories" value={newCategory} onChange={e => setNewCategory(e.target.value)}
+              placeholder="Set category (e.g. Non-food)" className="w-44 rounded-lg" />
             <datalist id="audit-categories">
               {categories.map(c => <option key={c} value={c} />)}
             </datalist>
-            <button onClick={() => runBulk('category')} disabled={busy}
-              className="btn btn-secondary rounded-lg px-3 py-2 text-xs">Apply category</button>
+            <Button onClick={() => runBulk('category')} disabled={busy}
+              variant="secondary" size="sm">Apply category</Button>
             {tab === 'active' ? (
-              <button onClick={() => runBulk('archive')} disabled={busy}
-                className="text-xs font-bold text-rose-300 bg-rose-500/10 border border-rose-500/30 rounded-lg px-4 py-2 hover:bg-rose-500/20 transition disabled:opacity-50">
+              <Button onClick={() => runBulk('archive')} disabled={busy}
+                variant="outline" size="sm" className="text-rose-300 bg-rose-500/10 border-rose-500/30 hover:bg-rose-500/20 hover:text-rose-200">
                 {busy ? 'Working…' : `Archive ${selected.length}`}
-              </button>
+              </Button>
             ) : (
-              <button onClick={() => runBulk('restore')} disabled={busy}
-                className="text-xs font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/30 rounded-lg px-4 py-2 hover:bg-emerald-500/20 transition disabled:opacity-50">
+              <Button onClick={() => runBulk('restore')} disabled={busy}
+                variant="outline" size="sm" className="text-emerald-300 bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20 hover:text-emerald-200">
                 {busy ? 'Working…' : `Restore ${selected.length}`}
-              </button>
+              </Button>
             )}
           </div>
 
@@ -277,19 +281,19 @@ export default function Audit() {
             <span className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold mr-1">Tag selection</span>
             {tags.length === 0 && <span className="text-[11px] text-slate-600">No tags yet — create one under “Manage tags”.</span>}
             {tags.map(t => (
-              <span key={t.id} className="badge text-[10px] text-sky-300 bg-sky-500/10 border-sky-500/25 flex items-center gap-1 normal-case">
+              <Badge key={t.id} variant="outline" className="text-[10px] text-sky-300 bg-sky-500/10 border-sky-500/25 flex items-center gap-1 normal-case">
                 <button onClick={() => runBulk('tag', [t.id])} disabled={busy} title={`Add “${t.name}” to the ${selected.length} selected`}
                   className="hover:text-sky-100">{t.name}</button>
                 <button onClick={() => runBulk('untag', [t.id])} disabled={busy} title={`Remove “${t.name}” from the ${selected.length} selected`}
                   className="text-slate-500 hover:text-rose-400">✕</button>
-              </span>
+              </Badge>
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* ═══ Section: Item table ═══ */}
-      <div data-loc="audit.table" className="card rounded-3xl p-5">
+      <Card data-loc="audit.table" className="rounded-3xl p-5">
         {loading ? (
           <p className="text-slate-500 text-sm py-10 text-center">Loading catalog…</p>
         ) : filtered.length === 0 ? (
@@ -302,8 +306,8 @@ export default function Audit() {
               <thead>
                 <tr className="border-b border-white/5 text-slate-500">
                   <th className="py-2 w-8">
-                    <input type="checkbox" checked={allSelected} onChange={toggleAll}
-                      title="Select all filtered" className="accent-violet-500 cursor-pointer" />
+                    <Checkbox checked={allSelected} onCheckedChange={toggleAll}
+                      title="Select all filtered" className="cursor-pointer" />
                   </th>
                   <th className="py-2 w-12"></th>
                   <th className="py-2">Name</th>
@@ -322,10 +326,10 @@ export default function Audit() {
                       onClick={e => onRowClick(index, e)}
                       className={`border-b border-white/5 cursor-pointer transition ${checked ? 'bg-violet-500/10' : 'hover:bg-white/5'}`}>
                       <td className="py-2">
-                        <input type="checkbox" checked={checked} readOnly
-                          onClick={e => e.stopPropagation()}
-                          onChange={() => setSelected(prev => (prev.includes(f.id) ? prev.filter(x => x !== f.id) : prev.concat(f.id)))}
-                          className="accent-violet-500 cursor-pointer" />
+                        <Checkbox checked={checked}
+                          onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                          onCheckedChange={() => setSelected(prev => (prev.includes(f.id) ? prev.filter(x => x !== f.id) : prev.concat(f.id)))}
+                          className="cursor-pointer" />
                       </td>
                       <td className="py-2">
                         {f.display_image_id != null ? (
@@ -351,11 +355,11 @@ export default function Audit() {
                         {f.name}
                         {f.barcode && <span className="block text-[10px] text-slate-600 font-mono">{f.barcode}</span>}
                       </td>
-                      <td className="py-2"><span className="badge text-[9px] text-slate-300 bg-white/5 border-white/10">{f.category}</span></td>
+                      <td className="py-2"><Badge variant="outline" className="text-[9px] text-slate-300 bg-white/5 border-white/10">{f.category}</Badge></td>
                       <td className="py-2">
                         <span className="flex flex-wrap gap-1">
                           {(f.tags ?? []).map(t => (
-                            <span key={t.id} className="badge text-[9px] normal-case text-sky-300 bg-sky-500/10 border-sky-500/25">{t.name}</span>
+                            <Badge key={t.id} variant="outline" className="text-[9px] normal-case text-sky-300 bg-sky-500/10 border-sky-500/25">{t.name}</Badge>
                           ))}
                         </span>
                       </td>
@@ -381,27 +385,23 @@ export default function Audit() {
             </table>
           </div>
         )}
-      </div>
+      </Card>
 
       {/* ═══ Section: Manage-tags popup ═══ */}
       {tagPanelOpen && (
-        <Modal onClose={() => setTagPanelOpen(false)} dataLoc="modal.manage-tags" maxWidth="max-w-md"
-          panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
-          <div className="flex items-center justify-between">
+        <Modal onClose={() => setTagPanelOpen(false)} dataLoc="modal.manage-tags" maxWidth="max-w-md">
+          <div>
             <h3 className="text-sm font-bold text-white">Tags
               <span className="block text-[10px] text-slate-500 font-normal">labels you can apply to many items</span>
             </h3>
-            <button onClick={() => setTagPanelOpen(false)} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
           </div>
           <form onSubmit={async e => { e.preventDefault(); if (await createTag(newTagName)) setNewTagName(''); }}
             className="flex gap-2">
-            <input type="text" value={newTagName} onChange={e => setNewTagName(e.target.value)} maxLength={60}
-              placeholder="New tag name…" className="field-input flex-1 text-xs rounded-lg" />
-            <button type="submit" className="btn btn-primary rounded-lg px-4 py-2 text-xs">Create</button>
+            <Input type="text" value={newTagName} onChange={e => setNewTagName(e.target.value)} maxLength={60}
+              placeholder="New tag name…" className="flex-1 rounded-lg" />
+            <Button type="submit" size="sm">Create</Button>
           </form>
-          <div className="panel rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
+          <div className="bg-muted/50 border rounded-lg max-h-64 overflow-y-auto divide-y divide-white/5">
             {tags.length === 0 ? (
               <p className="text-[11px] text-slate-500 px-3 py-2">No tags yet.</p>
             ) : tags.map(t => (
@@ -552,17 +552,13 @@ function AutoTagModal({ foodIds, tags, onClose, onCreateTag, onApplied, notify }
   const willApply = (suggestions ?? []).filter(s => !skipped.includes(s.food_id) && s.tag_ids.length > 0).length;
 
   return (
-    <Modal onClose={onClose} dataLoc="modal.auto-tag" maxWidth="max-w-2xl"
-      panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
-      <div className="flex items-center justify-between">
+    <Modal onClose={onClose} dataLoc="modal.auto-tag" maxWidth="max-w-2xl">
+      <div>
         <h3 className="text-sm font-bold text-white">Auto-tag {foodIds.length} item{foodIds.length !== 1 ? 's' : ''} with AI
           <span className="block text-[10px] text-slate-500 font-normal">
             The model only suggests — nothing is saved until you press Apply.
           </span>
         </h3>
-        <button onClick={onClose} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-        </button>
       </div>
 
       {/* Step 1 — which tags may the model use */}
@@ -571,32 +567,31 @@ function AutoTagModal({ foodIds, tags, onClose, onCreateTag, onApplied, notify }
         <div className="flex flex-wrap gap-1.5">
           {tags.length === 0 && <span className="text-[11px] text-slate-600">No tags yet — create one below.</span>}
           {tags.map(t => (
-            <button key={t.id} type="button" onClick={() => toggleTag(t.id)}
-              className={`badge text-[10px] normal-case transition ${
+            <Badge key={t.id} variant="outline" render={<button type="button" />} onClick={() => toggleTag(t.id)}
+              className={`text-[10px] normal-case transition cursor-pointer ${
                 chosen.includes(t.id) ? 'text-sky-200 bg-sky-500/25 border-sky-500/50' : 'text-slate-400 bg-white/5 border-white/10 hover:bg-white/10'}`}>
               {chosen.includes(t.id) ? '✓ ' : ''}{t.name}
-            </button>
+            </Badge>
           ))}
         </div>
         <div className="flex gap-2">
-          <input type="text" value={newTagName} onChange={e => setNewTagName(e.target.value)} maxLength={60}
-            placeholder="…or create a new tag" className="field-input flex-1 text-xs rounded-lg" />
-          <button type="button" disabled={!newTagName.trim()}
+          <Input type="text" value={newTagName} onChange={e => setNewTagName(e.target.value)} maxLength={60}
+            placeholder="…or create a new tag" className="flex-1 rounded-lg" />
+          <Button type="button" disabled={!newTagName.trim()}
             onClick={async () => { const t = await onCreateTag(newTagName); if (t) { setChosen(prev => prev.concat(t.id)); setNewTagName(''); } }}
-            className="btn btn-secondary rounded-lg px-3 py-2 text-xs disabled:opacity-50">Create &amp; use</button>
+            variant="secondary" size="sm">Create &amp; use</Button>
         </div>
-        <input type="text" value={hint} onChange={e => setHint(e.target.value)}
+        <Input type="text" value={hint} onChange={e => setHint(e.target.value)}
           placeholder="Optional hint (e.g. “anything you can't eat is Non-food”)"
-          className="field-input w-full text-xs rounded-lg" />
+          className="w-full rounded-lg" />
       </div>
 
       {suggestions === null ? (
         <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onClose} className="btn btn-secondary rounded-lg px-4 py-2 text-xs">Cancel</button>
-          <button onClick={generate} disabled={running || chosen.length === 0}
-            className="btn btn-primary rounded-lg px-4 py-2 text-xs disabled:opacity-50">
+          <Button onClick={onClose} variant="secondary" size="sm">Cancel</Button>
+          <Button onClick={generate} disabled={running || chosen.length === 0} size="sm">
             {running ? 'Asking the model…' : 'Generate suggestions'}
-          </button>
+          </Button>
         </div>
       ) : (
         <>
@@ -615,29 +610,29 @@ function AutoTagModal({ foodIds, tags, onClose, onCreateTag, onApplied, notify }
                   <span className="text-slate-500 font-mono tabular-nums">{Math.round((progress.done / progress.total) * 100)}%</span>
                 </div>
                 <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-400 rounded-full transition-all duration-300"
+                  <div className="h-full bg-linear-to-r from-violet-500 to-indigo-400 rounded-full transition-all duration-300"
                     style={{ width: `${(progress.done / progress.total) * 100}%` }} />
                 </div>
               </div>
             )}
-            <div className="panel rounded-lg max-h-72 overflow-y-auto divide-y divide-white/5">
+            <div className="bg-muted/50 border rounded-lg max-h-72 overflow-y-auto divide-y divide-white/5">
               {suggestions.length === 0 && !running && <p className="text-[11px] text-slate-500 px-3 py-2">The model returned nothing usable.</p>}
               {suggestions.map(s => {
                 const skip = skipped.includes(s.food_id);
                 return (
                   <div key={s.food_id} className={`flex items-center gap-2 px-3 py-2 ${skip ? 'opacity-40' : ''}`}>
-                    <input type="checkbox" checked={!skip}
-                      onChange={() => setSkipped(prev => (skip ? prev.filter(x => x !== s.food_id) : prev.concat(s.food_id)))}
-                      className="accent-violet-500 cursor-pointer shrink-0" />
+                    <Checkbox checked={!skip}
+                      onCheckedChange={() => setSkipped(prev => (skip ? prev.filter(x => x !== s.food_id) : prev.concat(s.food_id)))}
+                      className="cursor-pointer shrink-0" />
                     <span className="text-xs text-slate-200 flex-1 min-w-0 truncate">{s.food_name}</span>
                     <span className="flex flex-wrap gap-1 justify-end shrink-0">
                       {s.tag_ids.length === 0 && <span className="text-[10px] text-slate-600">no tag</span>}
                       {s.tag_ids.map(tid => (
-                        <span key={tid} className="badge text-[9px] normal-case text-sky-300 bg-sky-500/10 border-sky-500/25 flex items-center gap-1">
+                        <Badge key={tid} variant="outline" className="text-[9px] normal-case text-sky-300 bg-sky-500/10 border-sky-500/25 flex items-center gap-1">
                           {tagById.get(tid)?.name ?? tid}
                           <button onClick={() => dropTag(s.food_id, tid)} title="Don't apply this tag"
                             className="text-slate-500 hover:text-rose-400">✕</button>
-                        </span>
+                        </Badge>
                       ))}
                     </span>
                   </div>
@@ -646,15 +641,14 @@ function AutoTagModal({ foodIds, tags, onClose, onCreateTag, onApplied, notify }
             </div>
           </div>
           <div className="flex justify-between gap-2 pt-1">
-            <button onClick={generate} disabled={running} className="btn btn-secondary rounded-lg px-4 py-2 text-xs disabled:opacity-50">
+            <Button onClick={generate} disabled={running} variant="secondary" size="sm">
               {running ? 'Tagging…' : 'Regenerate'}
-            </button>
+            </Button>
             <div className="flex gap-2">
-              <button onClick={onClose} className="btn btn-secondary rounded-lg px-4 py-2 text-xs">Cancel</button>
-              <button onClick={apply} disabled={applying || running || willApply === 0}
-                className="btn btn-primary rounded-lg px-4 py-2 text-xs disabled:opacity-50">
+              <Button onClick={onClose} variant="secondary" size="sm">Cancel</Button>
+              <Button onClick={apply} disabled={applying || running || willApply === 0} size="sm">
                 {applying ? 'Applying…' : `Apply to ${willApply} item${willApply !== 1 ? 's' : ''}`}
-              </button>
+              </Button>
             </div>
           </div>
         </>
@@ -703,17 +697,13 @@ function MergeModal({ foods, onClose, onMerged, notify }: {
   };
 
   return (
-    <Modal onClose={onClose} dataLoc="modal.merge-foods" maxWidth="max-w-lg"
-      panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
-      <div className="flex items-center justify-between">
+    <Modal onClose={onClose} dataLoc="modal.merge-foods" maxWidth="max-w-lg">
+      <div>
         <h3 className="text-sm font-bold text-white">Merge {foods.length} items into one
           <span className="block text-[10px] text-slate-500 font-normal">Pick the survivor — the others are archived and all their data moves onto it.</span>
         </h3>
-        <button onClick={onClose} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-        </button>
       </div>
-      <div className="panel rounded-lg max-h-72 overflow-y-auto divide-y divide-white/5">
+      <div className="bg-muted/50 border rounded-lg max-h-72 overflow-y-auto divide-y divide-white/5">
         {foods.map(f => (
           <label key={f.id} className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-white/5">
             <input type="radio" name="merge-survivor" checked={targetId === f.id}
@@ -726,16 +716,15 @@ function MergeModal({ foods, onClose, onMerged, notify }: {
                 {f.nutrition ? ` · ${formatCaloriesPer100(f.nutrition, f.unit) ?? `${Math.round(Number(f.nutrition.calories))} kcal`}` : ''}
               </span>
             </span>
-            {targetId === f.id && <span className="badge text-[9px] text-amber-200 bg-amber-500/20 border-amber-500/40 shrink-0">survivor</span>}
+            {targetId === f.id && <Badge variant="outline" className="text-[9px] text-amber-200 bg-amber-500/20 border-amber-500/40 shrink-0">survivor</Badge>}
           </label>
         ))}
       </div>
       <div className="flex justify-end gap-2">
-        <button onClick={onClose} className="btn btn-secondary rounded-lg px-4 py-2 text-xs">Cancel</button>
-        <button onClick={run} disabled={busy}
-          className="btn btn-primary rounded-lg px-4 py-2 text-xs disabled:opacity-50">
+        <Button onClick={onClose} variant="secondary" size="sm">Cancel</Button>
+        <Button onClick={run} disabled={busy} size="sm">
           {busy ? 'Merging…' : `Merge into “${target?.name ?? ''}”`}
-        </button>
+        </Button>
       </div>
     </Modal>
   );
@@ -823,26 +812,21 @@ function FindDuplicatesModal({ foods, onClose, onMerged, notify }: {
   const groupCount = (groups ?? []).filter(g => g.foods.length >= 2).length;
 
   return (
-    <Modal onClose={onClose} dataLoc="modal.find-duplicates" maxWidth="max-w-2xl"
-      panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4">
-      <div className="flex items-center justify-between">
+    <Modal onClose={onClose} dataLoc="modal.find-duplicates" maxWidth="max-w-2xl">
+      <div>
         <h3 className="text-sm font-bold text-white">Find duplicate items with AI
           <span className="block text-[10px] text-slate-500 font-normal">
             The model only proposes groups — nothing merges until you press Apply.
           </span>
         </h3>
-        <button onClick={onClose} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-        </button>
       </div>
 
       {groups === null ? (
         <div className="flex items-center justify-between gap-2">
           <p className="text-[11px] text-slate-500">Scans {foods.length} active item{foods.length !== 1 ? 's' : ''} for likely duplicates.</p>
-          <button onClick={generate} disabled={running || foods.length < 2}
-            className="btn btn-primary rounded-lg px-4 py-2 text-xs disabled:opacity-50">
+          <Button onClick={generate} disabled={running || foods.length < 2} size="sm">
             {running ? 'Scanning…' : 'Scan for duplicates'}
-          </button>
+          </Button>
         </div>
       ) : (
         <>
@@ -860,7 +844,7 @@ function FindDuplicatesModal({ foods, onClose, onMerged, notify }: {
                   <span className="text-slate-500 font-mono tabular-nums">{Math.round((progress.done / progress.total) * 100)}%</span>
                 </div>
                 <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-violet-500 to-indigo-400 rounded-full transition-all duration-300"
+                  <div className="h-full bg-linear-to-r from-violet-500 to-indigo-400 rounded-full transition-all duration-300"
                     style={{ width: `${(progress.done / progress.total) * 100}%` }} />
                 </div>
               </div>
@@ -868,7 +852,7 @@ function FindDuplicatesModal({ foods, onClose, onMerged, notify }: {
             <div className="space-y-2 max-h-80 overflow-y-auto">
               {groupCount === 0 && !running && <p className="text-[11px] text-slate-500 px-1 py-2">No duplicates found.</p>}
               {(groups ?? []).map((g, idx) => g.foods.length < 2 ? null : (
-                <div key={idx} className="panel rounded-lg p-3 space-y-2">
+                <div key={idx} className="bg-muted/50 border rounded-lg p-3 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <span className="text-[10px] text-slate-500 flex-1">{g.reason || 'Likely the same product'}</span>
                     <button onClick={() => dropGroup(idx)} className="text-[10px] text-slate-500 hover:text-rose-400 shrink-0">Dismiss group</button>
@@ -879,7 +863,7 @@ function FindDuplicatesModal({ foods, onClose, onMerged, notify }: {
                         onChange={() => setSurvivor(idx, f.id)} className="accent-amber-500 cursor-pointer shrink-0" />
                       <span className="text-xs text-slate-200 flex-1 min-w-0 truncate">{f.name}</span>
                       {g.survivorId === f.id
-                        ? <span className="badge text-[9px] text-amber-200 bg-amber-500/20 border-amber-500/40 shrink-0">survivor</span>
+                        ? <Badge variant="outline" className="text-[9px] text-amber-200 bg-amber-500/20 border-amber-500/40 shrink-0">survivor</Badge>
                         : <button onClick={(e) => { e.preventDefault(); dropFood(idx, f.id); }} title="Remove from this group"
                             className="text-slate-500 hover:text-rose-400 text-xs shrink-0">✕</button>}
                     </label>
@@ -889,15 +873,14 @@ function FindDuplicatesModal({ foods, onClose, onMerged, notify }: {
             </div>
           </div>
           <div className="flex justify-between gap-2 pt-1">
-            <button onClick={generate} disabled={running} className="btn btn-secondary rounded-lg px-4 py-2 text-xs disabled:opacity-50">
+            <Button onClick={generate} disabled={running} variant="secondary" size="sm">
               {running ? 'Scanning…' : 'Rescan'}
-            </button>
+            </Button>
             <div className="flex gap-2">
-              <button onClick={onClose} className="btn btn-secondary rounded-lg px-4 py-2 text-xs">Cancel</button>
-              <button onClick={apply} disabled={applying || running || groupCount === 0}
-                className="btn btn-primary rounded-lg px-4 py-2 text-xs disabled:opacity-50">
+              <Button onClick={onClose} variant="secondary" size="sm">Cancel</Button>
+              <Button onClick={apply} disabled={applying || running || groupCount === 0} size="sm">
                 {applying ? 'Merging…' : `Merge ${groupCount} group${groupCount !== 1 ? 's' : ''}`}
-              </button>
+              </Button>
             </div>
           </div>
         </>

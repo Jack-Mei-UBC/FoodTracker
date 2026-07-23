@@ -16,25 +16,33 @@
     "mobile:open:android": "cap open android"
   },
   "dependencies": {
+    "@base-ui/react": "^1.6.0",
     "@capacitor/android": "^6.1.2",
     "@capacitor/core": "^6.1.2",
     "@capacitor/ios": "^6.1.2",
-    "lucide-react": "^0.300.0",
-    "next": "^14.0.4",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "lucide-react": "^1.25.0",
+    "next": "^15.5.21",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-easy-crop": "^6.2.2"
+    "react-easy-crop": "^6.2.2",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.6.0",
+    "tw-animate-css": "^1.4.0"
   },
   "devDependencies": {
     "@capacitor/cli": "^6.1.2",
     "@playwright/test": "^1.61.1",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "20.19.43",
     "@types/react": "18.3.31",
     "@types/react-dom": "^18.2.17",
-    "autoprefixer": "^10.4.16",
     "cross-env": "^7.0.3",
     "postcss": "^8.4.32",
-    "tailwindcss": "^3.3.6",
+    "shadcn": "^4.14.0",
+    "tailwindcss": "^4.3.3",
     "typescript": "5.9.3"
   }
 }

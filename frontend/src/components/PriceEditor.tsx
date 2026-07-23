@@ -8,6 +8,11 @@
 
 import React, { useState, useEffect } from 'react';
 import Modal from './Modal';
+import { Button } from './ui/button';
+import { Label } from './ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { Input } from './ui/input';
+import { Checkbox } from './ui/checkbox';
 import { UNIT_OPTIONS, parseAmountInput, formatCanonicalUnitPrice } from '../lib/units';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
@@ -137,17 +142,12 @@ export default function PriceEditor({
     }
   };
 
-  const field = 'w-full bg-slate-950 border border-white/10 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-violet-500';
-
   return (
-    <Modal onClose={onClose} maxWidth="max-w-md" panelClassName="bg-[#0b0f1e] border border-white/10 rounded-2xl p-5 space-y-4" dataLoc="modal.price-editor">
-        <div className="flex items-center justify-between">
+    <Modal onClose={onClose} maxWidth="max-w-md" dataLoc="modal.price-editor">
+        <div>
           <h3 className="text-sm font-bold text-white">
             {isEdit ? 'Edit Price' : 'Add Price'}{foodName ? <span className="text-slate-400 font-normal"> — {foodName}</span> : null}
           </h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-white p-1 rounded-full hover:bg-white/5 transition">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
         </div>
 
         {error && <div className="text-xs font-semibold text-rose-300 bg-rose-950/70 border border-rose-500/30 rounded-lg px-3 py-2">{error}</div>}
@@ -155,37 +155,41 @@ export default function PriceEditor({
         <div className="space-y-2.5">
           <div>
             <label className="block text-[11px] font-semibold text-slate-400 mb-1">Store</label>
-            <select value={draft.store_id} onChange={e => setDraft({ ...draft, store_id: e.target.value })} className={field}>
-              <option value="">Choose a store…</option>
-              {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            <Select value={draft.store_id} onValueChange={v => setDraft({ ...draft, store_id: v ?? '' })}>
+              <SelectTrigger className="w-full"><SelectValue placeholder="Choose a store…" /></SelectTrigger>
+              <SelectContent>
+                {stores.map(s => <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex gap-2">
             <div className="flex-1">
               <label className="block text-[11px] font-semibold text-slate-400 mb-1">Price ($)</label>
-              <input type="number" step="0.01" min="0" value={draft.price} onChange={e => setDraft({ ...draft, price: e.target.value })} className={`${field} font-mono`} />
+              <Input type="number" step="0.01" min="0" value={draft.price} onChange={e => setDraft({ ...draft, price: e.target.value })} className="font-mono focus-visible:border-violet-500" />
             </div>
             <div className="w-24">
               <label className="block text-[11px] font-semibold text-slate-400 mb-1">Amount</label>
-              <input
+              <Input
                 type="text" inputMode="text" placeholder="e.g. 600g"
                 value={draft.amount}
                 onChange={e => onAmount(e.target.value)}
                 title="Type a number with a unit (e.g. 600g, 2lb) to auto-fill both fields"
-                className={`${field} font-mono`}
+                className="font-mono focus-visible:border-violet-500"
               />
             </div>
             <div className="w-24">
               <label className="block text-[11px] font-semibold text-slate-400 mb-1">Unit</label>
-              <select value={draft.amount_unit} onChange={e => setDraft({ ...draft, amount_unit: e.target.value })} className={field}>
-                <option value="">—</option>
-                {UNIT_OPTIONS.map(u => <option key={u} value={u}>{u}</option>)}
-              </select>
+              <Select value={draft.amount_unit} onValueChange={v => setDraft({ ...draft, amount_unit: v ?? '' })}>
+                <SelectTrigger className="w-full"><SelectValue placeholder="—" /></SelectTrigger>
+                <SelectContent>
+                  {UNIT_OPTIONS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="flex items-center justify-between pt-1">
             <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
-              <input type="checkbox" checked={draft.is_sale} onChange={e => setDraft({ ...draft, is_sale: e.target.checked })} className="accent-amber-500" />
+              <Checkbox checked={draft.is_sale} onCheckedChange={c => setDraft({ ...draft, is_sale: c === true })} />
               On sale
             </label>
             {preview && <span className="text-xs font-mono text-emerald-400">{preview}</span>}
@@ -193,10 +197,10 @@ export default function PriceEditor({
           {/* A sale price is hidden from current-price views once this date passes. */}
           {draft.is_sale && (
             <div>
-              <label className="field-label">Sale ends</label>
-              <input type="date" value={draft.sale_ends_at}
+              <Label>Sale ends</Label>
+              <Input type="date" value={draft.sale_ends_at}
                 onChange={e => setDraft({ ...draft, sale_ends_at: e.target.value })}
-                className="field-input w-full" />
+                className="w-full" />
               <p className="text-[10px] text-slate-500 mt-1">
                 {draft.sale_ends_at
                   ? 'After this date the price stops showing as current (history keeps it).'
@@ -207,17 +211,17 @@ export default function PriceEditor({
         </div>
 
         <div className="flex gap-2 pt-1">
-          <button onClick={save} disabled={busy} className="btn btn-primary flex-1 rounded-lg py-2">
+          <Button onClick={save} disabled={busy} className="flex-1">
             {busy ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Price'}
-          </button>
+          </Button>
           {isEdit && onDeleted && (
-            <button onClick={del} disabled={busy} className="bg-rose-600/20 border border-rose-500/30 text-rose-300 rounded-lg px-4 py-2 text-sm font-semibold hover:bg-rose-600/30 transition disabled:opacity-50">
+            <Button onClick={del} disabled={busy} variant="destructive">
               Delete
-            </button>
+            </Button>
           )}
-          <button onClick={onClose} disabled={busy} className="btn btn-secondary rounded-lg px-4 py-2">
+          <Button onClick={onClose} disabled={busy} variant="secondary">
             Cancel
-          </button>
+          </Button>
         </div>
     </Modal>
   );
